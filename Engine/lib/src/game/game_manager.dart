@@ -10,6 +10,7 @@ import 'package:sakiengine/src/widgets/common/black_screen_transition.dart';
 import 'package:sakiengine/src/effects/scene_filter.dart';
 import 'package:sakiengine/src/effects/scene_transition_effects.dart';
 import 'package:sakiengine/src/utils/music_manager.dart';
+import 'package:sakiengine/src/animation/character_animation_system.dart';
 
 /// 音乐区间类
 /// 定义音乐播放的有效范围，从play music到下一个play music/stop music之间
@@ -220,6 +221,9 @@ class GameManager {
 
     final posesContent = await AssetManager().loadString('assets/GameScript/configs/poses.sks');
     _poseConfigs = ConfigParser().parsePoses(posesContent);
+    
+    // 初始化动画系统
+    await CharacterAnimationSystem().loadAnimations('assets');
   }
 
   Future<void> startGame(String scriptName) async {
@@ -383,7 +387,7 @@ class GameManager {
       }
 
       if (node is ShowNode) {
-        print('[GameManager] 处理ShowNode: character=${node.character}, pose=${node.pose}, expression=${node.expression}, position=${node.position}');
+        print('[GameManager] 处理ShowNode: character=${node.character}, pose=${node.pose}, expression=${node.expression}, position=${node.position}, animation=${node.animation}');
         // 优先使用角色配置，如果没有配置则直接使用资源ID
         final characterConfig = _characterConfigs[node.character];
         String resourceId;
@@ -411,6 +415,7 @@ class GameManager {
         newCharacters[node.character] = currentCharacterState.copyWith(
           pose: node.pose,
           expression: node.expression,
+          animation: node.animation,
         );
         _currentState =
             _currentState.copyWith(characters: newCharacters, clearDialogueAndSpeaker: true, everShownCharacters: _everShownCharacters);
@@ -448,6 +453,7 @@ class GameManager {
           newCharacters[node.character!] = currentCharacterState.copyWith(
             pose: node.pose,
             expression: node.expression,
+            animation: node.animation,
           );
           _currentState = _currentState.copyWith(characters: newCharacters, everShownCharacters: _everShownCharacters);
         }
@@ -1042,17 +1048,29 @@ class CharacterState {
   final String? pose;
   final String? expression;
   final String? positionId;
+  final String? animation; // 新增：当前动画名称
 
-  CharacterState(
-      {required this.resourceId, this.pose, this.expression, this.positionId});
-  
+  CharacterState({
+    required this.resourceId,
+    this.pose,
+    this.expression,
+    this.positionId,
+    this.animation,
+  });
 
-  CharacterState copyWith({String? pose, String? expression, String? positionId}) {
+  CharacterState copyWith({
+    String? pose,
+    String? expression,
+    String? positionId,
+    String? animation,
+    bool clearAnimation = false,
+  }) {
     return CharacterState(
       resourceId: resourceId,
       pose: pose ?? this.pose,
       expression: expression ?? this.expression,
       positionId: positionId ?? this.positionId,
+      animation: clearAnimation ? null : (animation ?? this.animation),
     );
   }
 }

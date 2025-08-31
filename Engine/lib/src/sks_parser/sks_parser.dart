@@ -137,30 +137,51 @@ class SksParser {
           String? pose;
           String? expression;
           String? position;
+          String? animation;
           
-          // 支持两种语法格式:
+          // 支持三种语法格式:
           // 1. show character pose:xxx expression:xxx
           // 2. show character pose1 happy at pose
+          // 3. show character pose1 happy at pose an jump
           
           int atIndex = -1;
+          int anIndex = -1;
+          
           for (int i = 2; i < parts.length; i++) {
             if (parts[i] == 'at') {
               atIndex = i;
+            } else if (parts[i] == 'an') {
+              anIndex = i;
               break;
             }
           }
           
-          if (atIndex >= 0) {
-            // 新语法: show character pose1 happy at pose
-            final attributeParts = parts.sublist(2, atIndex);
+          if (atIndex >= 0 || anIndex >= 0) {
+            // 新语法: show character pose1 happy at pose an jump
+            int endIndex = anIndex >= 0 ? anIndex : (atIndex >= 0 ? parts.length : parts.length);
+            if (atIndex >= 0 && anIndex >= 0) {
+              endIndex = anIndex;
+            } else if (atIndex >= 0) {
+              endIndex = parts.length;
+            }
+            
+            final attributeParts = parts.sublist(2, atIndex >= 0 ? atIndex : anIndex);
             if (attributeParts.isNotEmpty) {
               pose = attributeParts[0]; // 第一个属性作为pose
               if (attributeParts.length > 1) {
                 expression = attributeParts[1]; // 第二个属性作为expression
               }
             }
-            if (atIndex + 1 < parts.length) {
-              position = parts[atIndex + 1]; // at后面的参数作为位置
+            
+            if (atIndex >= 0) {
+              int positionEnd = anIndex >= 0 ? anIndex : parts.length;
+              if (atIndex + 1 < positionEnd) {
+                position = parts[atIndex + 1]; // at后面的参数作为位置
+              }
+            }
+            
+            if (anIndex >= 0 && anIndex + 1 < parts.length) {
+              animation = parts[anIndex + 1]; // an后面的参数作为动画
             }
           } else {
             // 原语法: show character pose:xxx expression:xxx
@@ -173,7 +194,7 @@ class SksParser {
             }
           }
           
-          nodes.add(ShowNode(character, pose: pose, expression: expression, position: position));
+          nodes.add(ShowNode(character, pose: pose, expression: expression, position: position, animation: animation));
           break;
         case 'hide':
           nodes.add(HideNode(parts[1]));
@@ -263,20 +284,36 @@ class SksParser {
     final character = parts[0];
     String? pose;
     String? expression;
+    String? animation;
     
-    // This logic is a placeholder. You'll need a robust way to distinguish
-    // poses from expressions, likely by checking against loaded pose/expression configs.
-    if (parts.length > 1) {
-        final attrs = parts.sublist(1);
-        // A simple heuristic: if it contains 'pose', it's a pose.
-        // This is not robust. A better way would be to check against a list of valid poses.
-        pose = attrs.firstWhere((attr) => attr.contains('pose'), orElse: () => '');
-        expression = attrs.firstWhere((attr) => !attr.contains('pose'), orElse: () => '');
-
-        if(pose.isEmpty) pose = null;
-        if(expression.isEmpty) expression = null;
+    // 查找an关键字
+    int anIndex = -1;
+    for (int i = 1; i < parts.length; i++) {
+      if (parts[i] == 'an') {
+        anIndex = i;
+        break;
+      }
     }
     
-    return SayNode(character: character, dialogue: dialogue, pose: pose, expression: expression);
+    // 解析pose和expression（在an之前的属性）
+    if (parts.length > 1) {
+      final attributeEndIndex = anIndex >= 0 ? anIndex : parts.length;
+      final attrs = parts.sublist(1, attributeEndIndex);
+      
+      // 简单的启发式方法：第一个属性作为pose，第二个作为expression
+      if (attrs.isNotEmpty) {
+        pose = attrs[0];
+        if (attrs.length > 1) {
+          expression = attrs[1];
+        }
+      }
+    }
+    
+    // 解析动画（在an之后）
+    if (anIndex >= 0 && anIndex + 1 < parts.length) {
+      animation = parts[anIndex + 1];
+    }
+    
+    return SayNode(character: character, dialogue: dialogue, pose: pose, expression: expression, animation: animation);
   }
 } 

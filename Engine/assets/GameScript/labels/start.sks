@@ -1,5 +1,13 @@
 //label// SoraNoUta 主标签脚本文件
 label start
+
+// 测试菜单
+menu
+"开始游戏" story_start
+"测试动画" animation_test
+endmenu
+
+label story_start
 // 背景设置为白天天空
 scene #000000
 play sound kazekage loop

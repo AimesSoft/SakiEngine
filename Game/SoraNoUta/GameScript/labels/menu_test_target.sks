@@ -1,0 +1,11 @@
+// 测试跨文件menu跳转的目标文件
+label cross_file_target
+scene bg school
+"成功跳转到了另一个文件的标签！"
+"这证明menu的跨文件跳转功能正常工作。"
+
+// 测试返回到主文件
+menu
+"返回动画测试" animation_test
+"返回开始界面" start
+endmenu

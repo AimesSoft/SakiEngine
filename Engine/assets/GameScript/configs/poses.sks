@@ -25,4 +25,4 @@ closeup: scale=0.8 xcenter=0.5 ycenter=0.8 anchor=center
 
 // 默认姿势
 pose: scale=1.5 ycenter=0.8 anchor=center
-xiayo1pose: scale=1.2 ycenter=0.8 anchor=center
+xiayo1pose: scale=1.3 ycenter=0.7 anchor=center

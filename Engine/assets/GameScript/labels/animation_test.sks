@@ -1,0 +1,38 @@
+label animation_test
+scene bg school
+
+// 测试show命令的an语法
+show xiayo pose1 happy at pose an jump
+"夏夜跳起来了！"
+
+// 测试对话中的an语法  
+xiayo happy an shake "我在摇晃！"
+
+// 测试连续动画
+show xiayo pose2 happy at pose an bounce
+xiayo "弹跳效果！"
+
+// 测试淡入动画
+show xiayo pose1 happy at pose an fade_in
+xiayo "淡入动画"
+
+// 测试滑动动画
+show xiayo pose2 happy at pose an slide_in_left
+xiayo "从左滑入"
+
+// 测试缩放动画
+show xiayo pose1 happy at pose an zoom_in
+xiayo "放大进入"
+
+// 测试脉冲动画（循环）
+show xiayo pose2 happy at pose an pulse
+xiayo "脉冲效果（循环）"
+
+// 等待几秒后停止循环动画
+xiayo "几秒后会停止脉冲..."
+
+// 停止动画 - 不指定动画名称
+show xiayo pose1 happy at pose
+xiayo "动画已停止"
+
+return

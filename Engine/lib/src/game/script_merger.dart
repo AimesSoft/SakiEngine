@@ -100,6 +100,19 @@ class ScriptMerger {
           }
         }
       }
+      
+      // 如果是 menu 节点，也要记录所有选择的目标
+      if (node is MenuNode) {
+        for (final choice in node.choices) {
+          final targetLabel = choice.targetLabel;
+          if (_globalLabelMap.containsKey(targetLabel)) {
+            final targetFile = _globalLabelMap[targetLabel]!;
+            if (!jumpTargets.contains(targetFile) && targetFile != fileName) {
+              jumpTargets.add(targetFile);
+            }
+          }
+        }
+      }
     }
     
     // 添加文件结束标记

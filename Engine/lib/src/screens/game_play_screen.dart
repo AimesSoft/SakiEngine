@@ -31,6 +31,7 @@ import 'package:sakiengine/src/config/project_info_manager.dart';
 import 'package:sakiengine/src/utils/character_layer_parser.dart';
 import 'package:sakiengine/soranouta/widgets/soranouta_dialogue_box.dart';
 import 'package:sakiengine/src/rendering/scene_layer.dart';
+import 'package:sakiengine/src/widgets/animated_character_widget.dart';
 
 class GamePlayScreen extends StatefulWidget {
   final SaveSlot? saveSlotToLoad;
@@ -524,9 +525,46 @@ class _GamePlayScreenState extends State<GamePlayScreen> {
       final characterState = entry.value;
       final poseConfig = poseConfigs[characterState.positionId] ?? PoseConfig(id: 'default');
 
-      // 使用新的异步图层解析器，但添加缓存键来避免重复解析
-      final cacheKey = '${characterState.resourceId}:${characterState.pose ?? 'pose1'}:${characterState.expression ?? 'happy'}';
-      
+      // 如果有动画，使用AnimatedCharacterWidget
+      if (characterState.animation != null && characterState.animation!.isNotEmpty) {
+        return FutureBuilder<List<CharacterLayerInfo>>(
+          future: CharacterLayerParser.parseCharacterLayers(
+            resourceId: characterState.resourceId,
+            pose: characterState.pose ?? 'pose1',
+            expression: characterState.expression ?? 'happy',
+          ),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return const SizedBox.shrink();
+            }
+
+            // 使用第一个图层作为主要图片路径（简化处理）
+            final primaryImagePath = snapshot.data!.first.assetName;
+            final screenSize = MediaQuery.of(context).size;
+            
+            // 计算角色尺寸
+            double characterHeight = screenSize.height * (poseConfig.scale > 0 ? poseConfig.scale : 0.8);
+            double characterWidth = characterHeight * 0.75; // 假设角色宽高比
+            
+            return AnimatedCharacterWidget(
+              characterId: characterId,
+              imagePath: primaryImagePath,
+              width: characterWidth,
+              height: characterHeight,
+              x: poseConfig.xcenter * screenSize.width,
+              y: poseConfig.ycenter * screenSize.height,
+              scale: 1.0,
+              opacity: 1.0,
+              animationName: characterState.animation,
+              onAnimationComplete: () {
+                print('[AnimatedCharacterWidget] 动画完成: ${characterState.animation} for $characterId');
+              },
+            );
+          },
+        );
+      }
+
+      // 没有动画时使用原有的渲染方式
       return FutureBuilder<List<CharacterLayerInfo>>(
         future: CharacterLayerParser.parseCharacterLayers(
           resourceId: characterState.resourceId,

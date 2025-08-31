@@ -10,7 +10,8 @@ class ShowNode implements SksNode {
   final String? pose;
   final String? expression;
   final String? position;
-  ShowNode(this.character, {this.pose, this.expression, this.position});
+  final String? animation; // 新增：动画名称
+  ShowNode(this.character, {this.pose, this.expression, this.position, this.animation});
 }
 
 class HideNode implements SksNode {
@@ -31,7 +32,8 @@ class SayNode implements SksNode {
   final String dialogue;
   final String? pose;
   final String? expression;
-  SayNode({this.character, required this.dialogue, this.pose, this.expression});
+  final String? animation; // 新增：动画名称
+  SayNode({this.character, required this.dialogue, this.pose, this.expression, this.animation});
 }
 
 class ChoiceOptionNode {

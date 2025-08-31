@@ -1,0 +1,91 @@
+// 角色动画配置文件
+// 使用[动画名称]包裹定义动画
+// 支持变量: xcenter, ycenter, scale, rotation 等
+
+[jump]
+// 跳跃动画 - 向上移动然后返回
+keyframe 0.0 y:ycenter
+keyframe 0.5 y:ycenter-0.2 scale:scale+0.1
+keyframe 1.0 y:ycenter scale:scale
+duration 1.0
+ease in_out_bounce
+
+[shake]
+// 摇晃动画 - 左右晃动
+keyframe 0.0 x:xcenter
+keyframe 0.2 x:xcenter+0.05
+keyframe 0.4 x:xcenter-0.05
+keyframe 0.6 x:xcenter+0.03
+keyframe 0.8 x:xcenter-0.03
+keyframe 1.0 x:xcenter
+duration 1.0
+ease in_out_quad
+
+[bounce]
+// 弹跳动画 - 缩放弹跳效果
+keyframe 0.0 scale:scale
+keyframe 0.3 scale:scale+0.2
+keyframe 0.6 scale:scale-0.1
+keyframe 1.0 scale:scale
+duration 0.8
+ease elastic_out
+
+[fade_in]
+// 淡入动画
+keyframe 0.0 opacity:0.0
+keyframe 1.0 opacity:1.0
+duration 1.0
+ease linear
+
+[fade_out]
+// 淡出动画
+keyframe 0.0 opacity:1.0
+keyframe 1.0 opacity:0.0
+duration 1.0
+ease linear
+
+[slide_in_left]
+// 从左侧滑入
+keyframe 0.0 x:xcenter-1.0 opacity:0.0
+keyframe 1.0 x:xcenter opacity:1.0
+duration 1.0
+ease out_cubic
+
+[slide_in_right]
+// 从右侧滑入
+keyframe 0.0 x:xcenter+1.0 opacity:0.0
+keyframe 1.0 x:xcenter opacity:1.0
+duration 1.0
+ease out_cubic
+
+[zoom_in]
+// 放大进入
+keyframe 0.0 scale:scale*0.1 opacity:0.0
+keyframe 1.0 scale:scale opacity:1.0
+duration 0.8
+ease out_back
+
+[zoom_out]
+// 缩小退出
+keyframe 0.0 scale:scale opacity:1.0
+keyframe 1.0 scale:scale*0.1 opacity:0.0
+duration 0.8
+ease in_back
+
+[pulse]
+// 脉冲效果
+keyframe 0.0 scale:scale
+keyframe 0.5 scale:scale+0.15
+keyframe 1.0 scale:scale
+duration 1.5
+ease in_out_sine
+loop true
+
+[float]
+// 浮动效果
+keyframe 0.0 y:ycenter
+keyframe 1.0 y:ycenter-0.1
+duration 2.0
+ease in_out_sine
+loop true
+alternate true
