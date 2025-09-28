@@ -89,7 +89,11 @@ class _GameContainerState extends State<GameContainer> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
+    final isDarkMode = SettingsManager().currentDarkMode;
+    
+    print('[GameContainer] 全局反色模式: $isDarkMode');
+    
+    Widget gameContent = FutureBuilder(
       future: moduleLoader.getCurrentModule(),
       builder: (builderContext, snapshot) {
         if (!snapshot.hasData) {
@@ -134,6 +138,21 @@ class _GameContainerState extends State<GameContainer> with WindowListener {
         return currentScreen;
       },
     );
+
+    // 在夜间模式下应用全局反色滤镜
+    if (isDarkMode) {
+      gameContent = ColorFiltered(
+        colorFilter: const ColorFilter.matrix([
+          -1.0, 0, 0, 0, 255,
+          0, -1.0, 0, 0, 255,
+          0, 0, -1.0, 0, 255,
+          0, 0, 0, 1.0, 0,
+        ]),
+        child: gameContent,
+      );
+    }
+
+    return gameContent;
   }
 }
 

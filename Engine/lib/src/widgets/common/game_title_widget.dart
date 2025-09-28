@@ -61,7 +61,7 @@ class _GameTitleWidgetState extends State<GameTitleWidget> {
     }
     
     print('[GameTitleWidget] 最终标题路径: $titleImagePath');
-    print('[GameTitleWidget] 是否应用反色滤镜: ${!isDarkMode}');
+    print('[GameTitleWidget] 全局反色模式，不再单独应用滤镜');
     
     Widget titleImage = SmartAssetImage(
       assetName: titleImagePath,
@@ -84,18 +84,7 @@ class _GameTitleWidgetState extends State<GameTitleWidget> {
       ),
     );
     
-    // 在浅色模式下对原始图片应用反色滤镜
-    if (!isDarkMode) {
-      titleImage = ColorFiltered(
-        colorFilter: const ColorFilter.matrix([
-          -1.0, 0, 0, 0, 255,
-          0, -1.0, 0, 0, 255,
-          0, 0, -1.0, 0, 255,
-          0, 0, 0, 1.0, 0,
-        ]),
-        child: titleImage,
-      );
-    }
+    // 移除单独的反色滤镜，因为现在使用全局反色
     
     return Positioned(
       top: widget.config.hasBottom ? null : screenSize.height * widget.config.mainMenuTitleTop,
