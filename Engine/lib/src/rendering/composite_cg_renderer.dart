@@ -1806,7 +1806,9 @@ class _DissolveShaderPainter extends CustomPainter {
       ..setImageSampler(0, fromImage)
       ..setImageSampler(1, toImage);
 
-    final paint = ui.Paint()..shader = shader;
+    final paint = ui.Paint()
+      ..shader = shader
+      ..blendMode = ui.BlendMode.srcOver;  // 确保使用srcOver以保留透明度
 
     canvas.drawRect(targetRect, paint);
   }
