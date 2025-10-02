@@ -465,6 +465,9 @@ class CompositeCgRenderer {
         ..isAntiAlias = false
         ..filterQuality = ui.FilterQuality.none;
 
+      // 使用saveLayer来确保透明度正确处理
+      canvas.saveLayer(targetRect, ui.Paint());
+
       for (var layerIndex = 0; layerIndex < result.layers.length; layerIndex++) {
         final layer = result.layers[layerIndex];
         final srcRect = ui.Rect.fromLTWH(
@@ -473,9 +476,12 @@ class CompositeCgRenderer {
           layer.width.toDouble(),
           layer.height.toDouble(),
         );
+        // 在saveLayer内部，第一层可以使用src
         paint.blendMode = layerIndex == 0 ? ui.BlendMode.src : ui.BlendMode.srcOver;
         canvas.drawImageRect(layer, srcRect, targetRect, paint);
       }
+
+      canvas.restore();
 
       final picture = recorder.endRecording();
       final image = await picture.toImage(result.width, result.height);
@@ -1806,9 +1812,7 @@ class _DissolveShaderPainter extends CustomPainter {
       ..setImageSampler(0, fromImage)
       ..setImageSampler(1, toImage);
 
-    final paint = ui.Paint()
-      ..shader = shader
-      ..blendMode = ui.BlendMode.srcOver;  // 确保使用srcOver以保留透明度
+    final paint = ui.Paint()..shader = shader;
 
     canvas.drawRect(targetRect, paint);
   }
@@ -2016,12 +2020,30 @@ void _drawCompositeResult(
     ..isAntiAlias = true
     ..filterQuality = ui.FilterQuality.high;
 
+  // 在Windows上，使用saveLayer来创建一个新的透明图层
+  // 这样可以避免BlendMode.src的问题
+  final needsSaveLayer = result.layers.isNotEmpty;
+  if (needsSaveLayer) {
+    // 创建一个带有透明度的新图层
+    final layerPaint = ui.Paint()
+      ..color = ui.Color.fromRGBO(255, 255, 255, alpha);
+    canvas.saveLayer(targetRect, layerPaint);
+  }
+
   for (var index = 0; index < result.layers.length; index++) {
     final layer = result.layers[index];
+    // 在saveLayer内部，第一层可以使用src以提高性能
+    // 因为saveLayer已经创建了一个透明的图层
     paint
       ..blendMode = index == 0 ? ui.BlendMode.src : ui.BlendMode.srcOver
-      ..color = ui.Color.fromRGBO(255, 255, 255, alpha);
+      ..color = needsSaveLayer
+          ? Colors.white  // 在saveLayer内部使用不透明白色
+          : ui.Color.fromRGBO(255, 255, 255, alpha);
     canvas.drawImageRect(layer, srcRect, targetRect, paint);
+  }
+
+  if (needsSaveLayer) {
+    canvas.restore();
   }
 }
 
