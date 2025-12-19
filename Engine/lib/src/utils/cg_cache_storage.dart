@@ -67,7 +67,7 @@ class CgCacheStorage {
     if (path.isEmpty) {
       return false;
     }
-    return path.contains('${Platform.pathSeparator}.cg_cache${Platform.pathSeparator}') ||
+    return path.contains('${p.separator}.cg_cache${p.separator}') ||
         path.contains('/.cg_cache/');
   }
 

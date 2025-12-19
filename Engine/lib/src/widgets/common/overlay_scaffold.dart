@@ -148,7 +148,8 @@ class OverlayScaffoldState extends State<OverlayScaffold>
         return GestureDetector(
           onTap: _handleClose,
           onSecondaryTap: _handleClose,
-          child: Container(
+          child: Expanded(
+            child:Container(
             width: double.infinity,
             height: double.infinity,
             decoration: BoxDecoration(
@@ -235,7 +236,7 @@ class OverlayScaffoldState extends State<OverlayScaffold>
                 ),
               ),
             ),
-          ),
+          )),
         );
       },
     );

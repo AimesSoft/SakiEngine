@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show rootBundle, AssetManifest;
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/game/game_script_localization.dart';
 
@@ -110,10 +110,23 @@ class AssetManager {
     }
   }
 
+  Map<String, dynamic> listToManifestMap(List<String> assets) {
+    final Map<String, dynamic> manifest = {};
+
+    for (final path in assets) {
+      manifest[path] = [path];
+    }
+
+    return manifest;
+  }
+
   Future<void> _loadManifest() async {
     if (_assetManifest != null) return;
-    final manifestJson = await rootBundle.loadString('AssetManifest.json');
-    _assetManifest = json.decode(manifestJson);
+    // final manifestJson = await rootBundle.loadString('AssetManifest.json');
+    // _assetManifest = json.decode(manifestJson);
+    // https://docs.flutter.dev/release/breaking-changes/asset-manifest-dot-json
+    final assetManifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    _assetManifest = listToManifestMap(assetManifest.listAssets());
   }
 
   Future<List<String>> listAssets(String directory, String extension) async {

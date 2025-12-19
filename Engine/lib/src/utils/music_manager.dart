@@ -313,7 +313,8 @@ class MusicManager extends ChangeNotifier {
     try {
       // 根据轨道类型选择处理逻辑
       if (config.type == AudioTrackType.music) {
-        await _playMusic(
+        // await
+        _playMusic(
           assetPath,
           config,
           fadeTransition: fadeTransition,
@@ -321,7 +322,8 @@ class MusicManager extends ChangeNotifier {
           loop: loop || config.defaultLoop,
         );
       } else if (config.type == AudioTrackType.sound) {
-        await _playSound(
+        // await
+        _playSound(
           assetPath,
           config,
           fadeTransition: fadeTransition,

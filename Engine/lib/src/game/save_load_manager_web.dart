@@ -8,11 +8,109 @@ import 'package:sakiengine/src/game/screenshot_generator.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
 import 'package:sakiengine/src/utils/rich_text_parser.dart';
 import 'package:sakiengine/src/config/config_models.dart';
+import 'package:sakiengine/src/config/config_parser.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
+import 'package:sakiengine/src/game/script_merger.dart';
+import 'package:sakiengine/src/config/asset_manager.dart';
 
 class SaveLoadManager {
   static const String _storageKeyPrefix = 'saki_save_';
+
+
+  // 缓存脚本和配置，避免重复加载
+  static ScriptNode? _cachedScript;
+  static Map<String, CharacterConfig>? _cachedCharacterConfigs;
+
+  /// 实时查询存档的对话预览文本
+  /// 根据scriptIndex从当前脚本中查询对话内容
+  static Future<String> getDialoguePreview(GameStateSnapshot snapshot) async {
+    try {
+      // 加载脚本（如果未缓存）
+      if (_cachedScript == null) {
+        final scriptMerger = ScriptMerger();
+        _cachedScript = await scriptMerger.getMergedScript();
+      }
+
+      // 加载角色配置（如果未缓存）
+      if (_cachedCharacterConfigs == null) {
+        final charactersContent = await AssetManager()
+            .loadString('assets/GameScript/configs/characters.sks');
+        _cachedCharacterConfigs = ConfigParser().parseCharacters(charactersContent);
+      }
+
+      final currentState = snapshot.currentState;
+
+      // 检查是否是选择界面
+      if (currentState.currentNode != null && currentState.currentNode is MenuNode) {
+        final menuNode = currentState.currentNode as MenuNode;
+        final choiceTexts = menuNode.choices.map((choice) => '[${choice.text}]').toList();
+        final localization = LocalizationManager();
+        return '${localization.t('saveLoad.choiceMenu')}\n${choiceTexts.join('\n')}';
+      }
+
+      // 确定要查询的scriptIndex
+      // 优先使用对话历史的最后一条，如果没有则使用当前scriptIndex
+      final int dialogueScriptIndex = snapshot.dialogueHistory.isNotEmpty
+          ? snapshot.dialogueHistory.last.scriptIndex
+          : snapshot.scriptIndex;
+
+      // 从脚本中查询对话
+      if (dialogueScriptIndex >= 0 &&
+          dialogueScriptIndex < _cachedScript!.children.length) {
+        final node = _cachedScript!.children[dialogueScriptIndex];
+
+        if (node is SayNode) {
+          final dialogue = node.dialogue;
+          String? speaker;
+
+          if (node.character != null) {
+            final characterConfig = _cachedCharacterConfigs![node.character];
+            speaker = characterConfig?.name;
+          }
+
+          if (speaker != null && speaker.isNotEmpty) {
+            return '【$speaker】${RichTextParser.cleanText(dialogue)}';
+          } else {
+            return RichTextParser.cleanText(dialogue);
+          }
+        }
+      }
+
+      // 如果无法从脚本查询，回退到NVL模式检查
+      if (currentState.isNvlMode && currentState.nvlDialogues.isNotEmpty) {
+        final latestNvlDialogue = currentState.nvlDialogues.last;
+        if (latestNvlDialogue.speaker != null && latestNvlDialogue.speaker!.isNotEmpty) {
+          return '【${latestNvlDialogue.speaker}】${RichTextParser.cleanText(latestNvlDialogue.dialogue)}';
+        } else {
+          return RichTextParser.cleanText(latestNvlDialogue.dialogue);
+        }
+      }
+
+      // 最后回退到当前状态的对话
+      if (currentState.dialogue != null && currentState.dialogue!.isNotEmpty) {
+        if (currentState.speaker != null && currentState.speaker!.isNotEmpty) {
+          return '【${currentState.speaker}】${RichTextParser.cleanText(currentState.dialogue!)}';
+        } else {
+          return RichTextParser.cleanText(currentState.dialogue!);
+        }
+      }
+
+      return '...';
+    } catch (e) {
+      if (kDebugMode) {
+        print('[SaveLoadManager] 实时查询对话预览失败: $e');
+      }
+      return '...';
+    }
+    // return '...';
+  }
+
+  /// 清除缓存（在脚本热重载时调用）
+  static void clearCache() {
+    _cachedScript = null;
+    _cachedCharacterConfigs = null;
+  }
 
   // Web平台使用默认项目名
   Future<String> _getCurrentProjectName() async {
@@ -105,6 +203,110 @@ class SaveLoadManager {
     final base64Data = base64Encode(binaryData);
     html.window.localStorage[_getSaveKey(slotId)] = base64Data;
   }
+
+
+  /// 快速存档功能
+  Future<void> quickSave(String currentScript, GameStateSnapshot snapshot, Map<String, PoseConfig> poseConfigs) async {
+    // final directory = await getSavesDirectory();
+    // final file = File('$directory/quicksave.sakisav');
+    //
+    // // 生成截图数据
+    // Uint8List? screenshotData;
+    // try {
+    //   screenshotData = await ScreenshotGenerator.generateScreenshotData(
+    //     snapshot.currentState,
+    //     poseConfigs,
+    //   );
+    // } catch (e) {
+    //   print('生成截图失败: $e');
+    // }
+    //
+    // final saveSlot = SaveSlot(
+    //   id: -1, // 使用特殊ID表示快速存档
+    //   saveTime: DateTime.now(),
+    //   currentScript: currentScript,
+    //   dialoguePreview: '',
+    //   snapshot: snapshot,
+    //   screenshotData: screenshotData,
+    //   isLocked: false,
+    // );
+    //
+    // final binaryData = saveSlot.toBinary();
+    // await file.writeAsBytes(binaryData);
+    // 生成截图（需要确保你的 generateScreenshotData 支持 Web）
+    Uint8List? screenshotData;
+    try {
+      screenshotData = await ScreenshotGenerator.generateScreenshotData(
+        snapshot.currentState,
+        poseConfigs,
+      );
+    } catch (e, st) {
+      print('生成截图失败: $e\n$st');
+    }
+
+    final saveSlot = SaveSlot(
+      id: -1, // 快速存档
+      saveTime: DateTime.now(),
+      currentScript: currentScript,
+      dialoguePreview: '',
+      snapshot: snapshot,
+      screenshotData: screenshotData,
+      isLocked: false,
+    );
+
+    // 转换成二进制
+    final binaryData = saveSlot.toBinary();
+
+    // Web 无法保存二进制文件，因此使用 base64
+    final base64Data = base64Encode(binaryData);
+
+    try {
+      html.window.localStorage['quicksave.sakisav'] = base64Data;
+      print("快速存档成功（Web）");
+    } catch (e, st) {
+      print("快速存储失败: $e\n$st");
+    }
+  }
+
+  /// 读取快速存档
+  Future<SaveSlot?> loadQuickSave() async {
+    // try {
+    //   final directory = await getSavesDirectory();
+    //   final file = File('$directory/quicksave.sakisav');
+    //   if (await file.exists()) {
+    //     final binaryData = await file.readAsBytes();
+    //     return SaveSlot.fromBinary(binaryData);
+    //   }
+    // } catch (e) {
+    //   print('Error loading quick save: $e');
+    // }
+    final base64Data = html.window.localStorage['quicksave.sakisav'];
+    if (base64Data == null) return null;
+
+    try {
+      final binaryData = base64Decode(base64Data);
+      return SaveSlot.fromBinary(binaryData);
+    } catch (e, st) {
+      print('快速读档失败: $e\n$st');
+      return null;
+    }
+    // return null;
+  }
+
+  /// 检查快速存档是否存在
+  Future<bool> hasQuickSave() async {
+    // try {
+    //   final directory = await getSavesDirectory();
+    //   final file = File('$directory/quicksave.sakisav');
+    //   return await file.exists();
+    // } catch (e) {
+    //   print('Error checking quick save: $e');
+    //   return false;
+    // }
+    return html.window.localStorage.containsKey('quicksave.sakisav');
+    // return false;
+  }
+
 
   Future<SaveSlot?> loadGame(int slotId) async {
     try {
