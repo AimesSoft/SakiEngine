@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const { execSync } = require('child_process');
 const assetUtils = require('./asset-utils.js');
 
 // 颜色代码
@@ -126,18 +127,22 @@ async function createNewProject() {
         // 创建项目模块
         await createProjectModule(projectRoot, projectDir, projectName, primaryColor);
         
+        // 创建 Flutter App 并写入引擎依赖
+        await createFlutterAppProject(projectRoot, projectDir, projectName, bundleId);
+        
         console.log();
         colorLog('✓ 项目创建完成！', 'green');
         console.log();
         colorLog(`项目路径: ${projectDir}`, 'blue');
-        colorLog(`模块路径: ${path.join(projectDir, 'ProjectCode', 'lib', projectName.toLowerCase())}`, 'blue');
+        const moduleId = toSnakeIdentifier(projectName);
+        colorLog(`模块路径: ${path.join(projectDir, 'ProjectCode', 'lib', moduleId)}`, 'blue');
         colorLog('请将游戏资源（图片、音频等）放入对应的 Assets 子目录中。', 'yellow');
         console.log();
         colorLog('下一步操作：', 'green');
         colorLog('1. 运行 node run.js 并选择新创建的项目', 'blue');
         colorLog('2. 编辑 GameScript/labels/start.sks 开始创作你的故事', 'blue');
         colorLog('3. 在 Assets 目录中添加游戏所需的图片和音频资源', 'blue');
-        colorLog(`4. 自定义项目模块: ${path.join(projectDir, 'ProjectCode', 'lib', projectName.toLowerCase(), `${projectName.toLowerCase()}_module.dart`)}`, 'blue');
+        colorLog(`4. 自定义项目模块: ${path.join(projectDir, 'ProjectCode', 'lib', moduleId, `${moduleId}_module.dart`)}`, 'blue');
         console.log();
         
         // 询问是否立即设置为默认项目
@@ -439,7 +444,8 @@ endmenu
 async function createProjectModule(projectRoot, projectDir, projectName, primaryColor) {
     colorLog('创建项目代码目录...', 'yellow');
     
-    const projectNameLower = projectName.toLowerCase();
+    const projectNameLower = toSnakeIdentifier(projectName);
+    const moduleClassName = `${toPascalCase(projectName)}Module`;
     const projectCodeDir = path.join(projectDir, 'ProjectCode');
     const moduleDir = path.join(projectCodeDir, 'lib', projectNameLower);
     
@@ -461,7 +467,7 @@ import 'package:sakiengine/src/core/game_module.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 
 /// ${projectName} 项目的自定义模块
-class ${projectName}Module extends DefaultGameModule {
+class ${moduleClassName} extends DefaultGameModule {
   
   @override
   ThemeData? createTheme() {
@@ -502,14 +508,14 @@ class ${projectName}Module extends DefaultGameModule {
   @override
   Future<void> initialize() async {
     if (kDebugMode) {
-      print('[${projectName}Module] 🎯 ${projectName} 项目模块初始化完成');
+      print('[${moduleClassName}] 🎯 ${projectName} 项目模块初始化完成');
     }
     // 在这里可以进行项目特定的初始化
     // 比如加载特殊的资源、设置特殊的配置等
   }
 }
 
-GameModule createProjectModule() => ${projectName}Module();
+GameModule createProjectModule() => ${moduleClassName}();
 `;
     
     fs.writeFileSync(path.join(moduleDir, `${projectNameLower}_module.dart`), moduleContent);
@@ -523,17 +529,178 @@ GameModule createProjectModule() => ${projectName}Module();
 `;
     fs.writeFileSync(path.join(projectCodeDir, 'README.md'), projectCodeReadme);
 
-    // 在 Engine/lib 下创建链接，保持模块系统兼容
-    const engineLinkPath = path.join(projectRoot, 'Engine', 'lib', projectNameLower);
-    try {
-        if (fs.existsSync(engineLinkPath)) {
-            fs.rmSync(engineLinkPath, { recursive: true, force: true });
-        }
-        const relativeTarget = path.relative(path.dirname(engineLinkPath), moduleDir);
-        fs.symlinkSync(relativeTarget, engineLinkPath, process.platform === 'win32' ? 'junction' : 'dir');
-    } catch (error) {
-        colorLog(`警告: 创建 Engine/lib 链接失败，请手动链接 ${engineLinkPath} -> ${moduleDir}`, 'yellow');
+    const projectPackageName = `${projectNameLower}_project`;
+    fs.writeFileSync(
+        path.join(projectCodeDir, 'pubspec.yaml'),
+`name: ${projectPackageName}
+description: "${projectName} project-level module package"
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sakiengine:
+    path: ../../../Engine
+
+flutter:
+  uses-material-design: true
+`);
+
+    fs.writeFileSync(
+        path.join(projectCodeDir, 'lib', `${projectPackageName}.dart`),
+`library ${projectPackageName};
+
+export '${projectNameLower}/${projectNameLower}_module.dart' show createProjectModule;
+`);
+}
+
+function toSnakeIdentifier(name) {
+    const normalized = String(name)
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '');
+    if (!normalized) return 'game';
+    if (!/^[a-z]/.test(normalized)) {
+        return `game_${normalized}`;
     }
+    return normalized;
+}
+
+function toPascalCase(name) {
+    const words = String(name)
+        .replace(/[^a-zA-Z0-9]+/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+    if (words.length === 0) {
+        return 'Game';
+    }
+    return words
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join('');
+}
+
+async function createFlutterAppProject(projectRoot, projectDir, projectName, bundleId) {
+    colorLog('创建 Flutter 项目骨架...', 'yellow');
+
+    const moduleId = toSnakeIdentifier(projectName);
+    const appPackageName = `${moduleId}_app`;
+    const orgParts = String(bundleId).split('.');
+    const appOrg = orgParts.length > 1 ? orgParts.slice(0, -1).join('.') : 'com.sakiengine';
+    const projectPackageName = `${moduleId}_project`;
+
+    execSync(
+        `flutter create --no-pub --project-name ${appPackageName} --org ${appOrg} --platforms=android,ios,linux,macos,windows,web \"${projectDir}\"`,
+        { stdio: 'inherit' }
+    );
+
+    // 项目资产与默认配置
+    fs.writeFileSync(path.join(projectDir, 'default_game.txt'), `${projectName}\n`);
+    fs.mkdirSync(path.join(projectDir, 'Assets', 'fonts'), { recursive: true });
+    const rootIconPath = path.join(projectRoot, 'icon.png');
+    const engineIconPath = path.join(projectRoot, 'Engine', 'icon.png');
+    const projectIconPath = path.join(projectDir, 'icon.png');
+    if (!fs.existsSync(projectIconPath) && fs.existsSync(rootIconPath)) {
+        fs.copyFileSync(rootIconPath, projectIconPath);
+    } else if (!fs.existsSync(projectIconPath) && fs.existsSync(engineIconPath)) {
+        fs.copyFileSync(engineIconPath, projectIconPath);
+    }
+
+    fs.copyFileSync(
+        path.join(projectRoot, 'Engine', 'assets', 'fonts', 'SourceHanSansCN-Bold.ttf'),
+        path.join(projectDir, 'Assets', 'fonts', 'SourceHanSansCN-Bold.ttf')
+    );
+
+    fs.writeFileSync(
+        path.join(projectDir, 'pubspec.yaml'),
+`name: ${appPackageName}
+description: "${projectName} Flutter game project"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sakiengine:
+    path: ../../Engine
+  ${projectPackageName}:
+    path: ./ProjectCode
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - default_game.txt
+    - Assets/
+    - GameScript/
+    - GameScript_en/
+    - GameScript_ja/
+    - GameScript_zh-Hant/
+  fonts:
+    - family: SourceHanSansCN
+      fonts:
+        - asset: Assets/fonts/SourceHanSansCN-Bold.ttf
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "icon.png"
+  windows:
+    generate: true
+    image_path: "icon.png"
+  macos:
+    generate: true
+    image_path: "icon.png"
+`
+    );
+
+    fs.writeFileSync(
+        path.join(projectDir, 'lib', 'main.dart'),
+`import 'package:sakiengine/sakiengine.dart';
+import 'package:${projectPackageName}/${projectPackageName}.dart';
+
+Future<void> main() async {
+  registerProjectModule('${moduleId}', createProjectModule);
+  await runSakiEngine(
+    projectName: '${projectName}',
+    appName: '${projectName}',
+  );
+}
+`
+    );
+
+    fs.writeFileSync(
+        path.join(projectDir, 'README.md'),
+`# ${projectName}
+
+这是独立 Flutter 项目层目录（可直接运行）。
+
+- 引擎依赖: \`../../Engine\`
+- 项目代码包: \`./ProjectCode\`
+- 资源目录: \`Assets/\`、\`GameScript*/\`
+- 默认项目标识: \`default_game.txt\`
+
+快速启动:
+
+\`\`\`bash
+flutter pub get
+flutter run -d macos --dart-define=SAKI_GAME_PATH="$(pwd)"
+\`\`\`
+`
+    );
 }
 
 /**

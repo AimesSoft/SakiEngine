@@ -1,0 +1,30 @@
+//label// SakiEngine 剧情标签脚本文件
+label start
+// 设置背景场景（请将对应的背景图片放入 Assets/images/backgrounds/ 目录）
+// scene bg background_name
+
+// 欢迎消息
+nr "欢迎来到你的新项目！"
+nr "这是一个使用 SakiEngine 创建的新项目。"
+
+// 示例选择菜单
+menu
+"开始游戏" start_game
+"查看设置" show_settings
+"退出" quit_game
+endmenu
+
+label start_game
+nr "游戏开始了！"
+nr "请在这里编写你的故事..."
+// 在这里添加你的游戏内容
+return
+
+label show_settings
+nr "这里是设置界面。"
+nr "你可以在这里添加各种设置选项。"
+return
+
+label quit_game
+nr "感谢游玩！"
+return

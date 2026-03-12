@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/utils/cg_image_compositor.dart';
+import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 import 'package:sakiengine/src/utils/gpu_image_compositor.dart';
 import 'package:sakiengine/src/utils/character_composite_cache.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
@@ -112,7 +113,7 @@ class CompositeCgRenderer {
   static Future<void> _ensureDissolveProgram() async {
     if (_dissolveProgram != null) return;
     try {
-      final program = await ui.FragmentProgram.fromAsset(
+      final program = await EngineAssetLoader.loadFragmentProgram(
         'assets/shaders/dissolve.frag',
       );
       _dissolveProgram = program;
@@ -237,8 +238,7 @@ class CompositeCgRenderer {
     }
 
     final currentImagePath = _currentDisplayedImages[displayKey];
-    final bool isFirstAppearance =
-        !skipAnimations &&
+    final bool isFirstAppearance = !skipAnimations &&
         (currentImagePath == null || _isFreshFade(displayKey));
     if (isFirstAppearance) {
       _markFadeUsed(displayKey);
@@ -329,8 +329,7 @@ class CompositeCgRenderer {
 
     final currentKey = _currentDisplayedGpuKeys[displayKey];
     final currentResult = _peekGpuResult(currentKey);
-    final bool isFirstAppearance =
-        !skipAnimations &&
+    final bool isFirstAppearance = !skipAnimations &&
         (currentKey == null || _isFreshFade('gpu_$displayKey'));
     if (isFirstAppearance) {
       _markFadeUsed('gpu_$displayKey');
@@ -409,16 +408,16 @@ class CompositeCgRenderer {
     if (!_gpuFutureCache.containsKey(cacheKey)) {
       _gpuFutureCache[cacheKey] = _gpuCompositor
           .getCompositeEntry(
-            resourceId: characterState.resourceId,
-            pose: characterState.pose ?? 'pose1',
-            expression: characterState.expression ?? 'happy',
-          )
+        resourceId: characterState.resourceId,
+        pose: characterState.pose ?? 'pose1',
+        expression: characterState.expression ?? 'happy',
+      )
           .then((entry) {
-            if (entry != null) {
-              _cacheGpuResult(cacheKey, entry.result, markAsPreloaded: true);
-            }
-            return entry;
-          });
+        if (entry != null) {
+          _cacheGpuResult(cacheKey, entry.result, markAsPreloaded: true);
+        }
+        return entry;
+      });
     }
 
     return FutureBuilder<GpuCompositeEntry?>(
@@ -497,11 +496,9 @@ class CompositeCgRenderer {
         ..isAntiAlias = false
         ..filterQuality = ui.FilterQuality.none;
 
-      for (
-        var layerIndex = 0;
-        layerIndex < result.layers.length;
-        layerIndex++
-      ) {
+      for (var layerIndex = 0;
+          layerIndex < result.layers.length;
+          layerIndex++) {
         final layer = result.layers[layerIndex];
         final srcRect = ui.Rect.fromLTWH(
           0,
@@ -509,9 +506,8 @@ class CompositeCgRenderer {
           layer.width.toDouble(),
           layer.height.toDouble(),
         );
-        paint.blendMode = layerIndex == 0
-            ? ui.BlendMode.src
-            : ui.BlendMode.srcOver;
+        paint.blendMode =
+            layerIndex == 0 ? ui.BlendMode.src : ui.BlendMode.srcOver;
         canvas.drawImageRect(layer, srcRect, targetRect, paint);
       }
 
@@ -1073,9 +1069,8 @@ class _GpuSeamlessCgDisplayState extends State<GpuSeamlessCgDisplay>
         final currentOpacity = _incomingResult != null
             ? (1.0 - transitionValue) * fadeValue
             : fadeValue;
-        final newOpacity = _incomingResult != null
-            ? transitionValue * fadeValue
-            : 0.0;
+        final newOpacity =
+            _incomingResult != null ? transitionValue * fadeValue : 0.0;
 
         return LayoutBuilder(
           builder: (context, constraints) {

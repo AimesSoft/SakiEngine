@@ -1,0 +1,16 @@
+name: soranouta_project
+description: "SoraNoUta project-level module package"
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sakiengine:
+    path: ../../../Engine
+
+flutter:
+  uses-material-design: true

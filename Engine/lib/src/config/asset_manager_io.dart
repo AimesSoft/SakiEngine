@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle, AssetManifest;
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/game/game_script_localization.dart';
+import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
 class AssetManager {
   static final AssetManager _instance = AssetManager._internal();
@@ -49,7 +50,7 @@ class AssetManager {
     try {
       // 从assets读取default_game.txt
       final assetContent =
-          await rootBundle.loadString('assets/default_game.txt');
+          await EngineAssetLoader.loadString('assets/default_game.txt');
       final defaultGame = assetContent.trim();
 
       if (defaultGame.isEmpty) {
@@ -98,10 +99,12 @@ class AssetManager {
           'Failed to load asset from file system. Tried: ${candidates.join(', ')}. Last error: $lastError');
     } else {
       for (final candidate in candidates) {
-        try {
-          return await rootBundle.loadString(candidate, cache: false);
-        } catch (e) {
-          lastError = e;
+        for (final bundleCandidate in _bundleCandidates(candidate)) {
+          try {
+            return await rootBundle.loadString(bundleCandidate, cache: false);
+          } catch (e) {
+            lastError = e;
+          }
         }
       }
 
@@ -171,11 +174,15 @@ class AssetManager {
       if (_assetManifest != null) {
         for (final candidate in candidates) {
           final currentAssets = <String>[];
+          final candidatePrefixes = _bundleCandidates(candidate);
 
           for (final assetPath in _assetManifest!.keys) {
-            if (assetPath.startsWith(candidate) &&
-                assetPath.endsWith(extension)) {
-              currentAssets.add(p.basename(assetPath));
+            for (final prefix in candidatePrefixes) {
+              if (assetPath.startsWith(prefix) &&
+                  assetPath.endsWith(extension)) {
+                currentAssets.add(p.basename(assetPath));
+                break;
+              }
             }
           }
 
@@ -191,6 +198,14 @@ class AssetManager {
       }
     }
     return assets;
+  }
+
+  List<String> _bundleCandidates(String path) {
+    final values = <String>[path];
+    if (path.startsWith('assets/')) {
+      values.add(path.substring('assets/'.length));
+    }
+    return values;
   }
 
   Future<String?> findAsset(String name) async {

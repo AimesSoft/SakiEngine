@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/config/asset_manager.dart';
+import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
 /// WebP动图预加载缓存
 class WebPPreloadCache {
@@ -18,7 +19,8 @@ class WebPPreloadCache {
   final Map<String, Completer<void>> _loadingCompleters = {};
 
   Future<void> preloadWebP(String assetName) async {
-    if (_frameCache.containsKey(assetName) || _loadingCompleters.containsKey(assetName)) {
+    if (_frameCache.containsKey(assetName) ||
+        _loadingCompleters.containsKey(assetName)) {
       return;
     }
 
@@ -48,17 +50,17 @@ class WebPPreloadCache {
 
       final codec = await ui.instantiateImageCodec(bytes);
       final frameCount = codec.frameCount;
-      
+
       if (frameCount > 1) {
         final frames = <ui.Image>[];
         Duration totalDuration = Duration.zero;
-        
+
         for (int i = 0; i < frameCount; i++) {
           final frame = await codec.getNextFrame();
           frames.add(frame.image);
           totalDuration += frame.duration;
         }
-        
+
         _frameCache[assetName] = frames;
         _durationCache[assetName] = totalDuration;
       } else {
@@ -122,12 +124,13 @@ class WebPPreloadCache {
   }
 
   String get _debugRoot {
-    const fromDefine = String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
+    const fromDefine =
+        String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
     if (fromDefine.isNotEmpty) return fromDefine;
-    
+
     final fromEnv = Platform.environment['SAKI_GAME_PATH'];
     if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
-    
+
     return '';
   }
 
@@ -135,15 +138,16 @@ class WebPPreloadCache {
     if (_debugRoot.isNotEmpty) {
       return _debugRoot;
     }
-    
+
     try {
-      final assetContent = await rootBundle.loadString('assets/default_game.txt');
+      final assetContent =
+          await EngineAssetLoader.loadString('assets/default_game.txt');
       final defaultGame = assetContent.trim();
-      
+
       if (defaultGame.isEmpty) {
         throw Exception('default_game.txt is empty');
       }
-      
+
       final gamePath = p.join(Directory.current.path, 'Game', defaultGame);
       return gamePath;
     } catch (e) {
@@ -161,13 +165,13 @@ class WebPPreloadCache {
               : assetPath;
           final fileSystemPath = p.normalize(p.join(gamePath, relativePath));
           final file = File(fileSystemPath);
-          
+
           if (await file.exists()) {
             return await file.readAsBytes();
           }
         }
       }
-      
+
       final data = await rootBundle.load(assetPath);
       return data.buffer.asUint8List();
     } catch (e) {

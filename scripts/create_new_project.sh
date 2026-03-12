@@ -4,6 +4,8 @@
 # SakiEngine 新项目创建脚本
 #================================================
 
+set -euo pipefail
+
 # ANSI Color Codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -360,7 +362,18 @@ EOF
 
 # 创建项目代码目录（与引擎解耦）
 echo -e "${YELLOW}创建项目代码目录...${NC}"
-PROJECT_NAME_LOWER=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]')
+PROJECT_NAME_LOWER=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_]+/_/g; s/_+/_/g; s/^_+|_+$//g')
+if [[ -z "$PROJECT_NAME_LOWER" ]]; then
+  PROJECT_NAME_LOWER="game"
+fi
+if [[ ! "$PROJECT_NAME_LOWER" =~ ^[a-z] ]]; then
+  PROJECT_NAME_LOWER="game_$PROJECT_NAME_LOWER"
+fi
+MODULE_CLASS_NAME="$(echo "$PROJECT_NAME" | sed -E 's/[^a-zA-Z0-9]+/ /g' | awk '{for(i=1;i<=NF;i++){printf toupper(substr($i,1,1)) tolower(substr($i,2));}}')"
+if [[ -z "$MODULE_CLASS_NAME" ]]; then
+  MODULE_CLASS_NAME="Game"
+fi
+MODULE_CLASS_NAME="${MODULE_CLASS_NAME}Module"
 MODULE_DIR="$PROJECT_DIR/ProjectCode/lib/$PROJECT_NAME_LOWER"
 
 # 创建模块目录结构
@@ -375,7 +388,7 @@ import 'package:sakiengine/src/core/game_module.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 
 /// $PROJECT_NAME 项目的自定义模块
-class ${PROJECT_NAME}Module extends DefaultGameModule {
+class ${MODULE_CLASS_NAME} extends DefaultGameModule {
   
   @override
   ThemeData? createTheme() {
@@ -416,14 +429,14 @@ class ${PROJECT_NAME}Module extends DefaultGameModule {
   @override
   Future<void> initialize() async {
     if (kDebugMode) {
-      print('[${PROJECT_NAME}Module] 🎯 $PROJECT_NAME 项目模块初始化完成');
+      print('[${MODULE_CLASS_NAME}] 🎯 $PROJECT_NAME 项目模块初始化完成');
     }
     // 在这里可以进行项目特定的初始化
     // 比如加载特殊的资源、设置特殊的配置等
   }
 }
 
-GameModule createProjectModule() => ${PROJECT_NAME}Module();
+GameModule createProjectModule() => ${MODULE_CLASS_NAME}();
 EOF
 
 cat > "$PROJECT_DIR/ProjectCode/README.md" << EOF
@@ -435,10 +448,143 @@ cat > "$PROJECT_DIR/ProjectCode/README.md" << EOF
 - 目标: 保持引擎层与项目层完全解耦
 EOF
 
-ENGINE_MODULE_LINK="$PROJECT_ROOT/Engine/lib/$PROJECT_NAME_LOWER"
-ln -sfn "../../Game/$PROJECT_NAME/ProjectCode/lib/$PROJECT_NAME_LOWER" "$ENGINE_MODULE_LINK"
+# 创建 ProjectCode 包配置与公共导出
+PROJECT_PACKAGE_NAME="$(echo "${PROJECT_NAME_LOWER}_project" | tr '-' '_')"
+cat > "$PROJECT_DIR/ProjectCode/pubspec.yaml" << EOF
+name: $PROJECT_PACKAGE_NAME
+description: "$PROJECT_NAME project-level module package"
+publish_to: 'none'
+version: 0.1.0
 
-cd - > /dev/null
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sakiengine:
+    path: ../../../Engine
+
+flutter:
+  uses-material-design: true
+EOF
+
+cat > "$PROJECT_DIR/ProjectCode/lib/${PROJECT_PACKAGE_NAME}.dart" << EOF
+library ${PROJECT_PACKAGE_NAME};
+
+export '${PROJECT_NAME_LOWER}/${PROJECT_NAME_LOWER}_module.dart' show createProjectModule;
+EOF
+
+# 生成 Flutter 项目骨架
+echo -e "${YELLOW}创建 Flutter 项目骨架...${NC}"
+APP_PACKAGE_NAME="$(echo "${PROJECT_NAME_LOWER}_app" | tr '-' '_')"
+if [[ ! "$APP_PACKAGE_NAME" =~ ^[a-z] ]]; then
+  APP_PACKAGE_NAME="game_$APP_PACKAGE_NAME"
+fi
+APP_ORG="${BUNDLE_ID%.*}"
+if [ "$APP_ORG" = "$BUNDLE_ID" ]; then
+  APP_ORG="com.sakiengine"
+fi
+
+flutter create \
+  --no-pub \
+  --project-name "$APP_PACKAGE_NAME" \
+  --org "$APP_ORG" \
+  --platforms=android,ios,linux,macos,windows,web \
+  "$PROJECT_DIR"
+
+# 项目资产与默认配置
+echo "$PROJECT_NAME" > "$PROJECT_DIR/default_game.txt"
+mkdir -p "$PROJECT_DIR/Assets/fonts"
+if [ -f "$PROJECT_ROOT/icon.png" ] && [ ! -f "$PROJECT_DIR/icon.png" ]; then
+  cp "$PROJECT_ROOT/icon.png" "$PROJECT_DIR/icon.png"
+elif [ -f "$PROJECT_ROOT/Engine/icon.png" ] && [ ! -f "$PROJECT_DIR/icon.png" ]; then
+  cp "$PROJECT_ROOT/Engine/icon.png" "$PROJECT_DIR/icon.png"
+fi
+
+cp -f "$PROJECT_ROOT/Engine/assets/fonts/SourceHanSansCN-Bold.ttf" \
+  "$PROJECT_DIR/Assets/fonts/SourceHanSansCN-Bold.ttf"
+
+# 写入项目 app 的依赖与入口
+cat > "$PROJECT_DIR/pubspec.yaml" << EOF
+name: $APP_PACKAGE_NAME
+description: "$PROJECT_NAME Flutter game project"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sakiengine:
+    path: ../../Engine
+  $PROJECT_PACKAGE_NAME:
+    path: ./ProjectCode
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - default_game.txt
+    - Assets/
+    - GameScript/
+    - GameScript_en/
+    - GameScript_ja/
+    - GameScript_zh-Hant/
+  fonts:
+    - family: SourceHanSansCN
+      fonts:
+        - asset: Assets/fonts/SourceHanSansCN-Bold.ttf
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "icon.png"
+  windows:
+    generate: true
+    image_path: "icon.png"
+  macos:
+    generate: true
+    image_path: "icon.png"
+EOF
+
+cat > "$PROJECT_DIR/lib/main.dart" << EOF
+import 'package:sakiengine/sakiengine.dart';
+import 'package:$PROJECT_PACKAGE_NAME/$PROJECT_PACKAGE_NAME.dart';
+
+Future<void> main() async {
+  registerProjectModule('$PROJECT_NAME_LOWER', createProjectModule);
+  await runSakiEngine(
+    projectName: '$PROJECT_NAME',
+    appName: '$PROJECT_NAME',
+  );
+}
+EOF
+
+cat > "$PROJECT_DIR/README.md" << EOF
+# $PROJECT_NAME
+
+这是独立 Flutter 项目层目录（可直接运行）。
+
+- 引擎依赖: \`../../Engine\`
+- 项目代码包: \`./ProjectCode\`
+- 资源目录: \`Assets/\`、\`GameScript*/\`
+- 默认项目标识: \`default_game.txt\`
+
+快速启动:
+
+\`\`\`bash
+flutter pub get
+flutter run -d macos --dart-define=SAKI_GAME_PATH="\$(pwd)"
+\`\`\`
+EOF
 
 echo ""
 echo -e "${GREEN}✓ 项目创建完成！${NC}"

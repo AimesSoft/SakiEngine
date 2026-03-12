@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as p;
+import 'package:sakiengine/src/config/runtime_project_config.dart';
 
 class ProjectInfoManager {
   static final ProjectInfoManager _instance = ProjectInfoManager._internal();
@@ -25,27 +26,59 @@ class ProjectInfoManager {
     }
 
     try {
+      final runtimeConfig = RuntimeProjectConfigStore().config;
+      if (runtimeConfig.projectName != null) {
+        _cachedProjectName = runtimeConfig.projectName!;
+        return _cachedProjectName!;
+      }
+
+      if (runtimeConfig.gamePath != null) {
+        _cachedProjectName = p.basename(runtimeConfig.gamePath!);
+        return _cachedProjectName!;
+      }
+
       // 优先从环境变量获取游戏路径
-      const fromDefine = String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
+      const fromDefine =
+          String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
       if (fromDefine.isNotEmpty) {
         _cachedProjectName = p.basename(fromDefine);
         return _cachedProjectName!;
       }
-      
+
       final fromEnv = Platform.environment['SAKI_GAME_PATH'];
       if (fromEnv != null && fromEnv.isNotEmpty) {
         _cachedProjectName = p.basename(fromEnv);
         return _cachedProjectName!;
       }
-      
+
+      if (_shouldLoadFromExternal()) {
+        final currentDir = Directory.current.path;
+        final gameConfigFile = File(p.join(currentDir, 'game_config.txt'));
+        if (await gameConfigFile.exists()) {
+          _cachedProjectName = p.basename(currentDir);
+          return _cachedProjectName!;
+        }
+
+        final localDefaultGameFile =
+            File(p.join(currentDir, 'default_game.txt'));
+        if (await localDefaultGameFile.exists()) {
+          final defaultGame =
+              (await localDefaultGameFile.readAsString()).trim();
+          if (defaultGame.isNotEmpty) {
+            _cachedProjectName = defaultGame;
+            return _cachedProjectName!;
+          }
+        }
+      }
+
       // 从assets读取default_game.txt
-      final assetContent = await rootBundle.loadString('assets/default_game.txt');
+      final assetContent = await _loadDefaultGameNameFromAssets();
       final projectName = assetContent.trim();
-      
+
       if (projectName.isEmpty) {
         throw Exception('Project name is empty in default_game.txt');
       }
-      
+
       _cachedProjectName = projectName;
       return _cachedProjectName!;
     } catch (e) {
@@ -65,24 +98,48 @@ class ProjectInfoManager {
     }
 
     try {
+      final runtimeConfig = RuntimeProjectConfigStore().config;
+      if (runtimeConfig.appName != null) {
+        _cachedAppName = runtimeConfig.appName!;
+        return _cachedAppName!;
+      }
+
       // 优先尝试从game_config.txt获取应用名称
       String gamePath = '';
-      
+
+      if (runtimeConfig.gamePath != null) {
+        gamePath = runtimeConfig.gamePath!;
+      }
+
       // 获取游戏路径
-      const fromDefine = String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
-      if (fromDefine.isNotEmpty) {
-        gamePath = fromDefine;
-      } else {
+      if (gamePath.isEmpty) {
+        const fromDefine =
+            String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
+        if (fromDefine.isNotEmpty) {
+          gamePath = fromDefine;
+        }
+      }
+
+      if (gamePath.isEmpty) {
         final fromEnv = Platform.environment['SAKI_GAME_PATH'];
         if (fromEnv != null && fromEnv.isNotEmpty) {
           gamePath = fromEnv;
-        } else {
-          // 从assets读取default_game.txt
-          final assetContent = await rootBundle.loadString('assets/default_game.txt');
-          final projectName = assetContent.trim();
-          if (projectName.isNotEmpty) {
-            gamePath = p.join(Directory.current.path, 'Game', projectName);
-          }
+        }
+      }
+
+      if (gamePath.isEmpty && _shouldLoadFromExternal()) {
+        final currentDir = Directory.current.path;
+        final gameConfigFile = File(p.join(currentDir, 'game_config.txt'));
+        if (await gameConfigFile.exists()) {
+          gamePath = currentDir;
+        }
+      }
+
+      if (gamePath.isEmpty) {
+        final assetContent = await _loadDefaultGameNameFromAssets();
+        final projectName = assetContent.trim();
+        if (projectName.isNotEmpty) {
+          gamePath = p.join(Directory.current.path, 'Game', projectName);
         }
       }
 
@@ -115,5 +172,13 @@ class ProjectInfoManager {
   void clearCache() {
     _cachedProjectName = null;
     _cachedAppName = null;
+  }
+
+  Future<String> _loadDefaultGameNameFromAssets() async {
+    try {
+      return await rootBundle.loadString('assets/default_game.txt');
+    } catch (_) {
+      return await rootBundle.loadString('default_game.txt');
+    }
   }
 }

@@ -1,0 +1,11 @@
+//chara// SakiEngine 角色定义文件
+//格式: 别名 : "显示名称" : 资源ID
+
+// 示例角色定义（请根据实际需要修改）
+main : "主角" : narrator
+nr : "旁白" : narrator
+n : "空白" : narrator
+
+// 添加你的角色定义：
+// 格式: 角色别名 : "角色显示名称" : 角色资源ID
+// 示例: alice : "爱丽丝" : alice at pose

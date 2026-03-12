@@ -1,0 +1,27 @@
+//pos// SakiEngine 姿势定义文件
+//
+// --- 参数说明 ---
+// 格式: 姿势名称: scale=<缩放> xcenter=<水平位置> ycenter=<垂直位置> anchor=<锚点>
+//
+// scale: 缩放系数。
+//   scale=0:  特殊值，表示进行"边缘贴合 (Aspect Fit)"缩放，确保立绘完整显示在屏幕内。
+//   scale>0:  表示立绘最终渲染高度为 [屏幕高度 * scale] 值。与源文件分辨率无关。
+//
+// xcenter / ycenter: 锚点在屏幕上的归一化位置 (0.0 到 1.0)。
+//   xcenter=0.0 (最左), xcenter=0.5 (水平居中), xcenter=1.0 (最右)
+//   ycenter=0.0 (最顶), ycenter=0.5 (垂直居中), ycenter=1.0 (最底)
+//
+// anchor: 指定用立绘自身的哪个点去对齐屏幕上的 (xcenter, ycenter) 坐标点。
+//   常用锚点: center(中心), bottomCenter(底部中心), topCenter(顶部中心),
+//             centerLeft(左边缘中心), centerRight(右边缘中心), 等等。
+
+// 【常用】默认底部对齐姿势 (边缘贴合)
+center: scale=0 xcenter=0.5 ycenter=1.0 anchor=bottomCenter
+left: scale=0 xcenter=0.25 ycenter=1.0 anchor=bottomCenter
+right: scale=0 xcenter=0.75 ycenter=1.0 anchor=bottomCenter
+
+// 【特殊】稍微放大并居中的姿势 (固定缩放，高度为屏幕80%)
+closeup: scale=0.8 xcenter=0.5 ycenter=0.8 anchor=center
+
+// 默认姿势
+pose: scale=1.5 ycenter=0.8 anchor=center
