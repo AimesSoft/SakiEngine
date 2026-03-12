@@ -1,5 +1,5 @@
 /// 渲染系统配置和集成
-/// 
+///
 /// 提供在旧的预合成系统和新的层叠渲染系统间切换的功能
 /// 支持渐进式迁移和性能对比
 library rendering_system_integration;
@@ -16,32 +16,53 @@ import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 enum RenderingSystemType {
   /// 旧的预合成渲染系统（兼容模式）
   composite,
+
   /// 新的层叠渲染系统（高性能模式）
   layered,
+
   /// 自动选择（根据性能指标动态选择）
   auto,
 }
 
 /// 渲染系统管理器
-/// 
+///
 /// 负责在不同渲染系统之间切换，提供统一的接口
 class RenderingSystemManager {
-  static final RenderingSystemManager _instance = RenderingSystemManager._internal();
+  static final RenderingSystemManager _instance =
+      RenderingSystemManager._internal();
   factory RenderingSystemManager() => _instance;
   RenderingSystemManager._internal();
 
+  static const String _renderSystemOverride = String.fromEnvironment(
+    'SAKI_RENDER_SYSTEM',
+    defaultValue: 'auto',
+  );
+
+  static RenderingSystemType _initialSystem() {
+    if (kIsWeb) {
+      return RenderingSystemType.layered;
+    }
+    switch (_renderSystemOverride) {
+      case 'composite':
+        return RenderingSystemType.composite;
+      case 'layered':
+        return RenderingSystemType.layered;
+      default:
+        return RenderingSystemType.auto;
+    }
+  }
+
   /// 当前使用的渲染系统
-  RenderingSystemType _currentSystem =
-      kIsWeb ? RenderingSystemType.layered : RenderingSystemType.composite; // Web默认使用层叠渲染系统
-  
+  RenderingSystemType _currentSystem = _initialSystem();
+
   /// 是否启用性能监控
   bool _performanceMonitoringEnabled = kDebugMode;
-  
+
   /// 性能统计
   final List<double> _renderTimings = [];
   final List<double> _memoryUsage = [];
   DateTime _lastPerfCheck = DateTime.now();
-  
+
   /// 自动切换阈值
   static const double _performanceThreshold = 30.0; // FPS低于30时考虑切换
   static const Duration _autoSwitchCooldown = Duration(minutes: 1); // 切换冷却时间
@@ -50,14 +71,14 @@ class RenderingSystemManager {
   /// 设置渲染系统类型
   void setRenderingSystem(RenderingSystemType system) {
     if (_currentSystem == system) return;
-    
+
     final oldSystem = _currentSystem;
     _currentSystem = system;
-    
+
     if (kDebugMode) {
       print('[RenderingSystemManager] Switched from $oldSystem to $system');
     }
-    
+
     // 清理旧系统缓存
     _cleanupOldSystem(oldSystem);
   }
@@ -72,10 +93,10 @@ class RenderingSystemManager {
     GameManager gameManager,
   ) {
     final stopwatch = Stopwatch()..start();
-    
+
     try {
       List<Widget> widgets;
-      
+
       switch (_getEffectiveSystem(cgCharacters.length)) {
         case RenderingSystemType.composite:
           widgets = CompositeCgRenderer.buildCgCharacters(
@@ -86,24 +107,27 @@ class RenderingSystemManager {
           );
           break;
         case RenderingSystemType.layered:
-          widgets = LayeredCgRenderer.buildCgCharacters(context, cgCharacters, gameManager);
+          widgets = LayeredCgRenderer.buildCgCharacters(
+            context,
+            cgCharacters,
+            gameManager,
+          );
           break;
         case RenderingSystemType.auto:
           // Auto模式下根据当前性能选择
           widgets = _buildWithAutoSystem(context, cgCharacters, gameManager);
           break;
       }
-      
+
       stopwatch.stop();
       _recordPerformance(stopwatch.elapsedMicroseconds / 1000.0);
-      
+
       return widgets;
-      
     } catch (e) {
       if (kDebugMode) {
         print('[RenderingSystemManager] Render error: $e');
       }
-      
+
       // 出错时回退到兼容模式
       if (_currentSystem == RenderingSystemType.layered) {
         print('[RenderingSystemManager] Falling back to composite renderer');
@@ -114,7 +138,7 @@ class RenderingSystemManager {
           skipAnimations: gameManager.isFastForwardMode,
         );
       }
-      
+
       return [];
     }
   }
@@ -127,13 +151,19 @@ class RenderingSystemManager {
   ) {
     // 根据性能历史和复杂度选择系统
     final shouldUseLayered = _shouldUseLayeredSystem(cgCharacters.length);
-    
+
     if (shouldUseLayered) {
       try {
-        return LayeredCgRenderer.buildCgCharacters(context, cgCharacters, gameManager);
+        return LayeredCgRenderer.buildCgCharacters(
+          context,
+          cgCharacters,
+          gameManager,
+        );
       } catch (e) {
         if (kDebugMode) {
-          print('[RenderingSystemManager] Layered renderer failed, falling back: $e');
+          print(
+            '[RenderingSystemManager] Layered renderer failed, falling back: $e',
+          );
         }
         return CompositeCgRenderer.buildCgCharacters(
           context,
@@ -154,21 +184,32 @@ class RenderingSystemManager {
 
   /// 判断是否应该使用层叠系统
   bool _shouldUseLayeredSystem(int characterCount) {
-    // **临时回退策略**：由于层叠系统仍在优化中，
-    // 当前版本优先使用成熟稳定的预合成系统
-    
-    // 检查最近性能表现
-    if (_renderTimings.isNotEmpty) {
-      final avgRenderTime = _renderTimings.reduce((a, b) => a + b) / _renderTimings.length;
-      
-      // 如果预合成系统表现良好，继续使用
-      if (avgRenderTime < 50.0) { // 放宽阈值到50ms
-        return false; // 使用预合成系统
-      }
+    if (characterCount <= 0) {
+      return false;
     }
-    
-    // 只在预合成系统性能不佳时才尝试层叠系统
-    return false; // 当前默认使用预合成系统，等层叠系统优化完成
+
+    // 允许通过 dart-define 强制指定渲染系统
+    if (_renderSystemOverride == 'composite') {
+      return false;
+    }
+    if (_renderSystemOverride == 'layered') {
+      return true;
+    }
+
+    // 多图层/多角色场景优先使用层叠渲染
+    if (characterCount > 1) {
+      return true;
+    }
+
+    // 样本不足时默认使用层叠渲染，减少首帧CPU合成抖动
+    if (_renderTimings.length < 10) {
+      return true;
+    }
+
+    // 当最近平均渲染耗时偏高时保持层叠渲染
+    final avgRenderTime =
+        _renderTimings.reduce((a, b) => a + b) / _renderTimings.length;
+    return avgRenderTime >= 12.0;
   }
 
   /// 获取实际使用的系统类型
@@ -180,10 +221,10 @@ class RenderingSystemManager {
     if (_currentSystem != RenderingSystemType.auto) {
       return _currentSystem;
     }
-    
+
     // Auto模式逻辑
-    return _shouldUseLayeredSystem(characterCount) 
-        ? RenderingSystemType.layered 
+    return _shouldUseLayeredSystem(characterCount)
+        ? RenderingSystemType.layered
         : RenderingSystemType.composite;
   }
 
@@ -207,14 +248,14 @@ class RenderingSystemManager {
   /// 记录性能数据
   void _recordPerformance(double renderTimeMs) {
     if (!_performanceMonitoringEnabled) return;
-    
+
     _renderTimings.add(renderTimeMs);
-    
+
     // 保持固定大小的历史记录
     if (_renderTimings.length > 60) {
       _renderTimings.removeAt(0);
     }
-    
+
     // 定期检查是否需要自动切换系统
     final now = DateTime.now();
     if (now.difference(_lastPerfCheck).inSeconds > 5) {
@@ -226,21 +267,24 @@ class RenderingSystemManager {
   /// 检查是否需要自动切换渲染系统
   void _checkAutoSwitch() {
     if (_currentSystem != RenderingSystemType.auto) return;
-    
+
     final now = DateTime.now();
     if (now.difference(_lastAutoSwitch) < _autoSwitchCooldown) return;
-    
+
     if (_renderTimings.length < 10) return; // 样本不足
-    
-    final avgRenderTime = _renderTimings.reduce((a, b) => a + b) / _renderTimings.length;
+
+    final avgRenderTime =
+        _renderTimings.reduce((a, b) => a + b) / _renderTimings.length;
     final estimatedFps = 1000.0 / avgRenderTime;
-    
+
     if (estimatedFps < _performanceThreshold) {
       // 性能不足，考虑切换系统
       if (kDebugMode) {
-        print('[RenderingSystemManager] Performance warning: ${estimatedFps.toStringAsFixed(1)} FPS, considering system switch');
+        print(
+          '[RenderingSystemManager] Performance warning: ${estimatedFps.toStringAsFixed(1)} FPS, considering system switch',
+        );
       }
-      
+
       _lastAutoSwitch = now;
       // 这里可以实现更复杂的切换逻辑
     }
@@ -253,12 +297,13 @@ class RenderingSystemManager {
       'performance_monitoring': _performanceMonitoringEnabled,
       'render_sample_count': _renderTimings.length,
     };
-    
+
     if (_renderTimings.isNotEmpty) {
-      final avgRenderTime = _renderTimings.reduce((a, b) => a + b) / _renderTimings.length;
+      final avgRenderTime =
+          _renderTimings.reduce((a, b) => a + b) / _renderTimings.length;
       final minRenderTime = _renderTimings.reduce((a, b) => a < b ? a : b);
       final maxRenderTime = _renderTimings.reduce((a, b) => a > b ? a : b);
-      
+
       stats.addAll({
         'avg_render_time_ms': avgRenderTime,
         'min_render_time_ms': minRenderTime,
@@ -267,10 +312,11 @@ class RenderingSystemManager {
         'recent_render_times': List.from(_renderTimings.take(10)),
       });
     }
-    
+
     // 添加各系统特定的统计
     try {
-      if (_currentSystem == RenderingSystemType.layered || _currentSystem == RenderingSystemType.auto) {
+      if (_currentSystem == RenderingSystemType.layered ||
+          _currentSystem == RenderingSystemType.auto) {
         final layeredStats = LayeredCgRenderer.getCurrentStats();
         if (layeredStats != null) {
           stats['layered_system'] = {
@@ -284,7 +330,7 @@ class RenderingSystemManager {
     } catch (e) {
       stats['stats_error'] = e.toString();
     }
-    
+
     return stats;
   }
 
@@ -296,7 +342,7 @@ class RenderingSystemManager {
       _renderTimings.clear();
       _memoryUsage.clear();
     }
-    
+
     // 调用各系统的维护方法
     switch (_currentSystem) {
       case RenderingSystemType.composite:
@@ -309,9 +355,11 @@ class RenderingSystemManager {
         LayeredCgRenderer.performMaintenance();
         break;
     }
-    
+
     if (kDebugMode) {
-      print('[RenderingSystemManager] Maintenance completed for $_currentSystem system');
+      print(
+        '[RenderingSystemManager] Maintenance completed for $_currentSystem system',
+      );
     }
   }
 
@@ -321,7 +369,7 @@ class RenderingSystemManager {
     LayeredCgRenderer.clearCache();
     _renderTimings.clear();
     _memoryUsage.clear();
-    
+
     if (kDebugMode) {
       print('[RenderingSystemManager] All caches cleared');
     }
@@ -334,9 +382,11 @@ class RenderingSystemManager {
       _renderTimings.clear();
       _memoryUsage.clear();
     }
-    
+
     if (kDebugMode) {
-      print('[RenderingSystemManager] Performance monitoring: ${enabled ? "enabled" : "disabled"}');
+      print(
+        '[RenderingSystemManager] Performance monitoring: ${enabled ? "enabled" : "disabled"}',
+      );
     }
   }
 
@@ -349,20 +399,19 @@ class RenderingSystemManager {
       'last_perf_check': _lastPerfCheck.toIso8601String(),
       'performance_stats': getPerformanceStats(),
     };
-    
+
     // 添加各系统的详细信息
     try {
       info['composite_system'] = {
         'available': true,
         'description': 'Legacy pre-composition system',
       };
-      
+
       info['layered_system'] = LayeredCgRenderer.getDetailedInfo();
-      
     } catch (e) {
       info['info_error'] = e.toString();
     }
-    
+
     return info;
   }
 }
@@ -371,17 +420,17 @@ class RenderingSystemManager {
 extension RenderingSystemExtensions on GameManager {
   /// 获取渲染系统管理器
   RenderingSystemManager get renderingSystem => RenderingSystemManager();
-  
+
   /// 设置渲染系统
   void setRenderingSystem(RenderingSystemType system) {
     renderingSystem.setRenderingSystem(system);
   }
-  
+
   /// 获取渲染性能统计
   Map<String, dynamic> getRenderingStats() {
     return renderingSystem.getPerformanceStats();
   }
-  
+
   /// 执行渲染系统维护
   void performRenderingMaintenance() {
     renderingSystem.performMaintenance();

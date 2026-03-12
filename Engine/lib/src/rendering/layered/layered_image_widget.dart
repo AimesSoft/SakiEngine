@@ -1,5 +1,5 @@
 /// Flutter层叠图像显示组件
-/// 
+///
 /// 基于Stack的高性能层叠渲染组件
 /// 实现Ren'Py式的实时层叠显示，支持流畅的动画切换
 
@@ -12,7 +12,7 @@ import 'package:sakiengine/src/rendering/layered/layer_types.dart';
 import 'package:sakiengine/src/rendering/layered/layered_image_renderer.dart';
 
 /// 高性能层叠图像显示组件
-/// 
+///
 /// 特性：
 /// - 基于Stack的GPU加速层叠渲染
 /// - 支持微秒级的图层切换
@@ -21,36 +21,39 @@ import 'package:sakiengine/src/rendering/layered/layered_image_renderer.dart';
 class LayeredImageWidget extends StatefulWidget {
   /// 资源ID
   final String resourceId;
-  
+
   /// 姿势
   final String pose;
-  
+
   /// 表情
   final String expression;
-  
+
   /// 额外属性
   final Set<String>? attributes;
-  
+
   /// 是否正在淡出
   final bool isFadingOut;
-  
+
   /// 全局透明度
   final double opacity;
-  
+
   /// 全局缩放
   final double scale;
-  
+
   /// 动画持续时间
   final Duration animationDuration;
-  
+
   /// 自适应尺寸模式
   final BoxFit fit;
-  
+
   /// 对齐方式
   final Alignment alignment;
-  
+
   /// 性能监控回调
   final void Function(LayeredRenderingStats stats)? onStatsUpdate;
+
+  /// 快进等场景下优先速度模式
+  final bool preferSpeed;
 
   const LayeredImageWidget({
     super.key,
@@ -65,6 +68,7 @@ class LayeredImageWidget extends StatefulWidget {
     this.fit = BoxFit.contain,
     this.alignment = Alignment.center,
     this.onStatsUpdate,
+    this.preferSpeed = false,
   });
 
   @override
@@ -73,61 +77,60 @@ class LayeredImageWidget extends StatefulWidget {
 
 class _LayeredImageWidgetState extends State<LayeredImageWidget>
     with TickerProviderStateMixin {
-  
   /// 渲染器实例
   final LayeredImageRenderer _renderer = LayeredImageRenderer();
-  
+
   /// 当前显示的图像状态
   LayeredImageState? _currentState;
-  
+
   /// 图层纹理列表
   List<ui.Image> _layerTextures = [];
-  
+
   /// 动画控制器
   late final AnimationController _fadeController;
   late final AnimationController _scaleController;
-  
+
   /// 动画
   late final Animation<double> _fadeAnimation;
   late final Animation<double> _scaleAnimation;
-  
+
   /// 加载状态
   bool _isLoading = true;
   bool _hasError = false;
   String? _errorMessage;
-  
+
   /// 性能统计定时器
   Timer? _statsTimer;
-  
+
   /// 上一次的参数（用于检测变化）
   String? _lastImageId;
 
   @override
   void initState() {
     super.initState();
-    
+
     // 初始化动画控制器
     _fadeController = AnimationController(
       vsync: this,
       duration: widget.animationDuration,
     );
-    
+
     _scaleController = AnimationController(
       vsync: this,
       duration: widget.animationDuration,
     );
-    
+
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut)
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
     );
-    
+
     _scaleAnimation = Tween<double>(begin: 0.95, end: 1.0).animate(
-      CurvedAnimation(parent: _scaleController, curve: Curves.easeOutBack)
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOutBack),
     );
-    
+
     // 初始加载
     _loadLayeredImage();
-    
+
     // 启动性能监控
     if (widget.onStatsUpdate != null) {
       _startStatsMonitoring();
@@ -137,10 +140,11 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
   @override
   void didUpdateWidget(LayeredImageWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     // 检查参数是否改变
-    final newImageId = '${widget.resourceId}_${widget.pose}_${widget.expression}';
-    
+    final newImageId =
+        '${widget.resourceId}_${widget.pose}_${widget.expression}';
+
     if (_lastImageId != newImageId) {
       // 图像参数改变，重新加载
       _loadLayeredImage(isUpdate: true);
@@ -152,7 +156,7 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
         _fadeController.forward();
       }
     }
-    
+
     // 更新性能监控
     if (widget.onStatsUpdate != null && _statsTimer == null) {
       _startStatsMonitoring();
@@ -173,9 +177,9 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
   /// 加载层叠图像
   Future<void> _loadLayeredImage({bool isUpdate = false}) async {
     if (!mounted) return;
-    
+
     final stopwatch = Stopwatch()..start();
-    
+
     final bool hadTextures = _layerTextures.isNotEmpty && _currentState != null;
 
     setState(() {
@@ -183,12 +187,13 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
       _hasError = false;
       _errorMessage = null;
     });
-    
+
     try {
-      final imageId = '${widget.resourceId}_${widget.pose}_${widget.expression}';
-      
+      final imageId =
+          '${widget.resourceId}_${widget.pose}_${widget.expression}';
+
       LayeredImageState? newState;
-      
+
       if (isUpdate && _lastImageId != null) {
         // 尝试快速更新（只更换表情等）
         newState = await _renderer.updateLayeredImage(
@@ -197,7 +202,7 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
           newAttributes: widget.attributes,
         );
       }
-      
+
       // 如果快速更新失败或是首次加载，完整加载
       newState ??= await _renderer.createLayeredImage(
         resourceId: widget.resourceId,
@@ -205,11 +210,11 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
         expression: widget.expression,
         attributes: widget.attributes,
       );
-      
+
       if (newState == null) {
         throw Exception('Failed to create layered image: $imageId');
       }
-      
+
       // 加载纹理
       final newTextures = await _renderer.getLayerTextures(newState);
 
@@ -223,28 +228,29 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
         _lastImageId = imageId;
         _isLoading = false;
       });
-      
+
       // 开始动画
       if (!widget.isFadingOut) {
         _fadeController.forward();
         _scaleController.forward();
       }
-      
+
       stopwatch.stop();
-      
+
       if (kDebugMode) {
-        print('[LayeredImageWidget] Loaded in ${stopwatch.elapsedMilliseconds}ms: $imageId (${newTextures.length} layers)');
+        print(
+          '[LayeredImageWidget] Loaded in ${stopwatch.elapsedMilliseconds}ms: $imageId (${newTextures.length} layers)',
+        );
       }
-      
     } catch (e, stackTrace) {
       if (!mounted) return;
-      
+
       setState(() {
         _isLoading = false;
         _hasError = true;
         _errorMessage = e.toString();
       });
-      
+
       if (kDebugMode) {
         print('[LayeredImageWidget] Load error: $e\n$stackTrace');
       }
@@ -255,7 +261,7 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
   void _startStatsMonitoring() {
     _statsTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted || widget.onStatsUpdate == null) return;
-      
+
       final stats = _renderer.getPerformanceStats();
       widget.onStatsUpdate!(stats);
     });
@@ -298,26 +304,24 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
   /// 构建层叠Stack
   Widget _buildLayeredStack() {
     final visibleLayers = _currentState!.visibleLayers;
-    
+
     return Stack(
       alignment: widget.alignment,
       fit: StackFit.expand,
-      children: List.generate(
-        _layerTextures.length,
-        (index) {
-          if (index >= visibleLayers.length) return const SizedBox.shrink();
-          
-          final layer = visibleLayers[index];
-          final texture = _layerTextures[index];
-          
-          return _LayerWidget(
-            key: ValueKey(layer.layerId),
-            texture: texture,
-            layer: layer,
-            fit: widget.fit,
-          );
-        },
-      ),
+      children: List.generate(_layerTextures.length, (index) {
+        if (index >= visibleLayers.length) return const SizedBox.shrink();
+
+        final layer = visibleLayers[index];
+        final texture = _layerTextures[index];
+
+        return _LayerWidget(
+          key: ValueKey(layer.layerId),
+          texture: texture,
+          layer: layer,
+          fit: widget.fit,
+          preferSpeed: widget.preferSpeed,
+        );
+      }),
     );
   }
 
@@ -352,7 +356,10 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
               const SizedBox(height: 8),
               Text(
                 'LayeredImage Error',
-                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
@@ -376,12 +383,14 @@ class _LayerWidget extends StatelessWidget {
   final ui.Image texture;
   final LayerInfo layer;
   final BoxFit fit;
+  final bool preferSpeed;
 
   const _LayerWidget({
     super.key,
     required this.texture,
     required this.layer,
     required this.fit,
+    required this.preferSpeed,
   });
 
   @override
@@ -396,6 +405,7 @@ class _LayerWidget extends StatelessWidget {
             painter: _LayerPainter(
               texture: texture,
               fit: fit,
+              preferSpeed: preferSpeed,
             ),
             size: Size.infinite,
           ),
@@ -409,27 +419,32 @@ class _LayerWidget extends StatelessWidget {
 class _LayerPainter extends CustomPainter {
   final ui.Image texture;
   final BoxFit fit;
+  final bool preferSpeed;
 
   _LayerPainter({
     required this.texture,
     required this.fit,
+    this.preferSpeed = false,
   });
 
   @override
   void paint(ui.Canvas canvas, ui.Size size) {
     if (size.isEmpty) return;
-    
+
     // 检查纹理是否有效
     if (texture.width <= 0 || texture.height <= 0) return;
-    
+
     try {
-      final textureSize = Size(texture.width.toDouble(), texture.height.toDouble());
-      
+      final textureSize = Size(
+        texture.width.toDouble(),
+        texture.height.toDouble(),
+      );
+
       // 根据BoxFit计算源和目标矩形
       final fittedSizes = applyBoxFit(fit, textureSize, size);
       final sourceSize = fittedSizes.source;
       final destinationSize = fittedSizes.destination;
-      
+
       // 确保源矩形不超出纹理边界
       final sourceRect = Rect.fromLTWH(
         math.max(0, (textureSize.width - sourceSize.width) / 2),
@@ -437,24 +452,25 @@ class _LayerPainter extends CustomPainter {
         math.min(sourceSize.width, textureSize.width),
         math.min(sourceSize.height, textureSize.height),
       );
-      
+
       final destinationRect = Rect.fromLTWH(
         (size.width - destinationSize.width) / 2,
         (size.height - destinationSize.height) / 2,
         destinationSize.width,
         destinationSize.height,
       );
-      
+
       // 验证矩形有效性
       if (sourceRect.isEmpty || destinationRect.isEmpty) return;
-      
+
       // 高质量绘制
       final paint = ui.Paint()
         ..isAntiAlias = true
-        ..filterQuality = ui.FilterQuality.high;
-      
+        ..filterQuality = preferSpeed
+            ? ui.FilterQuality.low
+            : ui.FilterQuality.high;
+
       canvas.drawImageRect(texture, sourceRect, destinationRect, paint);
-      
     } catch (e) {
       if (kDebugMode) {
         print('[_LayerPainter] Paint error: $e');
@@ -465,7 +481,9 @@ class _LayerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _LayerPainter oldDelegate) {
-    return texture != oldDelegate.texture || fit != oldDelegate.fit;
+    return texture != oldDelegate.texture ||
+        fit != oldDelegate.fit ||
+        preferSpeed != oldDelegate.preferSpeed;
   }
 }
 
@@ -483,7 +501,7 @@ class LayeredImagePerformanceMonitor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!kDebugMode) return child;
-    
+
     return Stack(
       children: [
         child,

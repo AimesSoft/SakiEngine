@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
@@ -16,13 +17,29 @@ class CgImageCompositor {
 
   /// 磁盘缓存映射：缓存键 -> 合成图像的磁盘路径
   final Map<String, String> _diskPathCache = {};
+  final Map<String, String> _memoryPathCache = {};
+  final LinkedHashMap<String, Uint8List> _memoryBytesCache = LinkedHashMap();
 
   /// 正在合成的任务，避免重复合成
   final Map<String, Future<String?>> _compositingTasks = {};
 
+  static const bool _preferMemoryCache = bool.fromEnvironment(
+    'SAKI_CG_MEMORY_CACHE',
+    defaultValue: true,
+  );
+  static const bool _enableDiskFallback = bool.fromEnvironment(
+    'SAKI_CG_DISK_CACHE_FALLBACK',
+    defaultValue: false,
+  );
+  static const int _maxMemoryEntries = 180;
+
   /// 生成缓存键
   String _generateCacheKey(String resourceId, String pose, String expression) {
     return '${resourceId}_${pose}_$expression';
+  }
+
+  String _generateMemoryPath(String cacheKey) {
+    return '/memory_cache/cg_cache/$cacheKey.png';
   }
 
   /// 获取或生成合成CG图像的路径（磁盘路径）
@@ -32,6 +49,11 @@ class CgImageCompositor {
     required String expression,
   }) async {
     final cacheKey = _generateCacheKey(resourceId, pose, expression);
+
+    final memoryPath = _memoryPathCache[cacheKey];
+    if (memoryPath != null && _memoryBytesCache.containsKey(cacheKey)) {
+      return memoryPath;
+    }
 
     // 磁盘缓存命中
     final cachedPath = _diskPathCache[cacheKey];
@@ -66,6 +88,11 @@ class CgImageCompositor {
 
   /// 根据磁盘路径或缓存键读取图像字节
   Uint8List? getImageBytes(String pathOrKey) {
+    final memoryBytes = _resolveMemoryBytes(pathOrKey);
+    if (memoryBytes != null) {
+      return memoryBytes;
+    }
+
     final resolvedPath = _resolveDiskPath(pathOrKey);
     if (resolvedPath == null) {
       return null;
@@ -87,7 +114,8 @@ class CgImageCompositor {
 
   /// 判断给定路径是否为CG磁盘缓存路径
   bool isCachePath(String path) {
-    return CgCacheStorage().isCachePath(path);
+    return path.startsWith('/memory_cache/cg_cache/') ||
+        CgCacheStorage().isCachePath(path);
   }
 
   /// 实际执行合成逻辑
@@ -100,7 +128,9 @@ class CgImageCompositor {
     try {
       if (kIsWeb) {
         if (kDebugMode) {
-          print('[CgImageCompositor] Skip CPU composition on Web for $cacheKey');
+          print(
+            '[CgImageCompositor] Skip CPU composition on Web for $cacheKey',
+          );
         }
         return null;
       }
@@ -142,8 +172,18 @@ class CgImageCompositor {
         return null;
       }
 
-      // 保存到磁盘
-      final savedPath = await _saveCompositeToDisk(compositeImage, cacheKey);
+      String? savedPath;
+      if (_preferMemoryCache) {
+        savedPath = await _saveCompositeToMemory(compositeImage, cacheKey);
+        if (_enableDiskFallback) {
+          final diskPath = await _saveCompositeToDisk(compositeImage, cacheKey);
+          if (diskPath != null) {
+            _diskPathCache[cacheKey] = diskPath;
+          }
+        }
+      } else {
+        savedPath = await _saveCompositeToDisk(compositeImage, cacheKey);
+      }
 
       // 清理资源
       for (final image in layerImages) {
@@ -151,7 +191,7 @@ class CgImageCompositor {
       }
       compositeImage.dispose();
 
-      if (savedPath != null) {
+      if (savedPath != null && !savedPath.startsWith('/memory_cache/')) {
         _diskPathCache[cacheKey] = savedPath;
       }
 
@@ -188,13 +228,23 @@ class CgImageCompositor {
 
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder);
-      final canvasRect = ui.Rect.fromLTWH(0, 0, canvasWidth.toDouble(), canvasHeight.toDouble());
+      final canvasRect = ui.Rect.fromLTWH(
+        0,
+        0,
+        canvasWidth.toDouble(),
+        canvasHeight.toDouble(),
+      );
 
       for (final image in layerImages) {
         final paint = ui.Paint()
           ..isAntiAlias = true
           ..filterQuality = ui.FilterQuality.high;
-        final srcRect = ui.Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
+        final srcRect = ui.Rect.fromLTWH(
+          0,
+          0,
+          image.width.toDouble(),
+          image.height.toDouble(),
+        );
         canvas.drawImageRect(image, srcRect, canvasRect, paint);
       }
 
@@ -204,6 +254,31 @@ class CgImageCompositor {
 
       return compositeImage;
     } catch (e) {
+      return null;
+    }
+  }
+
+  Future<String?> _saveCompositeToMemory(
+    ui.Image image,
+    String cacheKey,
+  ) async {
+    try {
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        return null;
+      }
+
+      final bytes = Uint8List.fromList(byteData.buffer.asUint8List());
+      _cacheMemoryBytes(cacheKey, bytes);
+      final memoryPath = _generateMemoryPath(cacheKey);
+      _memoryPathCache[cacheKey] = memoryPath;
+      return memoryPath;
+    } catch (e) {
+      if (kDebugMode) {
+        print(
+          '[CgImageCompositor] Failed to save composite image in memory: $e',
+        );
+      }
       return null;
     }
   }
@@ -226,7 +301,9 @@ class CgImageCompositor {
       await CgCacheStorage().pruneIfNeeded();
 
       if (kDebugMode) {
-        print('[CgImageCompositor] Disk cache saved: $cacheKey (${bytes.length} bytes)');
+        print(
+          '[CgImageCompositor] Disk cache saved: $cacheKey (${bytes.length} bytes)',
+        );
       }
 
       return file.path;
@@ -242,6 +319,8 @@ class CgImageCompositor {
   Future<void> clearCache() async {
     try {
       _diskPathCache.clear();
+      _memoryPathCache.clear();
+      _memoryBytesCache.clear();
       _compositingTasks.clear();
       await CgCacheStorage().clear();
 
@@ -260,6 +339,13 @@ class CgImageCompositor {
     try {
       final stats = await CgCacheStorage().collectStats();
       stats['disk_index'] = _diskPathCache.length;
+      stats['memory_index'] = _memoryBytesCache.length;
+      stats['memory_bytes'] = _memoryBytesCache.values.fold<int>(
+        0,
+        (sum, bytes) => sum + bytes.length,
+      );
+      stats['prefer_memory_cache'] = _preferMemoryCache;
+      stats['disk_fallback_enabled'] = _enableDiskFallback;
       stats['compositing_tasks'] = _compositingTasks.length;
       return stats;
     } catch (e) {
@@ -292,5 +378,46 @@ class CgImageCompositor {
     }
 
     return null;
+  }
+
+  Uint8List? _resolveMemoryBytes(String pathOrKey) {
+    if (pathOrKey.isEmpty) {
+      return null;
+    }
+
+    if (_memoryBytesCache.containsKey(pathOrKey)) {
+      final bytes = _memoryBytesCache.remove(pathOrKey)!;
+      _memoryBytesCache[pathOrKey] = bytes;
+      return bytes;
+    }
+
+    if (_memoryPathCache.containsKey(pathOrKey)) {
+      final cacheKey = pathOrKey;
+      final bytes = _memoryBytesCache.remove(cacheKey);
+      if (bytes == null) return null;
+      _memoryBytesCache[cacheKey] = bytes;
+      return bytes;
+    }
+
+    if (pathOrKey.startsWith('/memory_cache/cg_cache/')) {
+      final cacheKey = pathOrKey.split('/').last.replaceAll('.png', '');
+      final bytes = _memoryBytesCache.remove(cacheKey);
+      if (bytes == null) return null;
+      _memoryBytesCache[cacheKey] = bytes;
+      return bytes;
+    }
+
+    return null;
+  }
+
+  void _cacheMemoryBytes(String cacheKey, Uint8List bytes) {
+    _memoryBytesCache.remove(cacheKey);
+    _memoryBytesCache[cacheKey] = bytes;
+
+    while (_memoryBytesCache.length > _maxMemoryEntries) {
+      final oldestKey = _memoryBytesCache.keys.first;
+      _memoryBytesCache.remove(oldestKey);
+      _memoryPathCache.remove(oldestKey);
+    }
   }
 }
