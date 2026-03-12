@@ -3,7 +3,6 @@ import 'dart:ui' as ui;
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -15,11 +14,11 @@ import 'package:sakiengine/src/utils/binary_serializer.dart';
 import 'package:sakiengine/src/screens/save_load_screen.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 import 'package:sakiengine/src/widgets/choice_menu.dart';
-import 'package:sakiengine/src/widgets/dialogue_box.dart';
 import 'package:sakiengine/src/widgets/quick_menu.dart';
 import 'package:sakiengine/src/widgets/smart_image.dart';
 import 'package:sakiengine/src/screens/review_screen.dart';
 import 'package:sakiengine/src/screens/main_menu_screen.dart';
+import 'package:sakiengine/src/core/game_module.dart';
 import 'package:sakiengine/src/widgets/common/exit_confirmation_dialog.dart';
 import 'package:sakiengine/src/utils/game_flowchart_mixin.dart';
 import 'package:sakiengine/src/rendering/cg_character_renderer.dart';
@@ -36,8 +35,6 @@ import 'package:sakiengine/src/utils/smart_asset_image.dart';
 import 'package:sakiengine/src/rendering/color_background_renderer.dart';
 import 'package:sakiengine/src/effects/scene_filter.dart';
 import 'package:sakiengine/src/effects/mouse_parallax.dart';
-import 'package:sakiengine/src/config/project_info_manager.dart';
-import 'package:sakiengine/soranouta/widgets/soranouta_dialogue_box.dart';
 import 'package:sakiengine/src/rendering/scene_layer.dart';
 import 'package:sakiengine/src/utils/character_composite_cache.dart';
 import 'package:sakiengine/src/widgets/developer_panel.dart';
@@ -63,12 +60,14 @@ class GamePlayScreen extends StatefulWidget {
   final SaveSlot? saveSlotToLoad;
   final VoidCallback? onReturnToMenu;
   final Function(SaveSlot)? onLoadGame;
+  final GameModule? gameModule;
 
   const GamePlayScreen({
     super.key,
     this.saveSlotToLoad,
     this.onReturnToMenu,
     this.onLoadGame,
+    this.gameModule,
   });
 
   @override
@@ -100,7 +99,6 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   late MouseWheelHandler _mouseWheelHandler; // 鼠标滚轮处理器
   final SettingsManager _settingsManager = SettingsManager();
   String _mouseRollbackBehavior = SettingsManager.defaultMouseRollbackBehavior;
-  String? _projectName;
   DateTime? _reviewReopenSuppressedUntil;
   bool _reviewOpenedByMouseRollback = false;
   final GlobalKey _nvlScreenKey = GlobalKey();
@@ -147,9 +145,6 @@ class _GamePlayScreenState extends State<GamePlayScreen>
     _dialogueProgressionManager = DialogueProgressionManager(
       gameManager: _gameManager,
     );
-
-    // 获取项目名称
-    _loadProjectName();
 
     // 注册系统级热键 Shift+R
     _setupHotkey();
@@ -238,15 +233,6 @@ class _GamePlayScreenState extends State<GamePlayScreen>
     });
   }
 
-  Future<void> _loadProjectName() async {
-    try {
-      _projectName = await ProjectInfoManager().getAppName();
-      if (mounted) setState(() {});
-    } catch (e) {
-      _projectName = 'SakiEngine';
-    }
-  }
-
   void _returnToMainMenu() {
     // 停止所有音效，保留音乐
     _gameManager.stopAllSounds();
@@ -259,7 +245,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
         MaterialPageRoute(
           builder: (context) => MainMenuScreen(
             onNewGame: () => Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (context) => const GamePlayScreen()),
+              MaterialPageRoute(
+                builder: (context) => GamePlayScreen(gameModule: widget.gameModule),
+              ),
             ),
             onLoadGame: () => setState(() => _showLoadOverlay = true),
           ),
@@ -267,10 +255,6 @@ class _GamePlayScreenState extends State<GamePlayScreen>
         (Route<dynamic> route) => false,
       );
     }
-  }
-
-  Future<void> _initializeModule() async {
-    // 移除模块系统 - 直接加载项目名称即可
   }
 
   Widget _createDialogueBox({
@@ -282,28 +266,15 @@ class _GamePlayScreenState extends State<GamePlayScreen>
     required int scriptIndex, // 新增脚本索引参数
   }) {
     // 不在这里标记为已读！应该在用户推进对话时才标记
-
-    // 根据项目名称选择对话框
-    if (_projectName == 'SoraNoUta') {
-      return SoranoUtaDialogueBox(
-        key: key,
-        speaker: speaker,
-        speakerAlias: speakerAlias, // 传递角色简写
-        dialogue: dialogue,
-        progressionManager: _dialogueProgressionManager,
-        isFastForwarding: isFastForwarding, // 传递快进状态
-        scriptIndex: scriptIndex, // 传递脚本索引
-      );
-    }
-
-    // 默认对话框
-    return DialogueBox(
+    final module = widget.gameModule ?? DefaultGameModule();
+    return module.createDialogueBox(
       key: key,
       speaker: speaker,
+      speakerAlias: speakerAlias,
       dialogue: dialogue,
       progressionManager: _dialogueProgressionManager,
-      isFastForwarding: isFastForwarding, // 传递快进状态
-      scriptIndex: scriptIndex, // 传递脚本索引
+      isFastForwarding: isFastForwarding,
+      scriptIndex: scriptIndex,
     );
   }
 

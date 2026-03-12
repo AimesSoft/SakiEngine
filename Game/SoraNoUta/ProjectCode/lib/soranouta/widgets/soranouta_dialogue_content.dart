@@ -147,9 +147,9 @@ class _SoranoutaDialogueContentState extends State<SoranoutaDialogueContent> {
   Widget _buildTextArea() {
     return Padding(
       padding: EdgeInsets.only(
-        left: 16.0 * widget.uiScale + widget.config.soranoUtaTextXPos,
+        left: 16.0 * widget.uiScale + widget.config.dialogueTextXPos,
         right: 100.0 * widget.uiScale,
-        top: 16.0 * widget.uiScale + widget.config.soranoUtaTextYPos,
+        top: 16.0 * widget.uiScale + widget.config.dialogueTextYPos,
         bottom: 16.0 * widget.uiScale,
       ),
       child: LayoutBuilder(

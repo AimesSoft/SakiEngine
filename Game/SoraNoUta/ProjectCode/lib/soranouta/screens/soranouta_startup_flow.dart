@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
 import 'package:sakiengine/src/utils/settings_manager.dart';
 import 'package:sakiengine/src/utils/smart_asset_image.dart';
-import 'package:sakiengine/soranouta/screens/soranouta_main_menu_screen.dart';
+import 'soranouta_main_menu_screen.dart';
 import 'package:sakiengine/src/game/story_flowchart_analyzer.dart';
 import 'package:flutter/foundation.dart';
 

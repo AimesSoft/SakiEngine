@@ -16,7 +16,6 @@ cd "$(dirname "$0")"
 # 获取项目根目录（scripts目录的上级目录）
 PROJECT_ROOT="$(dirname "$(pwd)")"
 GAME_BASE_DIR="$PROJECT_ROOT/Game"
-ENGINE_LIB_DIR="$PROJECT_ROOT/Engine/lib"
 
 echo -e "${BLUE}=== SakiEngine 新项目创建向导 ===${NC}"
 echo ""
@@ -243,6 +242,7 @@ base_choice: size=24
 base_review_title: size=45
 base_quick_menu: size=25
 main_menu: background=sky size=200 top=0.3 right=0.05
+settings_defaults: menu_display_mode=windowed
 EOF
 
 # 创建基础的剧情脚本文件
@@ -358,10 +358,10 @@ endmenu
 \`\`\`
 EOF
 
-# 创建项目模块文件夹和文件
-echo -e "${YELLOW}创建项目模块文件夹...${NC}"
+# 创建项目代码目录（与引擎解耦）
+echo -e "${YELLOW}创建项目代码目录...${NC}"
 PROJECT_NAME_LOWER=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]')
-MODULE_DIR="$ENGINE_LIB_DIR/$PROJECT_NAME_LOWER"
+MODULE_DIR="$PROJECT_DIR/ProjectCode/lib/$PROJECT_NAME_LOWER"
 
 # 创建模块目录结构
 mkdir -p "$MODULE_DIR/screens"
@@ -372,7 +372,6 @@ cat > "$MODULE_DIR/${PROJECT_NAME_LOWER}_module.dart" << EOF
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sakiengine/src/core/game_module.dart';
-import 'package:sakiengine/src/core/module_registry.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 
 /// $PROJECT_NAME 项目的自定义模块
@@ -424,18 +423,20 @@ class ${PROJECT_NAME}Module extends DefaultGameModule {
   }
 }
 
-// 自动注册这个模块
-// 当这个文件被导入时，模块会自动注册
-void _registerModule() {
-  registerProjectModule('$PROJECT_NAME_LOWER', () => ${PROJECT_NAME}Module());
-}
-
-// 使用顶级变量触发注册，避免编译器警告
-final bool _isRegistered = (() {
-  _registerModule();
-  return true;
-})();
+GameModule createProjectModule() => ${PROJECT_NAME}Module();
 EOF
+
+cat > "$PROJECT_DIR/ProjectCode/README.md" << EOF
+# $PROJECT_NAME ProjectCode
+
+此目录用于放置项目层 Dart 代码，不应写入引擎目录。
+
+- 入口模块: \`lib/$PROJECT_NAME_LOWER/${PROJECT_NAME_LOWER}_module.dart\`
+- 目标: 保持引擎层与项目层完全解耦
+EOF
+
+ENGINE_MODULE_LINK="$PROJECT_ROOT/Engine/lib/$PROJECT_NAME_LOWER"
+ln -sfn "../../Game/$PROJECT_NAME/ProjectCode/lib/$PROJECT_NAME_LOWER" "$ENGINE_MODULE_LINK"
 
 cd - > /dev/null
 

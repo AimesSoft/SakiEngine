@@ -1,7 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
+import 'package:sakiengine/src/core/game_module.dart';
+import 'package:sakiengine/src/core/project_module_loader.dart';
 import 'package:sakiengine/src/utils/settings_manager.dart';
 
 /// 对话框中提示下一句话的箭头组件
@@ -59,27 +60,18 @@ class _DialogueNextArrowState extends State<DialogueNextArrow>
     final effectiveColor = widget.color ?? defaultColor;
     final size = widget.fontSize*1.6;
 
-    return FutureBuilder<bool>(
-      future: _isSoraNoUtaProject(),
+    return FutureBuilder<GameModule>(
+      future: moduleLoader.getCurrentModule(),
       builder: (context, snapshot) {
         // 默认显示箭头，避免闪烁
         if (!snapshot.hasData) {
           return _buildArrow(effectiveColor, size);
         }
-        final isSoraNoUta = snapshot.data!;
-        
-        // 只有在SoraNoUta项目中才根据角色判断显示下划线还是箭头
-        // 其他项目都显示箭头
-        final bool shouldShowUnderscore = isSoraNoUta && 
-                                          widget.speaker != null && 
-                                          widget.speaker!.isNotEmpty && 
-                                          widget.speakerAlias != 'l' &&
-                                          widget.speakerAlias != 'ls' &&
-                                          widget.speakerAlias != 'x2' &&
-                                          widget.speakerAlias != 'x2nan' &&
-                                          widget.speaker != '刘守真' &&
-                                          widget.speaker != '林澄' &&
-                                          widget.speakerAlias != 'nanshin'; // 新增：nanshin也显示箭头
+        final module = snapshot.data!;
+        final shouldShowUnderscore = module.shouldUseUnderscoreNextArrow(
+          speaker: widget.speaker,
+          speakerAlias: widget.speakerAlias,
+        );
 
         return AnimatedBuilder(
           animation: _animationController,
@@ -93,18 +85,6 @@ class _DialogueNextArrowState extends State<DialogueNextArrow>
         );
       },
     );
-  }
-
-  /// 检查是否为SoraNoUta项目
-  Future<bool> _isSoraNoUtaProject() async {
-    try {
-      final assetContent = await rootBundle.loadString('assets/default_game.txt');
-      final projectName = assetContent.trim();
-      return projectName.toLowerCase() == 'soranouta';
-    } catch (e) {
-      // 如果读取失败，默认为false（显示箭头）
-      return false;
-    }
   }
 
   /// 构建下划线（改为循环箭头）

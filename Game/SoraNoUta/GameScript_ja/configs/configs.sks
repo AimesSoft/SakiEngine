@@ -9,7 +9,7 @@ base_quick_menu: size=25
 base_window: border=0 alpha=0.5 background=back background_alpha=0.5 background_blend=multiply background_scale=1.2 background_xalign=0.0 dialogue_background_scale=0.9 dialogue_background_xalign=0.5
 main_menu: background=main title=title size=500 bottom=0.0 left=0.05
 nvl: left=200 right=40 top=100 bottom=60
-soranouta_dialogbox: xpos=0.2 ypos=0.0 dialogue_xpos=200 dialogue_ypos=20
+dialogbox_layout: xpos=0.2 ypos=0.0 dialogue_xpos=200 dialogue_ypos=20
 // 可用的混合模式：
   //- multiply - 正片叠底（默认）
 ///  - screen - 滤色
@@ -23,3 +23,5 @@ soranouta_dialogbox: xpos=0.2 ypos=0.0 dialogue_xpos=200 dialogue_ypos=20
 //  - difference - 差值
 //  - exclusion - 排除
 //  - src_over - 正常（无混合）
+
+settings_defaults: menu_display_mode=fullscreen

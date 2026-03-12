@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sakiengine/src/core/game_module.dart';
-import 'package:sakiengine/src/core/module_registry.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
 import 'package:sakiengine/src/utils/dialogue_progression_manager.dart';
 import 'package:sakiengine/src/utils/music_manager.dart';
 import 'package:sakiengine/src/widgets/common/configurable_menu_button.dart';
-import 'package:sakiengine/src/screens/main_menu_screen.dart';
-import 'package:sakiengine/soranouta/widgets/soranouta_menu_buttons.dart';
-import 'package:sakiengine/soranouta/widgets/soranouta_dialogue_box.dart';
-import 'package:sakiengine/soranouta/screens/soranouta_main_menu_screen.dart';
-import 'package:sakiengine/soranouta/screens/soranouta_startup_flow.dart';
+import 'widgets/soranouta_menu_buttons.dart';
+import 'widgets/soranouta_dialogue_box.dart';
+import 'screens/soranouta_startup_flow.dart';
 
 /// SoraNoUta 项目的自定义模块
 /// 这个示例展示了如何为特定项目创建自定义模块
@@ -60,6 +57,7 @@ class SoranoutaModule extends DefaultGameModule {
   @override
   List<MenuButtonConfig> createMainMenuButtonConfigs({
     required VoidCallback onNewGame,
+    VoidCallback? onContinueGame,
     required VoidCallback onLoadGame,
     required VoidCallback onSettings,
     required VoidCallback onExit,
@@ -83,33 +81,41 @@ class SoranoutaModule extends DefaultGameModule {
 
   @override
   Widget createDialogueBox({
+    Key? key,
     String? speaker,
     String? speakerAlias, // 新增：角色简写参数
     required String dialogue,
     DialogueProgressionManager? progressionManager,
+    required bool isFastForwarding,
     required int scriptIndex, // 新增：脚本索引参数
   }) {
     return SoranoUtaDialogueBox(
+      key: key,
       speaker: speaker,
       speakerAlias: speakerAlias, // 传递角色简写
       dialogue: dialogue,
       progressionManager: progressionManager,
+      isFastForwarding: isFastForwarding,
       scriptIndex: scriptIndex, // 传递脚本索引
     );
   }
 
   @override
   bool get showBottomBar => false;
+
+  @override
+  bool shouldUseUnderscoreNextArrow({String? speaker, String? speakerAlias}) {
+    if (speaker == null || speaker.isEmpty) {
+      return false;
+    }
+    return speakerAlias != 'l' &&
+        speakerAlias != 'ls' &&
+        speakerAlias != 'x2' &&
+        speakerAlias != 'x2nan' &&
+        speaker != '刘守真' &&
+        speaker != '林澄' &&
+        speakerAlias != 'nanshin';
+  }
 }
 
-// 自动注册这个模块
-// 当这个文件被导入时，模块会自动注册
-void _registerModule() {
-  registerProjectModule('soranouta', () => SoranoutaModule());
-}
-
-// 使用顶级变量触发注册，避免编译器警告
-final bool _isRegistered = (() {
-  _registerModule();
-  return true;
-})();
+GameModule createProjectModule() => SoranoutaModule();

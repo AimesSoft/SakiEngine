@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:sakiengine/src/core/game_module.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
@@ -32,85 +31,6 @@ class ProjectModuleLoader {
     }
   }
 
-  /// 自动发现并加载项目模块
-  Future<GameModule?> _discoverAndLoadModule(String projectName) async {
-    final normalizedProjectName = projectName.toLowerCase();
-    
-    try {
-      // 尝试动态导入项目模块
-      final modulePackage = 'package:sakiengine/$normalizedProjectName/${normalizedProjectName}_module.dart';
-      
-      if (kDebugMode) {
-        //print('[ProjectModuleLoader] 尝试加载模块: $modulePackage');
-      }
-      
-      // 检查模块文件是否存在
-      final moduleFile = File('lib/$normalizedProjectName/${normalizedProjectName}_module.dart');
-      if (await moduleFile.exists()) {
-        if (kDebugMode) {
-          //print('[ProjectModuleLoader] 发现项目模块文件: ${moduleFile.path}');
-        }
-        
-        // 尝试通过反射或已知模块映射加载
-        final module = await _tryLoadKnownModule(normalizedProjectName);
-        if (module != null) {
-          await module.initialize();
-          if (kDebugMode) {
-            //print('[ProjectModuleLoader] 成功加载项目特定模块: $projectName');
-          }
-          return module;
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        //print('[ProjectModuleLoader] 自动发现模块失败: $projectName, 错误: $e');
-      }
-    }
-    
-    return null;
-  }
-
-  /// 尝试加载已知的模块
-  Future<GameModule?> _tryLoadKnownModule(String projectName) async {
-    // 动态加载已知模块
-    switch (projectName.toLowerCase()) {
-      case 'soranouta':
-        try {
-          // 动态导入 SoraNoutaModule
-          final module = await _loadSoraNoutaModule();
-          return module;
-        } catch (e) {
-          if (kDebugMode) {
-            //print('[ProjectModuleLoader] 加载 SoraNoutaModule 失败: $e');
-          }
-        }
-        break;
-      // 可以在这里添加其他已知模块
-    }
-    return null;
-  }
-
-  /// 动态加载 SoraNoUta 模块
-  Future<GameModule?> _loadSoraNoutaModule() async {
-    try {
-      // 尝试通过反射或导入加载
-      final module = await _createSoraNoutaModule();
-      return module;
-    } catch (e) {
-      if (kDebugMode) {
-        //print('[ProjectModuleLoader] 创建 SoraNoutaModule 失败: $e');
-      }
-    }
-    return null;
-  }
-
-  /// 创建 SoraNoutaModule 实例
-  Future<GameModule?> _createSoraNoutaModule() async {
-    // 由于 Dart 没有运行时反射，我们需要使用导入的方式
-    // 这里将在 module_registry.dart 中自动处理
-    return null;
-  }
-
   /// 获取当前项目的模块
   Future<GameModule> getCurrentModule() async {
     final projectName = await ProjectInfoManager().getProjectName();
@@ -141,13 +61,6 @@ class ProjectModuleLoader {
           //print('[ProjectModuleLoader] 加载已注册模块失败: $projectName, 错误: $e');
         }
       }
-    }
-
-    // 尝试自动发现和加载模块
-    final discoveredModule = await _discoverAndLoadModule(projectName);
-    if (discoveredModule != null) {
-      _currentModule = discoveredModule;
-      return _currentModule!;
     }
 
     // 回退到默认模块

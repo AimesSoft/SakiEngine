@@ -24,7 +24,7 @@ void initializeProjectModules() {
 /// 
 /// 使用示例：
 /// ```dart
-/// // 在 lib/myproject/myproject_module.dart 中:
+/// // 在 Game/MyProject/ProjectCode/lib/myproject/myproject_module.dart 中:
 /// import 'package:sakiengine/src/core/game_module.dart';
 /// import 'package:sakiengine/src/core/module_registry.dart';
 /// 
@@ -32,7 +32,7 @@ void initializeProjectModules() {
 ///   // 覆盖需要自定义的方法
 /// }
 /// 
-/// // 在 lib/myproject/myproject_module.dart 的末尾调用:
+/// // 在模块入口处调用:
 /// final _ = registerProjectModule('myproject', () => MyProjectModule());
 /// ```
 void registerProjectModule(String projectName, GameModuleFactory factory) {

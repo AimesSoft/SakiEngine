@@ -11,7 +11,6 @@ cd /d "%~dp0"
 REM 获取项目根目录（scripts目录的上级目录）
 for %%i in ("%cd%\..") do set "PROJECT_ROOT=%%~fi"
 set "GAME_BASE_DIR=%PROJECT_ROOT%\Game"
-set "ENGINE_LIB_DIR=%PROJECT_ROOT%\Engine\lib"
 
 echo [94m=== SakiEngine 新项目创建向导 ===[0m
 echo.
@@ -215,6 +214,7 @@ echo base_choice: size=24
 echo base_review_title: size=45
 echo base_quick_menu: size=25
 echo main_menu: background=sky size=200 top=0.3 right=0.05
+echo settings_defaults: menu_display_mode=windowed
 ) > "%PROJECT_DIR%\GameScript\configs\configs.sks"
 
 REM 创建基础的剧情脚本文件
@@ -252,13 +252,13 @@ echo nr "感谢游玩！"
 echo return
 ) > "%PROJECT_DIR%\GameScript\labels\start.sks"
 
-REM 创建项目模块文件夹和文件
-echo [93m创建项目模块文件夹...[0m
+REM 创建项目代码目录
+echo [93m创建项目代码目录...[0m
 for %%a in (A B C D E F G H I J K L M N O P Q R S T U V W X Y Z) do call set "PROJECT_NAME_LOWER=%%PROJECT_NAME:%%a=%%a%%"
 for %%a in (a b c d e f g h i j k l m n o p q r s t u v w x y z) do call set "PROJECT_NAME_LOWER=%%PROJECT_NAME_LOWER:%%a=%%a%%"
 call :tolower PROJECT_NAME_LOWER "%PROJECT_NAME%"
 
-set "MODULE_DIR=%ENGINE_LIB_DIR%\!PROJECT_NAME_LOWER!"
+set "MODULE_DIR=%PROJECT_DIR%\ProjectCode\lib\!PROJECT_NAME_LOWER!"
 
 REM 创建模块目录结构
 mkdir "!MODULE_DIR!" 2>nul
@@ -270,7 +270,6 @@ echo [93m创建模块主文件...[0m
 echo import 'package:flutter/material.dart';
 echo import 'package:flutter/foundation.dart';
 echo import 'package:sakiengine/src/core/game_module.dart';
-echo import 'package:sakiengine/src/core/module_registry.dart';
 echo import 'package:sakiengine/src/config/saki_engine_config.dart';
 echo.
 echo /// %PROJECT_NAME% 项目的自定义模块
@@ -322,18 +321,26 @@ echo     // 比如加载特殊的资源、设置特殊的配置等
 echo   }
 echo }
 echo.
-echo // 自动注册这个模块
-echo // 当这个文件被导入时，模块会自动注册
-echo void _registerModule^(^) {
-echo   registerProjectModule^('!PROJECT_NAME_LOWER!', ^(^) =^> %PROJECT_NAME%Module^(^)^);
-echo }
-echo.
-echo // 使用顶级变量触发注册，避免编译器警告
-echo final bool _isRegistered = ^(^(^) {
-echo   _registerModule^(^);
-echo   return true;
-echo }^)^(^);
+echo GameModule createProjectModule^(^) =^> %PROJECT_NAME%Module^(^);
 ) > "!MODULE_DIR!\!PROJECT_NAME_LOWER!_module.dart"
+
+(
+echo # %PROJECT_NAME% ProjectCode
+echo.
+echo 此目录用于放置项目层 Dart 代码，不应写入引擎目录。
+echo.
+echo - 入口模块: ^`lib/!PROJECT_NAME_LOWER!/!PROJECT_NAME_LOWER!_module.dart^`
+echo - 目标: 保持引擎层与项目层完全解耦
+) > "%PROJECT_DIR%\ProjectCode\README.md"
+
+set "ENGINE_MODULE_LINK=%PROJECT_ROOT%\Engine\lib\!PROJECT_NAME_LOWER!"
+if exist "!ENGINE_MODULE_LINK!" (
+    rmdir /s /q "!ENGINE_MODULE_LINK!" >nul 2>&1
+)
+mklink /J "!ENGINE_MODULE_LINK!" "!MODULE_DIR!" >nul 2>&1
+if errorlevel 1 (
+    echo [93m警告: 无法自动创建 Engine/lib 链接，请手动创建: !ENGINE_MODULE_LINK! -> !MODULE_DIR![0m
+)
 
 echo.
 echo [92m✓ 项目创建完成！[0m

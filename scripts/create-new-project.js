@@ -78,7 +78,6 @@ async function createNewProject() {
     // 获取项目根目录
     const projectRoot = path.dirname(__dirname);
     const gameBaseDir = path.join(projectRoot, 'Game');
-    const engineLibDir = path.join(projectRoot, 'Engine', 'lib');
     
     colorLog('=== SakiEngine 新项目创建向导 ===', 'blue');
     console.log();
@@ -125,20 +124,20 @@ async function createNewProject() {
         await createProjectStructure(projectDir, projectName, bundleId, primaryColor, rgbColor);
         
         // 创建项目模块
-        await createProjectModule(engineLibDir, projectName, primaryColor);
+        await createProjectModule(projectRoot, projectDir, projectName, primaryColor);
         
         console.log();
         colorLog('✓ 项目创建完成！', 'green');
         console.log();
         colorLog(`项目路径: ${projectDir}`, 'blue');
-        colorLog(`模块路径: ${path.join(engineLibDir, projectName.toLowerCase())}`, 'blue');
+        colorLog(`模块路径: ${path.join(projectDir, 'ProjectCode', 'lib', projectName.toLowerCase())}`, 'blue');
         colorLog('请将游戏资源（图片、音频等）放入对应的 Assets 子目录中。', 'yellow');
         console.log();
         colorLog('下一步操作：', 'green');
         colorLog('1. 运行 node run.js 并选择新创建的项目', 'blue');
         colorLog('2. 编辑 GameScript/labels/start.sks 开始创作你的故事', 'blue');
         colorLog('3. 在 Assets 目录中添加游戏所需的图片和音频资源', 'blue');
-        colorLog(`4. 自定义项目模块: ${path.join(engineLibDir, projectName.toLowerCase(), `${projectName.toLowerCase()}_module.dart`)}`, 'blue');
+        colorLog(`4. 自定义项目模块: ${path.join(projectDir, 'ProjectCode', 'lib', projectName.toLowerCase(), `${projectName.toLowerCase()}_module.dart`)}`, 'blue');
         console.log();
         
         // 询问是否立即设置为默认项目
@@ -317,6 +316,7 @@ base_choice: size=24
 base_review_title: size=45
 base_quick_menu: size=25
 main_menu: background=sky size=200 top=0.3 right=0.05
+settings_defaults: menu_display_mode=windowed
 `;
     fs.writeFileSync(path.join(projectDir, 'GameScript', 'configs', 'configs.sks'), systemConfig);
     
@@ -436,11 +436,12 @@ endmenu
 /**
  * 创建项目模块文件
  */
-async function createProjectModule(engineLibDir, projectName, primaryColor) {
-    colorLog('创建项目模块文件夹...', 'yellow');
+async function createProjectModule(projectRoot, projectDir, projectName, primaryColor) {
+    colorLog('创建项目代码目录...', 'yellow');
     
     const projectNameLower = projectName.toLowerCase();
-    const moduleDir = path.join(engineLibDir, projectNameLower);
+    const projectCodeDir = path.join(projectDir, 'ProjectCode');
+    const moduleDir = path.join(projectCodeDir, 'lib', projectNameLower);
     
     // 创建模块目录结构
     if (!fs.existsSync(moduleDir)) {
@@ -457,7 +458,6 @@ async function createProjectModule(engineLibDir, projectName, primaryColor) {
     const moduleContent = `import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sakiengine/src/core/game_module.dart';
-import 'package:sakiengine/src/core/module_registry.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 
 /// ${projectName} 项目的自定义模块
@@ -509,20 +509,31 @@ class ${projectName}Module extends DefaultGameModule {
   }
 }
 
-// 自动注册这个模块
-// 当这个文件被导入时，模块会自动注册
-void _registerModule() {
-  registerProjectModule('${projectNameLower}', () => ${projectName}Module());
-}
-
-// 使用顶级变量触发注册，避免编译器警告
-final bool _isRegistered = (() {
-  _registerModule();
-  return true;
-})();
+GameModule createProjectModule() => ${projectName}Module();
 `;
     
     fs.writeFileSync(path.join(moduleDir, `${projectNameLower}_module.dart`), moduleContent);
+
+    const projectCodeReadme = `# ${projectName} ProjectCode
+
+此目录用于放置项目层 Dart 代码，不应写入引擎目录。
+
+- 入口模块: \`lib/${projectNameLower}/${projectNameLower}_module.dart\`
+- 目标: 保持引擎层与项目层完全解耦
+`;
+    fs.writeFileSync(path.join(projectCodeDir, 'README.md'), projectCodeReadme);
+
+    // 在 Engine/lib 下创建链接，保持模块系统兼容
+    const engineLinkPath = path.join(projectRoot, 'Engine', 'lib', projectNameLower);
+    try {
+        if (fs.existsSync(engineLinkPath)) {
+            fs.rmSync(engineLinkPath, { recursive: true, force: true });
+        }
+        const relativeTarget = path.relative(path.dirname(engineLinkPath), moduleDir);
+        fs.symlinkSync(relativeTarget, engineLinkPath, process.platform === 'win32' ? 'junction' : 'dir');
+    } catch (error) {
+        colorLog(`警告: 创建 Engine/lib 链接失败，请手动链接 ${engineLinkPath} -> ${moduleDir}`, 'yellow');
+    }
 }
 
 /**

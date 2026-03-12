@@ -164,15 +164,12 @@ SakiEngine/
 │   └── ...                  # 其他工具脚本
 ├── Engine/             # Flutter引擎主目录
 │   ├── lib/           # 引擎源码
-│   │   ├── src/       # 引擎核心代码
-│   │   ├── projectname/ # 项目特定模块（自动创建）
+│   │   ├── src/       # 引擎核心代码（仅通用能力）
 │   │   └── main.dart  # 主入口
-│   ├── tool/          # 开发工具
-│   │   └── generate_modules.dart # 模块自动生成器
 │   └── pubspec.yaml   # 依赖配置
 └── Game/              # 游戏项目目录
     ├── SakiEngine/    # 默认示例游戏
-    ├── SoraNoUta/     # 另一个示例项目
+    ├── SoraNoUta/     # 业务项目（建议独立仓库）
     └── YourGame/      # 您的游戏项目（创建工具生成）
 ```
 
@@ -191,7 +188,7 @@ SakiEngine 提供了便捷的项目创建工具，可以快速搭建新的视觉
 - 创建完整的项目目录结构
 - 生成基础的配置文件（角色、姿势、系统配置）
 - 创建示例剧情脚本
-- **自动生成项目专用的Flutter模块**
+- **自动生成项目层 Flutter 模块（位于 ProjectCode）**
 - 配置主题颜色和Bundle ID
 - 更新模块注册表
 
@@ -204,7 +201,7 @@ SakiEngine 提供了便捷的项目创建工具，可以快速搭建新的视觉
 - **项目配置**：特殊的引擎参数和功能开关
 - **智能回退**：未自定义的组件自动使用引擎默认实现
 
-项目模块位置：`Engine/lib/项目名小写/项目名_module.dart`
+项目模块位置：`Game/项目名/ProjectCode/lib/项目名小写/项目名_module.dart`
 
 #### 快速开始新项目
 
@@ -224,7 +221,7 @@ SakiEngine 提供了便捷的项目创建工具，可以快速搭建新的视觉
 
 ```bash
 # 编辑项目模块文件
-Engine/lib/yourproject/yourproject_module.dart
+Game/yourproject/ProjectCode/lib/yourproject/yourproject_module.dart
 ```
 
 ### VSCode 语法高亮插件

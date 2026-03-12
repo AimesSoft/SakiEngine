@@ -141,13 +141,27 @@ class SakiEngineConfig {
   double dialogueBackgroundXAlign = 1.0;
   double dialogueBackgroundYAlign = 0.5;
 
-  // SoraNoUta 说话人位置配置
-  double soranoutaSpeakerXPos = 0.2;
-  double soranoutaSpeakerYPos = 0.0;
-  
-  // SoraNoUta 对话框内部文本位置配置
-  double soranoUtaTextXPos = 0.0;
-  double soranoUtaTextYPos = 0.0;
+  // 项目对话框布局配置
+  double dialogueSpeakerXPos = 0.2;
+  double dialogueSpeakerYPos = 0.0;
+  double dialogueTextXPos = 0.0;
+  double dialogueTextYPos = 0.0;
+
+  // 设置默认值配置
+  String defaultMenuDisplayMode = 'windowed';
+
+  // 兼容旧字段名，避免历史项目脚本立即失效
+  double get soranoutaSpeakerXPos => dialogueSpeakerXPos;
+  set soranoutaSpeakerXPos(double value) => dialogueSpeakerXPos = value;
+
+  double get soranoutaSpeakerYPos => dialogueSpeakerYPos;
+  set soranoutaSpeakerYPos(double value) => dialogueSpeakerYPos = value;
+
+  double get soranoUtaTextXPos => dialogueTextXPos;
+  set soranoUtaTextXPos(double value) => dialogueTextXPos = value;
+
+  double get soranoUtaTextYPos => dialogueTextYPos;
+  set soranoUtaTextYPos(double value) => dialogueTextYPos = value;
 
   TextStyle dialogueTextStyle = const TextStyle(fontSize: 24, color: Colors.white);
   TextStyle speakerTextStyle = const TextStyle(fontSize: 28, color: Colors.white, fontWeight: FontWeight.bold);
@@ -344,27 +358,40 @@ class SakiEngineConfig {
             }
           }
         }
-        if (trimmedLine.startsWith('soranouta_dialogbox:')) {
+        if (trimmedLine.startsWith('dialogbox_layout:') ||
+            trimmedLine.startsWith('soranouta_dialogbox:')) {
           final params = trimmedLine.split(':')[1].trim().split(' ');
           for (final param in params) {
             final keyValue = param.split('=');
             if (keyValue.length == 2) {
               switch (keyValue[0]) {
                 case 'xpos':
-                  soranoutaSpeakerXPos = double.tryParse(keyValue[1]) ?? 0.2;
-                  //print('[Config] soranoutaSpeakerXPos 设置为: $soranoutaSpeakerXPos');
+                  dialogueSpeakerXPos = double.tryParse(keyValue[1]) ?? 0.2;
                   break;
                 case 'ypos':
-                  soranoutaSpeakerYPos = double.tryParse(keyValue[1]) ?? 0.0;
-                  //print('[Config] soranoutaSpeakerYPos 设置为: $soranoutaSpeakerYPos');
+                  dialogueSpeakerYPos = double.tryParse(keyValue[1]) ?? 0.0;
                   break;
                 case 'dialogue_xpos':
-                  soranoUtaTextXPos = double.tryParse(keyValue[1]) ?? 0.0;
-                  //print('[Config] soranoUtaTextXPos 设置为: $soranoUtaTextXPos');
+                  dialogueTextXPos = double.tryParse(keyValue[1]) ?? 0.0;
                   break;
                 case 'dialogue_ypos':
-                  soranoUtaTextYPos = double.tryParse(keyValue[1]) ?? 0.0;
-                  //print('[Config] soranoUtaTextYPos 设置为: $soranoUtaTextYPos');
+                  dialogueTextYPos = double.tryParse(keyValue[1]) ?? 0.0;
+                  break;
+              }
+            }
+          }
+        }
+        if (trimmedLine.startsWith('settings_defaults:')) {
+          final params = trimmedLine.split(':')[1].trim().split(' ');
+          for (final param in params) {
+            final keyValue = param.split('=');
+            if (keyValue.length == 2) {
+              switch (keyValue[0]) {
+                case 'menu_display_mode':
+                  final mode = keyValue[1].trim();
+                  if (mode == 'windowed' || mode == 'fullscreen') {
+                    defaultMenuDisplayMode = mode;
+                  }
                   break;
               }
             }
