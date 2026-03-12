@@ -493,6 +493,10 @@ flutter create \
   --platforms=android,ios,linux,macos,windows,web \
   "$PROJECT_DIR"
 
+if [ -f "$PROJECT_DIR/.gitignore" ] && ! grep -q "^/.saki_cache/$" "$PROJECT_DIR/.gitignore"; then
+  echo "/.saki_cache/" >> "$PROJECT_DIR/.gitignore"
+fi
+
 # 项目资产与默认配置
 echo "$PROJECT_NAME" > "$PROJECT_DIR/default_game.txt"
 mkdir -p "$PROJECT_DIR/Assets/fonts"

@@ -599,6 +599,14 @@ async function createFlutterAppProject(projectRoot, projectDir, projectName, bun
         { stdio: 'inherit' }
     );
 
+    const projectGitignore = path.join(projectDir, '.gitignore');
+    if (fs.existsSync(projectGitignore)) {
+        const gitignoreContent = fs.readFileSync(projectGitignore, 'utf8');
+        if (!gitignoreContent.includes('/.saki_cache/')) {
+            fs.appendFileSync(projectGitignore, '\n/.saki_cache/\n');
+        }
+    }
+
     // 项目资产与默认配置
     fs.writeFileSync(path.join(projectDir, 'default_game.txt'), `${projectName}\n`);
     fs.mkdirSync(path.join(projectDir, 'Assets', 'fonts'), { recursive: true });

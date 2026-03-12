@@ -1,7 +1,13 @@
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
-import 'package:sakiengine/src/rendering/color_background_renderer.dart';
 
 class SksParser {
+  static bool _isValidHexColor(String color) {
+    if (!color.startsWith('#')) return false;
+    final hex = color.substring(1);
+    return RegExp(r'^([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$')
+        .hasMatch(hex);
+  }
+
   /// 为角色对话添加引号（旁白除外）
   String _formatDialogueWithQuotes(String dialogue, String? character) {
     // 如果没有角色（旁白），直接返回原文本
@@ -170,7 +176,7 @@ class SksParser {
           //print('[SksParser] scene解析结果: background="$backgroundName", transition="$transitionType", animation="$animation", repeat=$repeatCount');
           
           // 检查是否为十六进制颜色格式
-          if (ColorBackgroundRenderer.isValidHexColor(backgroundName.trim())) {
+          if (_isValidHexColor(backgroundName.trim())) {
             nodes.add(BackgroundNode(backgroundName.trim(), timer: timerValue, layers: layers, transitionType: transitionType, animation: animation, repeatCount: repeatCount));
           } else {
             nodes.add(BackgroundNode(backgroundName, timer: timerValue, layers: layers, transitionType: transitionType, animation: animation, repeatCount: repeatCount));

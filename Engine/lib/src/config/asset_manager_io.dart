@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle, AssetManifest;
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/game/game_script_localization.dart';
+import 'package:sakiengine/src/sks_compiler/compiled_sks_bundle.dart';
+import 'package:sakiengine/src/sks_compiler/compiled_sks_registry.dart';
 import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
 class AssetManager {
@@ -72,6 +74,16 @@ class AssetManager {
   Future<String> loadString(String path) async {
     final candidates = GameScriptLocalization.resolveAssetPaths(path);
     Object? lastError;
+    final compiledBundle = CompiledSksRegistry.instance.activeBundle;
+
+    if (compiledBundle != null) {
+      for (final candidate in candidates) {
+        final precompiled = compiledBundle.loadText(candidate);
+        if (precompiled != null) {
+          return precompiled;
+        }
+      }
+    }
 
     if (_shouldLoadFromExternal()) {
       final gamePath = await _getGamePath();
@@ -138,6 +150,11 @@ class AssetManager {
     final candidates =
         GameScriptLocalization.resolveAssetDirectories(directory);
     final resolvedDirectories = <String>[];
+    final precompiledAssets =
+        _listPrecompiledAssets(candidates: candidates, extension: extension);
+    if (precompiledAssets.isNotEmpty) {
+      return precompiledAssets;
+    }
 
     if (_shouldLoadFromExternal()) {
       final gamePath = await _getGamePath();
@@ -193,6 +210,32 @@ class AssetManager {
                 assets.add(fileName);
               }
             }
+          }
+        }
+      }
+    }
+    return assets;
+  }
+
+  List<String> _listPrecompiledAssets({
+    required List<String> candidates,
+    required String extension,
+  }) {
+    final bundle = CompiledSksRegistry.instance.activeBundle;
+    if (bundle == null) {
+      return const <String>[];
+    }
+
+    final assets = <String>[];
+    final seen = <String>{};
+    for (final candidate in candidates) {
+      final normalized = CompiledSksBundle.normalizeAssetPath(candidate);
+      final prefix = normalized.endsWith('/') ? normalized : '$normalized/';
+      for (final assetPath in bundle.textAssetPaths) {
+        if (assetPath.startsWith(prefix) && assetPath.endsWith(extension)) {
+          final fileName = p.basename(assetPath);
+          if (seen.add(fileName)) {
+            assets.add(fileName);
           }
         }
       }
