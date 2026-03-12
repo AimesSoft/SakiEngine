@@ -100,10 +100,10 @@ node run.js
 
 ##### 手动方式（项目内直接运行）
 
-1. 进入目标游戏目录（示例：`SoraNoUta`）
+1. 进入目标游戏目录（示例：`SakiEngine`）
 
 ```bash
-cd Game/SoraNoUta
+cd Game/SakiEngine
 ```
 
 2. 获取依赖并运行
@@ -167,9 +167,8 @@ SakiEngine/
 │   │   └── main.dart  # 兼容入口（内部调用 runSakiEngine）
 │   └── pubspec.yaml   # 依赖配置
 └── Game/              # 游戏项目目录
-    ├── SakiEngine/    # 示例游戏（独立 Flutter 项目）
-    ├── SoraNoUta/     # 业务项目（可独立仓库）
-    └── YourGame/      # 您的游戏项目（创建工具生成）
+    ├── SakiEngine/    # 示例游戏（随引擎仓库）
+    └── YourGame/      # 您的游戏项目（建议独立仓库）
 ```
 
 ### 新项目创建
