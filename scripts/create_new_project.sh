@@ -527,6 +527,10 @@ dependencies:
   $PROJECT_PACKAGE_NAME:
     path: ./ProjectCode
 
+dependency_overrides:
+  media_kit:
+    path: ../../third_party/media_kit_hotfix
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

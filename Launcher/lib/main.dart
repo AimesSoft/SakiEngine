@@ -1467,12 +1467,29 @@ endlocal
     }
 
     _pendingSafeRestart = true;
-    _appendLog('已请求安全重启：将停止当前运行并自动重新启动（规避原生插件热重启崩溃）');
+    _appendLog('已请求安全重启：将停止当前运行并自动重新启动');
     await _sendRunControl('q', '退出运行');
     await Future<void>.delayed(const Duration(milliseconds: 500));
     if (identical(process, _activeProcess)) {
       await _stopActiveTask();
     }
+  }
+
+  Future<void> _requestHotRestart() async {
+    final process = _activeProcess;
+    if (process == null || !_isRunTask) {
+      _appendLog('没有可重启的运行进程');
+      return;
+    }
+    if (_runMode != RunLaunchMode.embedded) {
+      _appendLog('系统终端模式请在终端内手动热重启');
+      return;
+    }
+    if (_runBuildMode != RunBuildMode.debug) {
+      _appendLog('仅 Debug 运行配置支持热重启');
+      return;
+    }
+    await _sendRunControl('R', '热重启');
   }
 
   Future<void> _stopActiveTask() async {
@@ -1880,6 +1897,14 @@ endlocal
               spacing: 8,
               runSpacing: 8,
               children: <Widget>[
+                OutlinedButton(
+                  onPressed: _runBuildMode == RunBuildMode.debug
+                      ? () {
+                          unawaited(_requestHotRestart());
+                        }
+                      : null,
+                  child: const Text('热重启 R'),
+                ),
                 OutlinedButton(
                   onPressed: _runBuildMode == RunBuildMode.debug
                       ? () {
