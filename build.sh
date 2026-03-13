@@ -219,17 +219,109 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
 EOF
 }
 
+prepare_release_pubspec_assets() {
+  mkdir -p "$GAME_SKS_CACHE_DIR"
+  cp -f "$GAME_PUBSPEC_FILE" "$GAME_PUBSPEC_BACKUP_FILE"
+
+  local assets_start_line
+  assets_start_line=$(grep -n -E "^  assets:\s*$" "$GAME_PUBSPEC_BACKUP_FILE" | head -1 | cut -d: -f1)
+  if [ -z "${assets_start_line:-}" ]; then
+    echo -e "${RED}错误: pubspec.yaml 未找到 flutter/assets 段${NC}"
+    exit 1
+  fi
+
+  local assets_end_line="$assets_start_line"
+  local total_lines
+  total_lines=$(wc -l < "$GAME_PUBSPEC_BACKUP_FILE" | xargs)
+  while [ "$assets_end_line" -lt "$total_lines" ]; do
+    local next_line_num=$((assets_end_line + 1))
+    local line
+    line=$(sed -n "${next_line_num}p" "$GAME_PUBSPEC_BACKUP_FILE")
+    if [[ "$line" =~ ^[[:space:]]*$ ]] || [[ "$line" =~ ^[[:space:]]{4}-[[:space:]]+ ]]; then
+      assets_end_line="$next_line_num"
+      continue
+    fi
+    break
+  done
+
+  local raw_assets_file="$GAME_SKS_CACHE_DIR/raw_assets_entries.txt"
+  local expanded_assets_file="$GAME_SKS_CACHE_DIR/expanded_assets_entries.txt"
+  local unique_assets_file="$GAME_SKS_CACHE_DIR/unique_assets_entries.txt"
+  local temp_pubspec="$GAME_SKS_CACHE_DIR/pubspec.yaml.temp"
+
+  sed -n "$((assets_start_line + 1)),$((assets_end_line))p" "$GAME_PUBSPEC_BACKUP_FILE" \
+    | sed -n -E "s/^[[:space:]]{4}-[[:space:]]+(.+)$/\1/p" \
+    | sed -E "s/[[:space:]]+#.*$//" \
+    | sed -E "s/^['\"](.*)['\"]$/\1/" \
+    > "$raw_assets_file"
+
+  : > "$expanded_assets_file"
+  while IFS= read -r entry; do
+    entry=$(echo "$entry" | xargs)
+    [ -n "$entry" ] || continue
+
+    # 全部 GameScript* 目录不打包（脚本由预编译 Dart 提供）
+    case "$entry" in
+      GameScript|GameScript/|GameScript/*|GameScript_*)
+        continue
+        ;;
+    esac
+
+    local normalized="${entry%/}"
+    local full_path="$GAME_DIR/$normalized"
+
+    if [ -d "$full_path" ]; then
+      while IFS= read -r file_path; do
+        [ -n "$file_path" ] || continue
+        local relative="${file_path#$GAME_DIR/}"
+        relative=${relative//\\//}
+        case "$relative" in
+          GameScript/*|GameScript_*)
+            continue
+            ;;
+        esac
+        echo "$relative" >> "$expanded_assets_file"
+      done < <(find "$full_path" -type f ! -name '.DS_Store' | sort)
+    elif [ -f "$full_path" ]; then
+      echo "$normalized" >> "$expanded_assets_file"
+    else
+      echo -e "${YELLOW}警告: 资源路径不存在，已跳过: $entry${NC}"
+    fi
+  done < "$raw_assets_file"
+
+  awk 'NF && !seen[$0]++' "$expanded_assets_file" > "$unique_assets_file"
+
+  local expanded_count
+  expanded_count=$(wc -l < "$unique_assets_file" | xargs)
+  if [ "$expanded_count" -eq 0 ]; then
+    echo -e "${RED}错误: 发布资源清单为空，已中止构建。${NC}"
+    exit 1
+  fi
+
+  local image_count
+  image_count=$(grep -E -i "^Assets/images/.*\.(png|jpg|jpeg|gif|bmp|webp|avif|mp4|mov|avi|mkv|webm)$" \
+    "$unique_assets_file" | wc -l | xargs)
+  if grep -q -E "^Assets/?$" "$raw_assets_file" && [ "$image_count" -eq 0 ]; then
+    echo -e "${RED}错误: 检测到配置了 Assets/，但展开后没有任何 Assets/images 资源。${NC}"
+    echo -e "${RED}为防止发布包缺少美术素材，已中止构建。${NC}"
+    exit 1
+  fi
+
+  head -n "$assets_start_line" "$GAME_PUBSPEC_BACKUP_FILE" > "$temp_pubspec"
+  while IFS= read -r asset_file; do
+    [ -n "$asset_file" ] || continue
+    echo "    - $asset_file" >> "$temp_pubspec"
+  done < "$unique_assets_file"
+  tail -n "+$((assets_end_line + 1))" "$GAME_PUBSPEC_BACKUP_FILE" >> "$temp_pubspec"
+
+  mv -f "$temp_pubspec" "$GAME_PUBSPEC_FILE"
+  echo -e "${YELLOW}已更新发布资源清单：总计 ${expanded_count} 项，图片/视频 ${image_count} 项，排除 GameScript*.sks${NC}"
+}
+
 restore_game_pubspec() {
   if [ -f "$GAME_PUBSPEC_BACKUP_FILE" ]; then
     mv -f "$GAME_PUBSPEC_BACKUP_FILE" "$GAME_PUBSPEC_FILE"
   fi
-}
-
-strip_sks_assets_from_pubspec() {
-  mkdir -p "$GAME_SKS_CACHE_DIR"
-  cp -f "$GAME_PUBSPEC_FILE" "$GAME_PUBSPEC_BACKUP_FILE"
-  perl -ne 'print unless /^\s*-\s*GameScript[^\s]*\/\s*$/' \
-    "$GAME_PUBSPEC_BACKUP_FILE" > "$GAME_PUBSPEC_FILE"
 }
 
 cleanup_on_exit() {
@@ -254,12 +346,8 @@ ensure_project_icon "$GAME_DIR" "$PROJECT_ROOT" || true
 
 cd "$GAME_DIR"
 
-echo -e "${YELLOW}正在从构建资源中排除 .sks 脚本目录...${NC}"
-strip_sks_assets_from_pubspec
-
-echo -e "${YELLOW}正在获取依赖...${NC}"
+echo -e "${YELLOW}准备脚本编译环境（首次依赖解析）...${NC}"
 flutter pub get
-generate_app_icons "$GAME_DIR" || true
 
 echo -e "${YELLOW}正在预编译 .sks 脚本为 Dart...${NC}"
 mkdir -p "$GAME_SKS_CACHE_DIR"
@@ -274,6 +362,13 @@ if [ ! -f "$GAME_SKS_BUNDLE_FILE" ]; then
 fi
 
 cp -f "$GAME_SKS_BUNDLE_FILE" "$ENGINE_COMPILED_LOADER"
+
+echo -e "${YELLOW}正在生成发布资源清单...${NC}"
+prepare_release_pubspec_assets
+
+echo -e "${YELLOW}正在获取依赖...${NC}"
+flutter pub get
+generate_app_icons "$GAME_DIR" || true
 
 echo -e "${YELLOW}正在构建 $PLATFORM ...${NC}"
 case "$PLATFORM" in

@@ -146,6 +146,22 @@ class AssetManager {
     return values;
   }
 
+  Iterable<String> _bundleAssetKeysByPriority() sync* {
+    if (_assetManifest == null) {
+      return;
+    }
+    for (final key in _assetManifest!.keys) {
+      if (!key.startsWith('packages/')) {
+        yield key;
+      }
+    }
+    for (final key in _assetManifest!.keys) {
+      if (key.startsWith('packages/')) {
+        yield key;
+      }
+    }
+  }
+
   Future<String?> findAsset(String name) async {
     if (_imageCache.containsKey(name)) {
       return _imageCache[name];
@@ -176,6 +192,9 @@ class AssetManager {
 
     // 从查询名称中提取文件名，例如 "backgrounds/sky" -> "sky"
     final targetFileName = name.split('/').last;
+    final targetFileNameLower = targetFileName.toLowerCase();
+    final targetFileNameWithoutExt = p.basenameWithoutExtension(targetFileName);
+    final targetFileNameWithoutExtLower = targetFileNameWithoutExt.toLowerCase();
 
     // 提取路径部分，例如 "backgrounds/sky" -> "backgrounds"
     final pathParts = name.split('/');
@@ -191,14 +210,21 @@ class AssetManager {
 
     // 如果检测到cg关键词，优先在cg路径下搜索（支持递归子文件夹）
     if (isCgRelated) {
-      for (final key in _assetManifest!.keys) {
+      for (final key in _bundleAssetKeysByPriority()) {
         final keyParts = key.split('/');
         final keyFileName = keyParts.last;
-        final keyFileNameWithoutExt = keyFileName.split('.').first;
+        final keyFileNameLower = keyFileName.toLowerCase();
+        if (!supportedExtensions.any((ext) => keyFileNameLower.endsWith(ext))) {
+          continue;
+        }
+        final keyFileNameWithoutExtLower =
+            p.basenameWithoutExtension(keyFileName).toLowerCase();
+        final fileNameMatched = keyFileNameWithoutExtLower ==
+                targetFileNameWithoutExtLower ||
+            keyFileNameLower == targetFileNameLower;
 
         // 检查文件名是否匹配且路径包含cg（支持cg的任意子文件夹）
-        if (keyFileNameWithoutExt.toLowerCase() ==
-            targetFileName.toLowerCase()) {
+        if (fileNameMatched) {
           final keyPath = key.toLowerCase();
           // 更精确的cg路径检测：支持 /cg/ 或 /cg/任意子目录/
           if (keyPath.contains('/cg/') ||
@@ -212,13 +238,21 @@ class AssetManager {
     }
 
     // 1. 精确匹配：路径和文件名都要匹配
-    for (final key in _assetManifest!.keys) {
+    for (final key in _bundleAssetKeysByPriority()) {
       final keyParts = key.split('/');
       final keyFileName = keyParts.last;
-      final keyFileNameWithoutExt = keyFileName.split('.').first;
+      final keyFileNameLower = keyFileName.toLowerCase();
+      if (!supportedExtensions.any((ext) => keyFileNameLower.endsWith(ext))) {
+        continue;
+      }
+      final keyFileNameWithoutExtLower =
+          p.basenameWithoutExtension(keyFileName).toLowerCase();
+      final fileNameMatched = keyFileNameWithoutExtLower ==
+              targetFileNameWithoutExtLower ||
+          keyFileNameLower == targetFileNameLower;
 
       // 检查文件名是否匹配
-      if (keyFileNameWithoutExt.toLowerCase() == targetFileName.toLowerCase()) {
+      if (fileNameMatched) {
         // 如果查询有路径要求，检查路径是否匹配
         if (targetPath.isNotEmpty) {
           final keyPath = key.toLowerCase();
@@ -238,12 +272,20 @@ class AssetManager {
     }
 
     // 2. 宽松匹配：只匹配文件名，忽略路径
-    for (final key in _assetManifest!.keys) {
+    for (final key in _bundleAssetKeysByPriority()) {
       final keyParts = key.split('/');
       final keyFileName = keyParts.last;
-      final keyFileNameWithoutExt = keyFileName.split('.').first;
+      final keyFileNameLower = keyFileName.toLowerCase();
+      if (!supportedExtensions.any((ext) => keyFileNameLower.endsWith(ext))) {
+        continue;
+      }
+      final keyFileNameWithoutExtLower =
+          p.basenameWithoutExtension(keyFileName).toLowerCase();
+      final fileNameMatched = keyFileNameWithoutExtLower ==
+              targetFileNameWithoutExtLower ||
+          keyFileNameLower == targetFileNameLower;
 
-      if (keyFileNameWithoutExt.toLowerCase() == targetFileName.toLowerCase()) {
+      if (fileNameMatched) {
         _imageCache[name] = key;
         //print("Found asset in bundle (fallback name match): $name -> $key");
         return key;

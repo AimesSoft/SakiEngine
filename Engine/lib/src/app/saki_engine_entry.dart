@@ -10,7 +10,6 @@ import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:sakiengine/src/config/runtime_project_config.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
-import 'package:sakiengine/src/core/module_registry.dart';
 import 'package:sakiengine/src/core/project_module_loader.dart';
 import 'package:sakiengine/src/game/save_load_manager.dart';
 import 'package:sakiengine/src/integrations/steam/steamworks_manager.dart';
@@ -162,7 +161,6 @@ Future<void> runSakiEngine({
   String? gamePath,
   int steamAppId = 3536120,
   bool enableSteamworks = true,
-  bool initializeGeneratedModules = true,
 }) async {
   setupDebugLogger();
 
@@ -234,10 +232,6 @@ Future<void> runSakiEngine({
       print('=== 全局变量状态结束 ===');
 
       SakiEngineConfig().updateThemeForDarkMode();
-
-      if (initializeGeneratedModules) {
-        initializeProjectModules();
-      }
 
       runApp(const SakiEngineApp());
     },

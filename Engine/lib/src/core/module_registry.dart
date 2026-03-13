@@ -1,23 +1,8 @@
-// 模块注册中心 - 使用自动生成的注册系统
-// 🤖 完全自动化，无需手动维护！
-
-import 'package:sakiengine/src/core/generated_module_registry.dart';
-import 'package:sakiengine/src/core/auto_module_registry.dart';
+// 模块注册中心（显式注册）
+//
+// 每个游戏项目在自己的 `main.dart` 中调用 `registerProjectModule` 即可。
+// 引擎不再维护自动扫描/自动生成的模块注册。
 import 'package:sakiengine/src/core/project_module_loader.dart';
-
-/// 初始化所有项目模块
-/// 这个函数使用自动生成的模块注册表
-/// 🎯 真正的零配置模块系统！
-void initializeProjectModules() {
-  // 使用自动生成的注册表
-  registerAllDiscoveredModules();
-  
-  // 显示扫描结果（用于开发调试）
-  final availableModules = AutoModuleRegistry.scanForAvailableModules();
-  if (availableModules.isNotEmpty) {
-  }
-  
-}
 
 /// 创建项目特定模块的助手函数
 /// 这个函数提供了一个便捷的方式来创建符合规范的项目模块

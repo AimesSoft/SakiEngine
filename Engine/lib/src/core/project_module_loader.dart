@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:sakiengine/src/core/game_module.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
 
-// 自动模块发现系统 - 无需手动注册
+// 显式模块注册系统：由游戏项目在入口处主动调用 registerProjectModule。
 
 /// 项目模块工厂函数类型
 typedef GameModuleFactory = GameModule Function();
@@ -15,7 +15,7 @@ class ProjectModuleLoader {
 
   /// 注册的项目模块工厂
   final Map<String, GameModuleFactory> _registeredModules = {};
-  
+
   /// 当前加载的模块
   GameModule? _currentModule;
   String? _currentProjectName;
@@ -34,7 +34,7 @@ class ProjectModuleLoader {
   /// 获取当前项目的模块
   Future<GameModule> getCurrentModule() async {
     final projectName = await ProjectInfoManager().getProjectName();
-    
+
     // 如果项目没有变化，返回缓存的模块
     if (_currentModule != null && _currentProjectName == projectName) {
       return _currentModule!;
@@ -50,11 +50,11 @@ class ProjectModuleLoader {
       try {
         _currentModule = _registeredModules[normalizedProjectName]!();
         await _currentModule!.initialize();
-        
+
         if (kDebugMode) {
           //print('[ProjectModuleLoader] 加载已注册模块: $projectName');
         }
-        
+
         return _currentModule!;
       } catch (e) {
         if (kDebugMode) {
@@ -66,11 +66,11 @@ class ProjectModuleLoader {
     // 回退到默认模块
     _currentModule = DefaultGameModule();
     await _currentModule!.initialize();
-    
+
     if (kDebugMode) {
       //print('[ProjectModuleLoader] 使用默认模块: $projectName');
     }
-    
+
     return _currentModule!;
   }
 
@@ -90,6 +90,13 @@ class ProjectModuleLoader {
   bool hasCustomModule(String projectName) {
     final normalizedName = projectName.toLowerCase();
     return _registeredModules.containsKey(normalizedName);
+  }
+
+  @visibleForTesting
+  void resetForTest() {
+    _registeredModules.clear();
+    _currentModule = null;
+    _currentProjectName = null;
   }
 }
 
