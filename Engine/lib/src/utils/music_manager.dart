@@ -464,17 +464,19 @@ class MusicManager extends ChangeNotifier {
       await player.setFilePath(trimmed);
       return;
     }
-    if (trimmed.startsWith('asset:///')) {
-      final normalized = trimmed.replaceFirst('asset:///', '');
-      final resolved =
-          normalized.startsWith('assets/') ? normalized : 'assets/$normalized';
-      await player.setAsset(resolved);
-      return;
-    }
-
-    final resolved =
-        trimmed.startsWith('assets/') ? trimmed : 'assets/$trimmed';
+    final resolved = _normalizeBundleAssetPath(trimmed);
     await player.setAsset(resolved);
+  }
+
+  String _normalizeBundleAssetPath(String path) {
+    final normalized = path.startsWith('asset:///')
+        ? path.replaceFirst('asset:///', '')
+        : path;
+    final lower = normalized.toLowerCase();
+    if (lower.startsWith('assets/') || lower.startsWith('packages/')) {
+      return normalized;
+    }
+    return 'Assets/$normalized';
   }
 
   bool _isNetworkPath(String path) {

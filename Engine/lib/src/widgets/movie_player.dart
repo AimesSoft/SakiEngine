@@ -141,20 +141,27 @@ class _MoviePlayerState extends State<MoviePlayer> {
   }
 
   String _buildMediaSource(String path) {
-    if (path.startsWith('asset:///')) {
-      return path;
+    final trimmed = path.trim();
+    final lower = trimmed.toLowerCase();
+
+    if (trimmed.startsWith('asset:///')) {
+      return trimmed;
     }
 
-    if (path.startsWith('assets/')) {
-      return 'asset:///$path';
+    if (lower.startsWith('assets/') || lower.startsWith('packages/')) {
+      return 'asset:///$trimmed';
     }
 
-    final uri = Uri.tryParse(path);
+    final uri = Uri.tryParse(trimmed);
     if (uri != null && uri.hasScheme) {
-      return path;
+      return trimmed;
     }
 
-    return Uri.file(path).toString();
+    if (trimmed.startsWith('/')) {
+      return Uri.file(trimmed).toString();
+    }
+
+    return 'asset:///Assets/$trimmed';
   }
 
   void _setError(String message) {

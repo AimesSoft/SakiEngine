@@ -138,8 +138,11 @@ class UISoundManager {
 
   Future<void> _setPlayerSource(AudioPlayer player, String assetPath) async {
     final trimmed = assetPath.trim();
-    final resolved =
-        trimmed.startsWith('assets/') ? trimmed : 'assets/$trimmed';
+    final lower = trimmed.toLowerCase();
+    final resolved = (lower.startsWith('assets/') ||
+            lower.startsWith('packages/'))
+        ? trimmed
+        : 'Assets/$trimmed';
     await player.setAsset(resolved);
   }
 }
