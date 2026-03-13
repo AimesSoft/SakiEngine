@@ -51,9 +51,70 @@ jobs:
         working-directory: Game/SakiEngine
         run: flutter test
 
-  build-android:
-    needs: quality
+  check-build-target:
+    name: Check Game Build Trigger
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      game_name: ${{ steps.check.outputs.game_name }}
+      game_dir: ${{ steps.check.outputs.game_dir }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check changed files
+        id: check
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          GAME_NAME=$(cat default_game.txt 2>/dev/null | tr -d '\r\n' | xargs || true)
+          if [[ -z "$GAME_NAME" ]]; then
+            echo "⚠️ 未读取到 default_game.txt，跳过构建"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          GAME_DIR="Game/$GAME_NAME"
+          echo "🎯 默认游戏: $GAME_NAME"
+          echo "📁 目标目录: $GAME_DIR/"
+          echo "game_name=$GAME_NAME" >> "$GITHUB_OUTPUT"
+          echo "game_dir=$GAME_DIR/" >> "$GITHUB_OUTPUT"
+
+          if [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            CHANGED_FILES=$(git show --name-only --pretty='' "$CURRENT_SHA")
+          else
+            CHANGED_FILES=$(git diff --name-only "$BEFORE_SHA" "$CURRENT_SHA")
+          fi
+
+          echo "🧾 本次改动文件:"
+          echo "$CHANGED_FILES"
+
+          should_run=false
+          while IFS= read -r file; do
+            [[ -n "$file" ]] || continue
+            if [[ "$file" == "$GAME_DIR" || "$file" == "$GAME_DIR/"* || "$file" == "default_game.txt" ]]; then
+              should_run=true
+              break
+            fi
+          done <<< "$CHANGED_FILES"
+
+          if [[ "$should_run" == "true" ]]; then
+            echo "✅ 命中游戏项目目录改动，触发构建"
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "⏭️ 未命中游戏项目目录改动，跳过构建"
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-android:
+    needs: [quality, check-build-target]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.check-build-target.outputs.should_run == 'true'
     name: Build Android
     uses: ./.github/workflows/android-build.yml
     with:
@@ -63,8 +124,8 @@ jobs:
     secrets: inherit
 
   build-ios:
-    needs: quality
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [quality, check-build-target]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.check-build-target.outputs.should_run == 'true'
     name: Build iOS
     uses: ./.github/workflows/ios-build.yml
     with:
@@ -74,8 +135,8 @@ jobs:
     secrets: inherit
 
   build-macos:
-    needs: quality
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [quality, check-build-target]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.check-build-target.outputs.should_run == 'true'
     name: Build macOS
     uses: ./.github/workflows/macos-build.yml
     with:
@@ -85,8 +146,8 @@ jobs:
     secrets: inherit
 
   build-windows:
-    needs: quality
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [quality, check-build-target]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.check-build-target.outputs.should_run == 'true'
     name: Build Windows
     uses: ./.github/workflows/windows-build.yml
     with:
@@ -96,8 +157,8 @@ jobs:
     secrets: inherit
 
   build-linux:
-    needs: quality
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [quality, check-build-target]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.check-build-target.outputs.should_run == 'true'
     name: Build Linux
     uses: ./.github/workflows/linux-build.yml
     with:
@@ -109,12 +170,13 @@ jobs:
   publish:
     name: Publish Release
     needs:
+      - check-build-target
       - build-android
       - build-ios
       - build-macos
       - build-windows
       - build-linux
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.check-build-target.outputs.should_run == 'true'
     uses: ./.github/workflows/publish.yml
     with:
       version: ${{ needs.build-android.outputs.version }}
@@ -124,13 +186,14 @@ jobs:
   update-version:
     name: Update Version
     needs:
+      - check-build-target
       - publish
       - build-android
       - build-ios
       - build-macos
       - build-windows
       - build-linux
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.check-build-target.outputs.should_run == 'true' && success()
     uses: ./.github/workflows/version-update.yml
     with:
       working_directory: Engine
