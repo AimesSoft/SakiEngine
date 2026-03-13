@@ -590,6 +590,9 @@ flutter run -d macos --dart-define=SAKI_GAME_PATH="\$(pwd)"
 \`\`\`
 EOF
 
+echo -e "${YELLOW}安装项目级 CI 工作流与构建脚本...${NC}"
+"$PROJECT_ROOT/scripts/install_project_ci.sh" "$PROJECT_DIR" "$PROJECT_ROOT"
+
 echo ""
 echo -e "${GREEN}✓ 项目创建完成！${NC}"
 echo ""

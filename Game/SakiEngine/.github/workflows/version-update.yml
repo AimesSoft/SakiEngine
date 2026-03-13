@@ -1,0 +1,87 @@
+name: Update Version
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        required: false
+        type: string
+        default: '.'
+        description: "Working directory containing pubspec.yaml"
+      version_increment:
+        required: false
+        type: string
+        default: 'patch'
+        description: "Version increment type: major, minor, patch"
+      commit_message_template:
+        required: false
+        type: string
+        default: "chore: bump version to {version} [skip ci]"
+        description: "Commit message template"
+      branch:
+        required: false
+        type: string
+        default: 'main'
+        description: "Target branch for version update"
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          
+      - name: Update version
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          # Get latest code
+          git fetch origin refs/heads/${{ inputs.branch }}:refs/remotes/origin/${{ inputs.branch }}
+          git checkout -B ${{ inputs.branch }} refs/remotes/origin/${{ inputs.branch }}
+          
+          # Read current version
+          CURRENT_VERSION=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1)
+          echo "Current version: $CURRENT_VERSION"
+          
+          # Parse version components
+          MAJOR=$(echo $CURRENT_VERSION | cut -d. -f1)
+          MINOR=$(echo $CURRENT_VERSION | cut -d. -f2)
+          PATCH=$(echo $CURRENT_VERSION | cut -d. -f3)
+          
+          # Increment version based on type
+          case "${{ inputs.version_increment }}" in
+            "major")
+              NEW_MAJOR=$((MAJOR + 1))
+              NEW_MINOR=0
+              NEW_PATCH=0
+              NEW_VERSION="$NEW_MAJOR.$NEW_MINOR.$NEW_PATCH"
+              ;;
+            "minor")
+              NEW_MINOR=$((MINOR + 1))
+              NEW_PATCH=0
+              NEW_VERSION="$MAJOR.$NEW_MINOR.$NEW_PATCH"
+              ;;
+            "patch"|*)
+              NEW_PATCH=$((PATCH + 1))
+              NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+              ;;
+          esac
+          
+          echo "New version: $NEW_VERSION"
+          
+          # Update pubspec.yaml
+          sed -i "s/^version: .*$/version: $NEW_VERSION/" pubspec.yaml
+          
+          # Generate commit message
+          commit_message="${{ inputs.commit_message_template }}"
+          commit_message=${commit_message//\{version\}/$NEW_VERSION}
+          
+          # Commit and push changes
+          git add pubspec.yaml
+          git commit -m "$commit_message"
+          git push origin refs/heads/${{ inputs.branch }}

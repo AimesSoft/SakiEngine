@@ -115,22 +115,29 @@ flutter run -d macos --dart-define=SAKI_GAME_PATH="$PWD"
 
 #### 构建发布版
 
-#### 构建不同平台（GitHub Action 使用）
+#### GitHub Action 触发规则
 
-直接推送即可。github会自动编译全平台二进制文件。
+- 仅支持**独立游戏项目仓库**触发编译（仓库根目录需包含 `pubspec.yaml` 与 `Assets/`）
+- 仅在 `push -> main` 且**提交信息包含 `[build]`** 时触发构建发布
+- 默认执行全平台构建（Android / iOS / macOS / Windows / Linux），并发布 Release
+- 发布成功后会自动执行版本号 `patch` 递增
+- 不带 `[build]` 的提交不会触发构建
+- 如果仓库不是独立游戏项目仓库，流程会自动跳过构建/发布
 
 #### 本地构建
 
 ```bash
+# 方式1：交互选择游戏项目 + 目标平台
+./build.sh
+
+# 方式2：指定平台（项目默认使用 default_game.txt，可在交互中切换）
 ./build.sh macos
-./build.sh linux  
-./build.sh windows
-./build.sh android
-./build.sh ios
-./build.sh web
+
+# 方式3：指定游戏项目 + 平台
+./build.sh SakiEngine macos
 ```
 
-`build.sh` 会根据 `default_game.txt` 直接在 `Game/<项目>` 目录构建，不再修改 `Engine/pubspec.yaml`。
+`build.sh` 会直接在 `Game/<项目>` 目录构建，不再修改 `Engine/pubspec.yaml`。发布构建时会先将 `.sks` 预编译到 `Game/<项目>/.saki_cache/`（隐藏缓存目录，不提交 Git），并自动排除 `GameScript*` 原始脚本资源打包。
 
 #### Windows 用户注意事项
 
@@ -153,7 +160,7 @@ Windows 用户需要使用以下方式之一来运行 shell 脚本：
 ```
 SakiEngine/
 ├── run.sh              # 统一启动脚本（跨平台）
-├── build.sh            # 构建脚本（GitHub Action）
+├── build.sh            # 发布构建脚本（支持交互选择项目/平台）
 ├── default_game.txt    # 默认游戏配置文件
 ├── scripts/            # 工具脚本目录
 │   ├── select_game.sh       # 游戏项目选择器
@@ -167,8 +174,8 @@ SakiEngine/
 │   │   └── main.dart  # 兼容入口（内部调用 runSakiEngine）
 │   └── pubspec.yaml   # 依赖配置
 └── Game/              # 游戏项目目录
-    ├── SakiEngine/    # 示例游戏（随引擎仓库）
-    └── YourGame/      # 您的游戏项目（建议独立仓库）
+    ├── SakiEngine/    # 轻量演示项目
+    └── YourGame/      # 您的游戏项目（建议独立仓库，按需克隆到此目录）
 ```
 
 ### 新项目创建
@@ -190,6 +197,7 @@ SakiEngine 提供了便捷的项目创建工具，可以快速搭建新的视觉
 - 创建完整 Flutter 项目骨架（`Game/<项目>/pubspec.yaml`、`lib/main.dart`、平台目录）
 - 配置主题颜色和Bundle ID
 - 配置对引擎包 `../../Engine` 的依赖
+- 生成项目级 CI 文件（`.github/workflows`）与项目内 `build.sh`
 
 #### 项目模块化系统
 
@@ -426,7 +434,17 @@ scene world with eye          // 支持简写别名
 
 ### 示例游戏
 
-本项目包含一个既是商业游戏也是开源游戏的游戏项目：《空之歌：每当磁针再次振动，我便在此等待》。
+引擎仓库内默认保留轻量演示项目 `Game/SakiEngine`。
+
+《空之歌：每当磁针再次振动，我便在此等待》已迁移到独立仓库：
+https://github.com/MCDFsteve/SoraNoUta-SakiEngine
+
+可按需克隆到 `Game/` 目录并切换默认项目：
+
+```bash
+git clone https://github.com/MCDFsteve/SoraNoUta-SakiEngine.git Game/SoraNoUta
+echo SoraNoUta > default_game.txt
+```
 
 ### 贡献
 

@@ -20,6 +20,10 @@ fi
 mkdir -p "$TARGET_DIR"
 rsync -a --delete "$SOURCE_DIR/" "$TARGET_DIR/"
 
+if [ -x "$ROOT_DIR/scripts/install_project_ci.sh" ]; then
+  "$ROOT_DIR/scripts/install_project_ci.sh" "$TARGET_DIR" "$ROOT_DIR"
+fi
+
 if [ ! -d "$TARGET_DIR/.git" ]; then
   (
     cd "$TARGET_DIR"

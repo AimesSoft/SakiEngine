@@ -1,0 +1,99 @@
+name: Publish Release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+        description: "Version to publish"
+      artifacts_pattern:
+        required: false
+        type: string
+        default: "/tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.zip"
+        description: "Artifact patterns to include in release"
+      release_name_template:
+        required: false
+        type: string
+        default: "Release v{version}"
+        description: "Release name template"
+      body_template:
+        required: false
+        type: string
+        default: |
+          ## 版本 v{version}
+          
+          ### 更新内容
+          {commit_message}
+          
+          ### 构建信息
+          - 构建时间: {timestamp}
+          - 提交: {commit_sha}
+          - 分支: {branch}
+        description: "Release body template"
+
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Make tmp dir
+        run: mkdir -p /tmp/artifacts
+      
+      - name: Download all Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/artifacts
+      
+      - name: List all Artifacts
+        run: ls -R /tmp/artifacts
+      
+      - name: Get commit message
+        id: commit_message
+        run: |
+          message=$(git log -1 --pretty=%B)
+          echo "message<<EOF" >> $GITHUB_OUTPUT
+          echo "$message" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Get commit range
+        id: commit_range
+        run: |
+          range=$(git log --pretty=format:'- %s' -n 10 | grep -v 'chore: bump version')
+          echo "range<<EOF" >> $GITHUB_OUTPUT
+          echo "$range" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Prepare release data
+        id: release_data
+        run: |
+          # Generate release name
+          release_name="${{ inputs.release_name_template }}"
+          release_name=${release_name//\{version\}/${{ inputs.version }}}
+          echo "release_name=$release_name" >> $GITHUB_OUTPUT
+          
+          # Generate release body
+          body="${{ inputs.body_template }}"
+          body=${body//\{version\}/${{ inputs.version }}}
+          body=${body//\{commit_message\}/${{ steps.commit_message.outputs.message }}}
+          body=${body//\{timestamp\}/${{ github.event.head_commit.timestamp }}}
+          body=${body//\{commit_sha\}/${{ github.sha }}}
+          body=${body//\{branch\}/${{ github.ref_name }}}
+          
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$body" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      
+      - name: Upload to release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v${{ inputs.version }}
+          name: ${{ steps.release_data.outputs.release_name }}
+          body: ${{ steps.release_data.outputs.body }}
+          allowUpdates: true
+          artifacts: ${{ inputs.artifacts_pattern }}
+          artifactErrorsFailBuild: true
+          replacesArtifacts: true
