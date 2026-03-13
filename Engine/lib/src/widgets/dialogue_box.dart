@@ -179,10 +179,14 @@ class _DialogueBoxState extends State<DialogueBox>
           ),
           child: Text(
             '已读',
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.clip,
             style: TextStyle(
               color: Colors.white,
               fontSize: 14.0 * textScale,
               fontWeight: FontWeight.bold,
+              decoration: TextDecoration.none,
             ),
           ),
         ),

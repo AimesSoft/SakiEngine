@@ -40,10 +40,12 @@ abstract class GameModule {
 
   /// 对话框组件工厂
   Widget createDialogueBox({
+    Key? key,
     String? speaker,
     String? speakerAlias, // 新增：角色简写参数
     required String dialogue,
     DialogueProgressionManager? progressionManager,
+    required bool isFastForwarding,
     required int scriptIndex, // 新增：脚本索引参数
   });
 
@@ -71,6 +73,7 @@ abstract class GameModule {
   /// 创建主菜单按钮配置列表
   List<MenuButtonConfig> createMainMenuButtonConfigs({
     required VoidCallback onNewGame,
+    VoidCallback? onContinueGame,
     required VoidCallback onLoadGame,
     required VoidCallback onSettings,
     required VoidCallback onExit,
@@ -92,6 +95,10 @@ abstract class GameModule {
 
   /// 是否显示底部横条
   bool get showBottomBar => true;
+
+  /// 是否把下一句提示图标切换为下划线样式
+  bool shouldUseUnderscoreNextArrow({String? speaker, String? speakerAlias}) =>
+      false;
 }
 
 /// 默认游戏模块实现 - 使用src/下的默认组件
@@ -125,6 +132,7 @@ class DefaultGameModule implements GameModule {
       saveSlotToLoad: saveSlotToLoad,
       onReturnToMenu: onReturnToMenu,
       onLoadGame: onLoadGame,
+      gameModule: this,
     );
   }
 
@@ -143,17 +151,21 @@ class DefaultGameModule implements GameModule {
 
   @override
   Widget createDialogueBox({
+    Key? key,
     String? speaker,
     String? speakerAlias, // 新增：角色简写参数
     required String dialogue,
     DialogueProgressionManager? progressionManager,
+    required bool isFastForwarding,
     required int scriptIndex, // 新增：脚本索引参数
   }) {
     return DialogueBox(
+      key: key,
       speaker: speaker,
       speakerAlias: speakerAlias, // 新增：传递角色简写
       dialogue: dialogue,
       progressionManager: progressionManager,
+      isFastForwarding: isFastForwarding,
       scriptIndex: scriptIndex, // 传递脚本索引
     );
   }
@@ -184,6 +196,7 @@ class DefaultGameModule implements GameModule {
   @override
   List<MenuButtonConfig> createMainMenuButtonConfigs({
     required VoidCallback onNewGame,
+    VoidCallback? onContinueGame,
     required VoidCallback onLoadGame,
     required VoidCallback onSettings,
     required VoidCallback onExit,
@@ -192,6 +205,7 @@ class DefaultGameModule implements GameModule {
   }) {
     return DefaultMenuButtons.createDefaultConfigs(
       onNewGame: onNewGame,
+      onContinueGame: onContinueGame,
       onLoadGame: onLoadGame,
       onSettings: onSettings,
       onExit: onExit,
@@ -214,4 +228,9 @@ class DefaultGameModule implements GameModule {
 
   @override
   bool get showBottomBar => true;
+
+  @override
+  bool shouldUseUnderscoreNextArrow({String? speaker, String? speakerAlias}) {
+    return false;
+  }
 }

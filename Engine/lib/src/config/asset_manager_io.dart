@@ -5,8 +5,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle, AssetManifest;
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/game/game_script_localization.dart';
+import 'package:sakiengine/src/sks_compiler/compiled_sks_bundle.dart';
+import 'package:sakiengine/src/sks_compiler/compiled_sks_registry.dart';
+import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
 class AssetManager {
+  static const bool _forceAssetDiagnostics =
+      bool.fromEnvironment('SAKI_ASSET_DIAG', defaultValue: true);
+
   static final AssetManager _instance = AssetManager._internal();
   factory AssetManager() => _instance;
   AssetManager._internal() {
@@ -15,16 +21,39 @@ class AssetManager {
       print("AssetManager CWD: ${Directory.current.path}");
       print("Game path from environment: $_debugRoot");
     }
+    _assetDiag(
+      'AssetManager 初始化: mode=${kDebugMode ? "debug" : "release"}, '
+      'cwd=${Directory.current.path}, external=${_shouldLoadFromExternal()}',
+    );
   }
 
   Map<String, dynamic>? _assetManifest;
   final Map<String, String> _imageCache = {};
+  bool _manifestDiagPrinted = false;
+  int _findAssetDiagCount = 0;
+  int _findAssetMissDiagCount = 0;
 
   // 检查是否应该从外部加载资源（仅桌面平台的Debug模式）
   static bool _shouldLoadFromExternal() {
     if (!kDebugMode) return false;
     // 只在桌面平台从外部加载
     return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+  }
+
+  static bool _shouldAssetDiagnostics() {
+    if (kDebugMode) {
+      return false;
+    }
+    return _forceAssetDiagnostics &&
+        (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+  }
+
+  static void _assetDiag(String message) {
+    if (!_shouldAssetDiagnostics()) {
+      return;
+    }
+    final now = DateTime.now().toIso8601String();
+    stderr.writeln('[SAKI_ASSET_DIAG][$now] $message');
   }
 
   // 获取游戏路径，从dart-define或环境变量获取
@@ -49,7 +78,7 @@ class AssetManager {
     try {
       // 从assets读取default_game.txt
       final assetContent =
-          await rootBundle.loadString('assets/default_game.txt');
+          await EngineAssetLoader.loadString('assets/default_game.txt');
       final defaultGame = assetContent.trim();
 
       if (defaultGame.isEmpty) {
@@ -71,6 +100,16 @@ class AssetManager {
   Future<String> loadString(String path) async {
     final candidates = GameScriptLocalization.resolveAssetPaths(path);
     Object? lastError;
+    final compiledBundle = CompiledSksRegistry.instance.activeBundle;
+
+    if (compiledBundle != null) {
+      for (final candidate in candidates) {
+        final precompiled = compiledBundle.loadText(candidate);
+        if (precompiled != null) {
+          return precompiled;
+        }
+      }
+    }
 
     if (_shouldLoadFromExternal()) {
       final gamePath = await _getGamePath();
@@ -98,10 +137,12 @@ class AssetManager {
           'Failed to load asset from file system. Tried: ${candidates.join(', ')}. Last error: $lastError');
     } else {
       for (final candidate in candidates) {
-        try {
-          return await rootBundle.loadString(candidate, cache: false);
-        } catch (e) {
-          lastError = e;
+        for (final bundleCandidate in _bundleCandidates(candidate)) {
+          try {
+            return await rootBundle.loadString(bundleCandidate, cache: false);
+          } catch (e) {
+            lastError = e;
+          }
         }
       }
 
@@ -127,6 +168,30 @@ class AssetManager {
     // https://docs.flutter.dev/release/breaking-changes/asset-manifest-dot-json
     final assetManifest = await AssetManifest.loadFromAssetBundle(rootBundle);
     _assetManifest = listToManifestMap(assetManifest.listAssets());
+
+    if (!_manifestDiagPrinted && _assetManifest != null) {
+      _manifestDiagPrinted = true;
+      final keys = _assetManifest!.keys.toList(growable: false);
+      final total = keys.length;
+      final projectAssets =
+          keys.where((key) => key.startsWith('Assets/')).length;
+      final imageAssets = keys
+          .where((key) => key.toLowerCase().contains('assets/images/'))
+          .length;
+      final scriptAssets = keys
+          .where((key) =>
+              key.startsWith('GameScript') &&
+              key.toLowerCase().endsWith('.sks'))
+          .length;
+      _assetDiag(
+        'AssetManifest 已加载: total=$total, projectAssets=$projectAssets, '
+        'imageAssets=$imageAssets, sksAssets=$scriptAssets',
+      );
+      if (imageAssets == 0) {
+        final preview = keys.take(40).join(', ');
+        _assetDiag('AssetManifest 前40项: $preview');
+      }
+    }
   }
 
   Future<List<String>> listAssets(String directory, String extension) async {
@@ -135,6 +200,11 @@ class AssetManager {
     final candidates =
         GameScriptLocalization.resolveAssetDirectories(directory);
     final resolvedDirectories = <String>[];
+    final precompiledAssets =
+        _listPrecompiledAssets(candidates: candidates, extension: extension);
+    if (precompiledAssets.isNotEmpty) {
+      return precompiledAssets;
+    }
 
     if (_shouldLoadFromExternal()) {
       final gamePath = await _getGamePath();
@@ -171,11 +241,15 @@ class AssetManager {
       if (_assetManifest != null) {
         for (final candidate in candidates) {
           final currentAssets = <String>[];
+          final candidatePrefixes = _bundleCandidates(candidate);
 
           for (final assetPath in _assetManifest!.keys) {
-            if (assetPath.startsWith(candidate) &&
-                assetPath.endsWith(extension)) {
-              currentAssets.add(p.basename(assetPath));
+            for (final prefix in candidatePrefixes) {
+              if (assetPath.startsWith(prefix) &&
+                  assetPath.endsWith(extension)) {
+                currentAssets.add(p.basename(assetPath));
+                break;
+              }
             }
           }
 
@@ -193,22 +267,93 @@ class AssetManager {
     return assets;
   }
 
+  List<String> _listPrecompiledAssets({
+    required List<String> candidates,
+    required String extension,
+  }) {
+    final bundle = CompiledSksRegistry.instance.activeBundle;
+    if (bundle == null) {
+      return const <String>[];
+    }
+
+    final assets = <String>[];
+    final seen = <String>{};
+    for (final candidate in candidates) {
+      final normalized = CompiledSksBundle.normalizeAssetPath(candidate);
+      final prefix = normalized.endsWith('/') ? normalized : '$normalized/';
+      for (final assetPath in bundle.textAssetPaths) {
+        if (assetPath.startsWith(prefix) && assetPath.endsWith(extension)) {
+          final fileName = p.basename(assetPath);
+          if (seen.add(fileName)) {
+            assets.add(fileName);
+          }
+        }
+      }
+    }
+    return assets;
+  }
+
+  List<String> _bundleCandidates(String path) {
+    final values = <String>[path];
+    if (path.startsWith('assets/')) {
+      values.add(path.substring('assets/'.length));
+    }
+    return values;
+  }
+
+  Iterable<String> _bundleAssetKeysByPriority() sync* {
+    if (_assetManifest == null) {
+      return;
+    }
+    for (final key in _assetManifest!.keys) {
+      if (!key.startsWith('packages/')) {
+        yield key;
+      }
+    }
+    for (final key in _assetManifest!.keys) {
+      if (key.startsWith('packages/')) {
+        yield key;
+      }
+    }
+  }
+
   Future<String?> findAsset(String name) async {
     if (_imageCache.containsKey(name)) {
+      if (_findAssetDiagCount < 200) {
+        _findAssetDiagCount++;
+        _assetDiag('findAsset 缓存命中: "$name" -> "${_imageCache[name]}"');
+      }
       return _imageCache[name];
     }
 
+    String? result;
     if (_shouldLoadFromExternal()) {
-      return _findAssetInFileSystem(name);
+      result = await _findAssetInFileSystem(name);
     } else {
-      return _findAssetInBundle(name);
+      result = await _findAssetInBundle(name);
     }
+
+    if (result != null) {
+      if (_findAssetDiagCount < 200) {
+        _findAssetDiagCount++;
+        _assetDiag('findAsset 命中: "$name" -> "$result"');
+      }
+      return result;
+    }
+
+    if (_findAssetMissDiagCount < 200) {
+      _findAssetMissDiagCount++;
+      _assetDiag('findAsset 未命中: "$name"');
+    }
+
+    return null;
   }
 
   Future<String?> _findAssetInBundle(String name) async {
     await _loadManifest();
     if (_assetManifest == null) {
       print("AssetManifest is null - cannot find assets");
+      _assetDiag('AssetManifest 为 null，无法查找 "$name"');
       return null;
     }
 
@@ -235,6 +380,9 @@ class AssetManager {
 
     // 从查询名称中提取文件名，例如 "backgrounds/sky" -> "sky"
     final targetFileName = name.split('/').last;
+    final targetFileNameLower = targetFileName.toLowerCase();
+    final targetFileNameWithoutExt = p.basenameWithoutExtension(targetFileName);
+    final targetFileNameWithoutExtLower = targetFileNameWithoutExt.toLowerCase();
 
     // 提取路径部分，例如 "backgrounds/sky" -> "backgrounds"
     final pathParts = name.split('/');
@@ -250,14 +398,21 @@ class AssetManager {
 
     // 如果检测到cg关键词，优先在cg路径下搜索（支持递归子文件夹）
     if (isCgRelated) {
-      for (final key in _assetManifest!.keys) {
+      for (final key in _bundleAssetKeysByPriority()) {
         final keyParts = key.split('/');
         final keyFileName = keyParts.last;
-        final keyFileNameWithoutExt = keyFileName.split('.').first;
+        final keyFileNameLower = keyFileName.toLowerCase();
+        if (!supportedExtensions.any((ext) => keyFileNameLower.endsWith(ext))) {
+          continue;
+        }
+        final keyFileNameWithoutExtLower =
+            p.basenameWithoutExtension(keyFileName).toLowerCase();
+        final fileNameMatched = keyFileNameWithoutExtLower ==
+                targetFileNameWithoutExtLower ||
+            keyFileNameLower == targetFileNameLower;
 
         // 检查文件名是否匹配且路径包含cg（支持cg的任意子文件夹）
-        if (keyFileNameWithoutExt.toLowerCase() ==
-            targetFileName.toLowerCase()) {
+        if (fileNameMatched) {
           final keyPath = key.toLowerCase();
           // 更精确的cg路径检测：支持 /cg/ 或 /cg/任意子目录/
           if (keyPath.contains('/cg/') ||
@@ -271,13 +426,21 @@ class AssetManager {
     }
 
     // 1. 精确匹配：路径和文件名都要匹配
-    for (final key in _assetManifest!.keys) {
+    for (final key in _bundleAssetKeysByPriority()) {
       final keyParts = key.split('/');
       final keyFileName = keyParts.last;
-      final keyFileNameWithoutExt = keyFileName.split('.').first;
+      final keyFileNameLower = keyFileName.toLowerCase();
+      if (!supportedExtensions.any((ext) => keyFileNameLower.endsWith(ext))) {
+        continue;
+      }
+      final keyFileNameWithoutExtLower =
+          p.basenameWithoutExtension(keyFileName).toLowerCase();
 
       // 检查文件名是否匹配
-      if (keyFileNameWithoutExt.toLowerCase() == targetFileName.toLowerCase()) {
+      final fileNameMatched = keyFileNameWithoutExtLower ==
+              targetFileNameWithoutExtLower ||
+          keyFileNameLower == targetFileNameLower;
+      if (fileNameMatched) {
         // 如果查询有路径要求，检查路径是否匹配
         if (targetPath.isNotEmpty) {
           final keyPath = key.toLowerCase();
@@ -297,12 +460,20 @@ class AssetManager {
     }
 
     // 2. 宽松匹配：只匹配文件名，忽略路径
-    for (final key in _assetManifest!.keys) {
+    for (final key in _bundleAssetKeysByPriority()) {
       final keyParts = key.split('/');
       final keyFileName = keyParts.last;
-      final keyFileNameWithoutExt = keyFileName.split('.').first;
+      final keyFileNameLower = keyFileName.toLowerCase();
+      if (!supportedExtensions.any((ext) => keyFileNameLower.endsWith(ext))) {
+        continue;
+      }
+      final keyFileNameWithoutExtLower =
+          p.basenameWithoutExtension(keyFileName).toLowerCase();
+      final fileNameMatched = keyFileNameWithoutExtLower ==
+              targetFileNameWithoutExtLower ||
+          keyFileNameLower == targetFileNameLower;
 
-      if (keyFileNameWithoutExt.toLowerCase() == targetFileName.toLowerCase()) {
+      if (fileNameMatched) {
         _imageCache[name] = key;
         //print("Found asset in bundle (fallback name match): $name -> $key");
         return key;
@@ -315,11 +486,15 @@ class AssetManager {
     final gamePath = await _getGamePath();
     if (gamePath.isEmpty) {
       print("Game path is not set, cannot find assets in file system.");
+      _assetDiag('文件系统查找失败: gamePath 为空, name="$name"');
       return null;
     }
 
     // 从资源名中提取文件名用于搜索，例如 "backgrounds/bg-school" -> "bg-school"
     final fileNameToSearch = name.split('/').last;
+    final fileNameToSearchLower = fileNameToSearch.toLowerCase();
+    final fileNameToSearchWithoutExtLower =
+        p.basenameWithoutExtension(fileNameToSearch).toLowerCase();
 
     final searchBase = p.join(gamePath, 'Assets', 'images');
 
@@ -349,9 +524,14 @@ class AssetManager {
       if (await directory.exists()) {
         await for (final file in directory.list(recursive: true)) {
           if (file is File) {
-            final fileNameWithoutExt = p.basenameWithoutExtension(file.path);
-            if (fileNameWithoutExt.toLowerCase() ==
-                fileNameToSearch.toLowerCase()) {
+            final fileName = p.basename(file.path);
+            final fileNameLower = fileName.toLowerCase();
+            final fileNameWithoutExtLower =
+                p.basenameWithoutExtension(fileName).toLowerCase();
+            final fileNameMatched = fileNameWithoutExtLower ==
+                    fileNameToSearchWithoutExtLower ||
+                fileNameLower == fileNameToSearchLower;
+            if (fileNameMatched) {
               // Debug模式下直接返回绝对路径，用于FileImage
               final assetPath = file.path.replaceAll('\\', '/');
               _imageCache[name] = assetPath;

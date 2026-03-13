@@ -499,6 +499,24 @@ $attemptedMessage
       }
     }
 
+    void addGameRoot(String gameRoot) {
+      final root = Directory(gameRoot);
+      if (!root.existsSync()) {
+        return;
+      }
+      for (final entity in root.listSync()) {
+        if (entity is! Directory) {
+          continue;
+        }
+        addVariantPath((dir) => p.join(entity.path, dir, 'labels'));
+      }
+    }
+
+    const fromDefine = String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
+    if (fromDefine.isNotEmpty && !fromDefine.contains('Containers')) {
+      addVariantPath((dir) => p.join(fromDefine, dir, 'labels'));
+    }
+
     final envPath = Platform.environment['SAKI_GAME_PATH'];
     if (envPath != null &&
         envPath.isNotEmpty &&
@@ -507,28 +525,20 @@ $attemptedMessage
     }
 
     if (homeDir.isNotEmpty) {
-      addVariantPath((dir) =>
-          p.join(homeDir, 'Documents', 'SakiEngine', 'Game', dir, 'labels'));
-      addVariantPath(
-          (dir) => p.join(homeDir, 'Documents', 'SoraNoUta', dir, 'labels'));
-      addVariantPath((dir) =>
-          p.join(homeDir, 'Downloads', 'SakiEngine', 'Game', dir, 'labels'));
-      addVariantPath(
-          (dir) => p.join(homeDir, 'Downloads', 'SoraNoUta', dir, 'labels'));
-      addVariantPath((dir) =>
-          p.join(homeDir, 'Desktop', 'SakiEngine', 'Game', dir, 'labels'));
-      addVariantPath(
-          (dir) => p.join(homeDir, 'Desktop', 'SoraNoUta', dir, 'labels'));
-      addVariantPath(
-          (dir) => p.join(homeDir, 'SakiEngine', 'Game', dir, 'labels'));
-      addVariantPath((dir) => p.join(homeDir, 'SoraNoUta', dir, 'labels'));
+      addGameRoot(p.join(homeDir, 'Documents', 'SakiEngine', 'Game'));
+      addGameRoot(p.join(homeDir, 'Downloads', 'SakiEngine', 'Game'));
+      addGameRoot(p.join(homeDir, 'Desktop', 'SakiEngine', 'Game'));
+      addGameRoot(p.join(homeDir, 'SakiEngine', 'Game'));
+
+      addVariantPath((dir) => p.join(homeDir, 'Documents', dir, 'labels'));
+      addVariantPath((dir) => p.join(homeDir, 'Downloads', dir, 'labels'));
+      addVariantPath((dir) => p.join(homeDir, 'Desktop', dir, 'labels'));
+      addVariantPath((dir) => p.join(homeDir, dir, 'labels'));
     }
 
     if (!currentDir.contains('Containers')) {
-      addVariantPath((dir) =>
-          p.join(currentDir, '..', 'Game', 'SoraNoUta', dir, 'labels'));
-      addVariantPath((dir) =>
-          p.join(currentDir, '..', '..', 'Game', 'SoraNoUta', dir, 'labels'));
+      addGameRoot(p.join(currentDir, '..', 'Game'));
+      addGameRoot(p.join(currentDir, '..', '..', 'Game'));
       addVariantPath((dir) => p.join(currentDir, '..', 'Game', dir, 'labels'));
       addVariantPath((dir) => p.join(currentDir, 'Game', dir, 'labels'));
       addVariantPath((dir) => p.join(currentDir, 'assets', dir, 'labels'));

@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/widgets.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
+import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
 enum SupportedLanguage { zhHans, zhHant, en, ja }
 
@@ -104,7 +104,8 @@ class LocalizationManager extends ChangeNotifier {
       // 第一次启动，根据系统语言自动设置
       _currentLanguage = _detectSystemLanguage();
       // 保存自动检测的语言
-      await _dataManager.setStringVariable('sakiengine.language', _currentLanguage.code, _projectName!);
+      await _dataManager.setStringVariable(
+          'sakiengine.language', _currentLanguage.code, _projectName!);
     }
 
     _initialized = true;
@@ -128,7 +129,9 @@ class LocalizationManager extends ChangeNotifier {
           if (_translations.containsKey(SupportedLanguage.zhHans)) {
             return SupportedLanguage.zhHans;
           }
-        } else if (scriptCode == 'hant' || scriptCode == 'tw' || scriptCode == 'hk') {
+        } else if (scriptCode == 'hant' ||
+            scriptCode == 'tw' ||
+            scriptCode == 'hk') {
           if (_translations.containsKey(SupportedLanguage.zhHant)) {
             return SupportedLanguage.zhHant;
           }
@@ -139,7 +142,9 @@ class LocalizationManager extends ChangeNotifier {
           if (_translations.containsKey(SupportedLanguage.zhHans)) {
             return SupportedLanguage.zhHans;
           }
-        } else if (countryCode == 'tw' || countryCode == 'hk' || countryCode == 'mo') {
+        } else if (countryCode == 'tw' ||
+            countryCode == 'hk' ||
+            countryCode == 'mo') {
           if (_translations.containsKey(SupportedLanguage.zhHant)) {
             return SupportedLanguage.zhHant;
           }
@@ -187,7 +192,7 @@ class LocalizationManager extends ChangeNotifier {
 
   Future<void> _loadTranslations() async {
     try {
-      final raw = await rootBundle.loadString(_translationsAsset);
+      final raw = await EngineAssetLoader.loadString(_translationsAsset);
       final data = jsonDecode(raw) as Map<String, dynamic>;
 
       for (final entry in data.entries) {
@@ -248,13 +253,16 @@ class LocalizationManager extends ChangeNotifier {
     }
 
     _currentLanguage = language;
-    await _dataManager.setStringVariable('sakiengine.language', language.code, _projectName!);
+    await _dataManager.setStringVariable(
+        'sakiengine.language', language.code, _projectName!);
     notifyListeners();
   }
 
-  String t(String key, {Map<String, String>? params, SupportedLanguage? language}) {
+  String t(String key,
+      {Map<String, String>? params, SupportedLanguage? language}) {
     final lang = language ?? _currentLanguage;
-    String? value = _translations[lang]?[key] ?? _translations[_fallbackLanguage]?[key];
+    String? value =
+        _translations[lang]?[key] ?? _translations[_fallbackLanguage]?[key];
 
     value ??= key;
 

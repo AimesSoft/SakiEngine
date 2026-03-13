@@ -63,3 +63,7 @@ Engine/.flutter-plugins-dependencies
 /Game/SoraNoUta/.cg_cache
 /Engine/lib/TheFirstLoveLetter_code
 /Game/TheFirstLoveLetter_source
+/Game/*/.saki_cache/
+
+# 拆分后的独立业务项目仓库（不纳入引擎主仓库）
+/Game/SoraNoUta/

@@ -1,19 +1,16 @@
-import 'dart:io' if (dart.library.html) 'dart:html' as io;
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
 import 'package:sakiengine/src/screens/save_load_screen.dart';
 import 'package:sakiengine/src/utils/scaling_manager.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
+import 'package:sakiengine/src/core/game_module.dart';
+import 'package:sakiengine/src/core/project_module_loader.dart';
 import 'package:sakiengine/src/widgets/debug_panel_dialog.dart';
-import 'package:sakiengine/src/widgets/common/black_screen_transition.dart';
 import 'package:sakiengine/src/widgets/common/exit_confirmation_dialog.dart';
 import 'package:sakiengine/src/widgets/settings_screen.dart';
 import 'package:sakiengine/src/widgets/common/configurable_menu_button.dart';
-import 'package:sakiengine/src/widgets/common/default_menu_buttons.dart';
 import 'package:sakiengine/src/utils/smart_asset_image.dart';
-import 'package:sakiengine/soranouta/widgets/soranouta_menu_buttons.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
 import 'package:sakiengine/src/game/save_load_manager.dart';
 
@@ -103,6 +100,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   String _appTitle = 'SakiEngine';
   late final LocalizationManager _localizationManager;
   bool _hasQuickSave = false; // 新增：标记是否有快速存档
+  GameModule _gameModule = DefaultGameModule();
 
   @override
   void initState() {
@@ -111,6 +109,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     _localizationManager.addListener(_handleLocalizationChanged);
     _loadAppTitle();
     _checkQuickSave(); // 新增：检查快速存档
+    _loadGameModule();
   }
 
   void _handleLocalizationChanged() {
@@ -129,6 +128,21 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
       }
     } catch (e) {
       // 保持默认标题
+    }
+  }
+
+  Future<void> _loadGameModule() async {
+    try {
+      final module = await moduleLoader.getCurrentModule();
+      if (mounted) {
+        setState(() {
+          _gameModule = module;
+        });
+      } else {
+        _gameModule = module;
+      }
+    } catch (_) {
+      _gameModule = DefaultGameModule();
     }
   }
 
@@ -263,7 +277,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   }
 
   bool _showBottomBar() {
-    return _appTitle != 'SoraNoUta'; // SoraNoUta项目不显示底条
+    return _gameModule.showBottomBar;
   }
 
   Widget _buildMenuButtons(
@@ -271,39 +285,16 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     double scale,
     SakiEngineConfig config,
   ) {
-    List<MenuButtonConfig> buttonConfigs;
-    MenuButtonsLayoutConfig layoutConfig;
-
-    // 根据项目选择按钮配置
-    if (_appTitle == 'SoraNoUta') {
-      buttonConfigs = SoranoutaMenuButtons.createConfigs(
-        onNewGame: _handleNewGame,
-        onLoadGame: () => setState(() => _showLoadOverlay = true),
-        onSettings: () => setState(() => _showSettings = true),
-        onExit: () => _showExitConfirmation(context),
-        config: config,
-        scale: scale,
-      );
-      layoutConfig = SoranoutaMenuButtons.getLayoutConfig();
-    } else {
-      buttonConfigs = DefaultMenuButtons.createDefaultConfigs(
-        onNewGame: _handleNewGame,
-        onContinueGame: _hasQuickSave ? _handleContinueGame : null, // 新增：传递继续游戏回调
-        onLoadGame: () => setState(() => _showLoadOverlay = true),
-        onSettings: () => setState(() => _showSettings = true),
-        onExit: () => _showExitConfirmation(context),
-        config: config,
-        scale: scale,
-      );
-      layoutConfig = const MenuButtonsLayoutConfig(
-        isVertical: false,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisAlignment: MainAxisAlignment.end,
-        spacing: 20,
-        bottom: 0.05,
-        right: 0.01,
-      );
-    }
+    final buttonConfigs = _gameModule.createMainMenuButtonConfigs(
+      onNewGame: _handleNewGame,
+      onContinueGame: _hasQuickSave ? _handleContinueGame : null,
+      onLoadGame: () => setState(() => _showLoadOverlay = true),
+      onSettings: () => setState(() => _showSettings = true),
+      onExit: () => _showExitConfirmation(context),
+      config: config,
+      scale: scale,
+    );
+    final layoutConfig = _gameModule.getMenuButtonsLayoutConfig();
     final screenSize = MediaQuery.of(context).size;
 
     Widget buttonsWidget;

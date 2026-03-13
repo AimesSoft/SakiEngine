@@ -34,6 +34,8 @@ import 'package:sakiengine/src/utils/binary_serializer.dart';
 import 'package:sakiengine/src/game/nvl_state_manager.dart';
 import 'package:sakiengine/src/game/chapter_autosave_manager.dart';
 
+part 'game_manager_lifecycle.dart';
+
 enum _NvlContextMode { none, standard, movie, noMask }
 
 /// 音乐区间类
@@ -120,8 +122,8 @@ class GameManager {
   String? _pendingChapterAutoSaveLabel; // 待存档的章节label
 
   // 章节自动存档管理器
-  final ChapterAutoSaveManager _chapterAutoSaveManager = ChapterAutoSaveManager();
-
+  final ChapterAutoSaveManager _chapterAutoSaveManager =
+      ChapterAutoSaveManager();
 
   // 场景动画控制器
   SceneAnimationController? _sceneAnimationController;
@@ -139,7 +141,8 @@ class GameManager {
   final StoryFlowchartManager _flowchartManager = StoryFlowchartManager();
 
   /// 检查是否需要创建自动存档
-  Future<void> _checkAndCreateAutoSave(int scriptIndex, {String? reason}) async {
+  Future<void> _checkAndCreateAutoSave(int scriptIndex,
+      {String? reason}) async {
     try {
       final node = _script.children[scriptIndex];
       String? nodeId;
@@ -164,7 +167,10 @@ class GameManager {
       if (nodeId != null && nodeType != null) {
         // 创建自动存档
         final saveSlot = SaveSlot(
-          id: int.parse(DateTime.now().millisecondsSinceEpoch.toString().substring(0, 10)),
+          id: int.parse(DateTime.now()
+              .millisecondsSinceEpoch
+              .toString()
+              .substring(0, 10)),
           saveTime: DateTime.now(),
           currentScript: currentScriptFile,
           dialoguePreview: displayName ?? '自动存档',
@@ -173,10 +179,12 @@ class GameManager {
         );
 
         // 保存到流程图管理器，并获取实际的 autoSaveId
-        final actualAutoSaveId = await _flowchartManager.createAutoSaveForNode(nodeId, saveSlot);
+        final actualAutoSaveId =
+            await _flowchartManager.createAutoSaveForNode(nodeId, saveSlot);
 
         // 解锁节点，使用实际的 autoSaveId
-        await _flowchartManager.unlockNode(nodeId, autoSaveId: actualAutoSaveId);
+        await _flowchartManager.unlockNode(nodeId,
+            autoSaveId: actualAutoSaveId);
 
         if (kDebugMode) {
           //print('[AutoSave] 创建自动存档: $displayName (原因: $reason)');
@@ -274,7 +282,9 @@ class GameManager {
       }
 
       // 情况2: 遇到下一个章节的背景
-      if (node is BackgroundNode && _containsChapter(node.background) && i != sceneIndex) {
+      if (node is BackgroundNode &&
+          _containsChapter(node.background) &&
+          i != sceneIndex) {
         final lastSceneIndex = _findLastSceneWithDialogueBeforeChapterEnd(i);
         if (kDebugMode) {
           //print('[AutoSave] 找到下一章节背景 ${node.background} (index: $i), 前面最后一个有对话的scene是: $lastSceneIndex, 当前scene: $sceneIndex');
@@ -301,7 +311,8 @@ class GameManager {
 
           // 只有跨章节的jump才算章节末尾
           if (targetChapter != currentChapter) {
-            final lastSceneIndex = _findLastSceneWithDialogueBeforeChapterEnd(i);
+            final lastSceneIndex =
+                _findLastSceneWithDialogueBeforeChapterEnd(i);
             if (kDebugMode) {
               //print('[AutoSave] 找到跨章节jump: cp$currentChapter -> cp$targetChapter (index: $i), 前面最后一个有对话的scene是: $lastSceneIndex, 当前scene: $sceneIndex');
             }
@@ -329,7 +340,8 @@ class GameManager {
   }
 
   /// 创建章节末尾自动存档
-  Future<void> _createChapterEndAutoSave(int sceneIndex, String sceneName, int endIndex) async {
+  Future<void> _createChapterEndAutoSave(
+      int sceneIndex, String sceneName, int endIndex) async {
     // 获取当前章节编号并构建语言无关的ID
     final currentLabel = _findNearestLabel(sceneIndex);
     String chapterIdSuffix = 'unknown';
@@ -354,7 +366,8 @@ class GameManager {
 
     // 创建自动存档
     final saveSlot = SaveSlot(
-      id: int.parse(DateTime.now().millisecondsSinceEpoch.toString().substring(0, 10)),
+      id: int.parse(
+          DateTime.now().millisecondsSinceEpoch.toString().substring(0, 10)),
       saveTime: DateTime.now(),
       currentScript: currentScriptFile,
       dialoguePreview: displayName,
@@ -363,7 +376,8 @@ class GameManager {
     );
 
     // 保存到流程图管理器
-    final actualAutoSaveId = await _flowchartManager.createAutoSaveForNode(nodeId, saveSlot);
+    final actualAutoSaveId =
+        await _flowchartManager.createAutoSaveForNode(nodeId, saveSlot);
 
     // 解锁节点
     await _flowchartManager.unlockNode(nodeId, autoSaveId: actualAutoSaveId);
@@ -385,12 +399,14 @@ class GameManager {
 
   /// 提取章节名
   String _extractChapterName(String bgName) {
-    final chapterMatch = RegExp(r'chapter[_\s-]?(\d+)', caseSensitive: false).firstMatch(bgName);
+    final chapterMatch =
+        RegExp(r'chapter[_\s-]?(\d+)', caseSensitive: false).firstMatch(bgName);
     if (chapterMatch != null) {
       return '第${chapterMatch.group(1)}章';
     }
 
-    final chMatch = RegExp(r'\bch(\d+)\b', caseSensitive: false).firstMatch(bgName);
+    final chMatch =
+        RegExp(r'\bch(\d+)\b', caseSensitive: false).firstMatch(bgName);
     if (chMatch != null) {
       return '第${chMatch.group(1)}章';
     }
@@ -890,6 +906,26 @@ class GameManager {
     LocalizationManager().addListener(_languageListener);
   }
 
+  Future<void> startGame(String scriptName) {
+    return _startGameLifecycle(scriptName);
+  }
+
+  Future<void> restoreFromSnapshot(
+    String scriptName,
+    GameStateSnapshot snapshot, {
+    bool shouldReExecute = true,
+  }) {
+    return _restoreFromSnapshotLifecycle(
+      scriptName,
+      snapshot,
+      shouldReExecute: shouldReExecute,
+    );
+  }
+
+  Future<void> hotReload(String scriptName) {
+    return _hotReloadLifecycle(scriptName);
+  }
+
   void _handleLanguageChange() {
     final newLanguage = LocalizationManager().currentLanguage;
     if (newLanguage == _activeLanguage) {
@@ -1048,75 +1084,6 @@ class GameManager {
         }
       }
     }
-  }
-
-  Future<void> _loadConfigs() async {
-    final charactersContent = await AssetManager()
-        .loadString('assets/GameScript/configs/characters.sks');
-    _characterConfigs = ConfigParser().parseCharacters(charactersContent);
-
-    final posesContent =
-        await AssetManager().loadString('assets/GameScript/configs/poses.sks');
-    _poseConfigs = ConfigParser().parsePoses(posesContent);
-
-    // 初始化差分偏移管理器
-    ExpressionOffsetManager().initializeDefaultConfigs();
-    CharacterCompositeCache.instance.clear();
-  }
-
-  Future<void> startGame(String scriptName) async {
-    // 平滑清除主菜单音乐
-    await MusicManager().clearBackgroundMusic(
-      fadeOut: true,
-      fadeDuration: const Duration(milliseconds: 1000),
-    );
-
-    await _loadConfigs();
-    await GlobalVariableManager().init(); // 初始化全局变量管理器
-
-    // 初始化剧情流程图管理器
-    await _flowchartManager.initialize();
-
-    // 初始化CG预分析器
-    _cgPreAnalyzer.initialize();
-
-    await AnimationManager.loadAnimations(); // 加载动画
-    _script = await _scriptMerger.getMergedScript();
-    _buildLabelIndexMap();
-    _buildMusicRegions(); // 构建音乐区间
-
-    // 分析脚本中的所有CG组合并预热
-    _analyzeCgCombinationsAndPreWarm(isLoadGame: false);
-
-    // 启动CG预热管理器
-    CgPreWarmManager().start();
-
-    // 预加载anime资源（同步执行，确保能看到错误）
-    try {
-      await _analyzeAndPreloadAnimeResources();
-    } catch (e) {
-      if (kDebugMode) {
-        ////print('[GameManager] 预加载anime资源失败: $e');
-      }
-    }
-
-    _currentState = GameState.initial();
-    _dialogueHistory = [];
-    _activeNvlContext = _NvlContextMode.none;
-    _showNvlOverlayOnNextDialogue = false;
-
-    // 如果指定了非 start 脚本，跳转到对应位置
-    if (scriptName != 'start') {
-      final startIndex = _scriptMerger.getFileStartIndex(scriptName);
-      if (startIndex != null) {
-        _scriptIndex = startIndex;
-      }
-    }
-
-    // 检查初始位置的音乐区间
-    await _checkMusicRegionAtCurrentIndex(forceCheck: true);
-
-    await _executeScript();
   }
 
   void _buildLabelIndexMap() {
@@ -1928,7 +1895,7 @@ class GameManager {
           // 检查是否需要创建章节开头的自动存档（NVL模式）
           try {
             await _chapterAutoSaveManager.onDialogueDisplayed(
-              scriptIndex: currentNodeIndex,  // 使用当前节点索引
+              scriptIndex: currentNodeIndex, // 使用当前节点索引
               currentScriptFile: currentScriptFile,
               currentLabel: _findNearestLabel(currentNodeIndex),
               saveStateSnapshot: saveStateSnapshot,
@@ -2172,13 +2139,13 @@ class GameManager {
 
           _gameStateController.add(_currentState);
 
-
           // 检查是否需要创建章节开头的自动存档（NVL模式-第二处）
           try {
             await _chapterAutoSaveManager.onDialogueDisplayed(
-              scriptIndex: currentNodeIndex,  // 使用当前节点索引，而不是_scriptIndex
+              scriptIndex: currentNodeIndex, // 使用当前节点索引，而不是_scriptIndex
               currentScriptFile: currentScriptFile,
-              currentLabel: _findNearestLabel(currentNodeIndex),  // 也使用currentNodeIndex查找label
+              currentLabel: _findNearestLabel(
+                  currentNodeIndex), // 也使用currentNodeIndex查找label
               saveStateSnapshot: saveStateSnapshot,
               flowchartManager: _flowchartManager,
             );
@@ -2220,7 +2187,7 @@ class GameManager {
           // 检查是否需要创建章节开头的自动存档（普通对话模式）
           try {
             await _chapterAutoSaveManager.onDialogueDisplayed(
-              scriptIndex: currentNodeIndex,  // 使用当前节点索引
+              scriptIndex: currentNodeIndex, // 使用当前节点索引
               currentScriptFile: currentScriptFile,
               currentLabel: _findNearestLabel(currentNodeIndex),
               saveStateSnapshot: saveStateSnapshot,
@@ -2539,241 +2506,6 @@ class GameManager {
     );
   }
 
-  Future<void> restoreFromSnapshot(
-      String scriptName, GameStateSnapshot snapshot,
-      {bool shouldReExecute = true}) async {
-    //print('📚 restoreFromSnapshot: scriptName = $scriptName');
-    //print('📚 restoreFromSnapshot: snapshot.scriptIndex = ${snapshot.scriptIndex}');
-    //print('📚 restoreFromSnapshot: isNvlMode = ${snapshot.isNvlMode}');
-    //print('📚 restoreFromSnapshot: nvlDialogues count = ${snapshot.nvlDialogues.length}');
-
-    await _loadConfigs();
-    await GlobalVariableManager().init(); // 初始化全局变量管理器
-    await AnimationManager.loadAnimations(); // 加载动画
-    _script = await _scriptMerger.getMergedScript();
-    _buildLabelIndexMap();
-    _buildMusicRegions(); // 构建音乐区间
-
-    //print('📚 加载合并脚本后: _script.children.length = ${_script.children.length}');
-
-    _scriptIndex = snapshot.scriptIndex;
-
-    // 分析脚本中的所有CG组合并预热（在恢复索引后）
-    _analyzeCgCombinationsAndPreWarm(isLoadGame: true);
-
-    // 预加载anime资源（同步执行）
-    try {
-      await _analyzeAndPreloadAnimeResources();
-    } catch (e) {
-      if (kDebugMode) {
-        ////print('[GameManager] 存档恢复：预加载anime资源失败: $e');
-      }
-    }
-
-    // 重置所有处理标志，确保恢复状态时没有遗留的锁定状态
-    _isProcessing = false;
-    _isWaitingForTimer = false;
-
-    // 修复快进回退bug：强制重置快进状态为非快进
-    // 回退到历史状态时，应该始终处于正常播放模式，而不是快进模式
-    setFastForwardMode(false);
-
-    // 取消当前活跃的计时器
-    _currentTimer?.cancel();
-    _currentTimer = null;
-
-    // 清理旧的场景动画控制器
-    _sceneAnimationController?.dispose();
-    _sceneAnimationController = null;
-
-    // 恢复 NVL 状态
-    if (kDebugMode) {
-      //print('[GameManager] 存档恢复：cgCharacters数量 = ${snapshot.currentState.cgCharacters.length}');
-      //print('[GameManager] 存档恢复：cgCharacters内容 = ${snapshot.currentState.cgCharacters.keys.toList()}');
-    }
-
-    // 修复bug：从新脚本中获取当前对话文本，避免使用存档中的旧文本
-    // 使用 NvlStateManager 来处理 NVL 模式的特殊逻辑
-    String? freshDialogue;
-    String? freshSpeaker;
-    List<NvlDialogue>? freshNvlDialogues;
-
-    // NVL模式：使用模块化的状态管理器
-    freshNvlDialogues = NvlStateManager.restoreNvlDialogues(
-      snapshot: snapshot,
-      script: _script,
-      characterConfigs: _characterConfigs,
-      scriptIndex: _scriptIndex,
-    );
-
-    // 非NVL模式：刷新当前对话
-    if (!snapshot.isNvlMode) {
-      final dialogueScriptIndex = snapshot.dialogueHistory.isNotEmpty
-          ? snapshot.dialogueHistory.last.scriptIndex
-          : _scriptIndex;
-
-      if (dialogueScriptIndex >= 0 && dialogueScriptIndex < _script.children.length) {
-        final currentNode = _script.children[dialogueScriptIndex];
-        if (currentNode is SayNode) {
-          freshDialogue = currentNode.dialogue;
-          if (currentNode.character != null) {
-            final characterConfig = _characterConfigs[currentNode.character];
-            freshSpeaker = characterConfig?.name;
-          }
-        }
-      }
-    }
-
-    _currentState = snapshot.currentState.copyWith(
-      isNvlMode: snapshot.isNvlMode,
-      isNvlMovieMode: snapshot.isNvlMovieMode,
-      isNvlnMode: snapshot.isNvlnMode, // 新增：恢复无遮罩NVL模式状态
-      isNvlOverlayVisible: snapshot.isNvlOverlayVisible,
-      nvlDialogues: freshNvlDialogues ?? snapshot.nvlDialogues,
-      everShownCharacters: _everShownCharacters,
-      isFastForwarding: false, // 修复快进回退bug：强制设置为非快进状态
-      // 明确恢复CG角色状态（修复CG存档恢复bug）
-      cgCharacters: snapshot.currentState.cgCharacters,
-      // 修复bug：使用从新脚本获取的对话文本
-      dialogue: freshDialogue ?? snapshot.currentState.dialogue,
-      speaker: freshSpeaker ?? snapshot.currentState.speaker,
-    );
-
-    // 设置NVL上下文模式
-    _activeNvlContext = snapshot.isNvlMode
-        ? (snapshot.isNvlMovieMode
-            ? _NvlContextMode.movie
-            : (snapshot.isNvlnMode
-                ? _NvlContextMode.noMask
-                : _NvlContextMode.standard))
-        : _NvlContextMode.none;
-    _showNvlOverlayOnNextDialogue = false;
-
-    // 初始化CG渲染器的淡入状态，避免恢复存档后首次差分出现全透明
-    for (final entry in _currentState.cgCharacters.entries) {
-      final displayKey = entry.key;
-      final state = entry.value;
-      final pose = state.pose ?? 'pose1';
-      final expression = state.expression ?? 'happy';
-      await CompositeCgRenderer.initializeDisplayedCg(
-        displayKey: displayKey,
-        resourceId: state.resourceId,
-        pose: pose,
-        expression: expression,
-      );
-    }
-
-    if (snapshot.dialogueHistory.isNotEmpty) {
-      _dialogueHistory = List.from(snapshot.dialogueHistory);
-      // 修复bug：从新脚本中重新获取对话文本，确保剧本修改后读档时显示最新内容
-      _refreshDialogueHistoryFromScript();
-    }
-
-    // 修复bug：同时更新当前状态的对话文本
-    // 但NVL模式不需要刷新，因为nvlDialogues已经在上面正确恢复了
-    if (!snapshot.isNvlMode) {
-      _refreshCurrentStateDialogue();
-    }
-
-    // 检查恢复位置的音乐区间（强制检查）
-    await _checkMusicRegionAtCurrentIndex(forceCheck: true);
-
-    // 检测并恢复当前场景的动画
-    await _checkAndRestoreSceneAnimation(notifyListeners: false);
-
-    // 预热当前游戏状态的CG（读档后立即预热，避免第一次显示黑屏）
-    await _preWarmCurrentGameState();
-
-    if (shouldReExecute) {
-      // 预热完成后再推送状态，确保CG已准备好
-      _gameStateController.add(_currentState);
-      await _executeScript();
-    } else {
-      // 不重新执行脚本时，检查当前位置是否是MenuNode
-      if (_scriptIndex < _script.children.length) {
-        final currentNode = _script.children[_scriptIndex];
-        if (currentNode is MenuNode) {
-          // 如果当前位置是MenuNode，确保currentNode被正确设置
-          _currentState = _currentState.copyWith(
-            currentNode: currentNode,
-            everShownCharacters: _everShownCharacters,
-          );
-          if (kDebugMode) {
-            //print('[GameManager] 存档恢复：检测到MenuNode，设置currentNode');
-          }
-        }
-      }
-      _gameStateController.add(_currentState);
-    }
-  }
-
-  Future<void> hotReload(String scriptName) async {
-    if (_dialogueHistory.isNotEmpty) {
-      _dialogueHistory.removeLast();
-    }
-
-    _savedSnapshot = saveStateSnapshot();
-
-    // 清理缓存并重新合并脚本
-    _scriptMerger.clearCache();
-    AnimationManager.clearCache(); // 清除动画缓存
-    SaveLoadManager.clearCache(); // 清除存档管理器的脚本缓存，确保对话预览使用最新脚本
-    await _loadConfigs();
-    await GlobalVariableManager().init(); // 初始化全局变量管理器
-    await AnimationManager.loadAnimations(); // 加载动画
-    _script = await _scriptMerger.getMergedScript();
-    _buildLabelIndexMap();
-    _buildMusicRegions(); // 构建音乐区间
-
-    if (_savedSnapshot != null) {
-      _scriptIndex = _savedSnapshot!.scriptIndex;
-      _dialogueHistory = List.from(_savedSnapshot!.dialogueHistory);
-
-      if (_scriptIndex > 0) {
-        _scriptIndex--;
-      }
-
-      _currentState = _savedSnapshot!.currentState.copyWith(
-        clearDialogueAndSpeaker: true,
-        forceNullCurrentNode: true,
-        // 恢复 NVL 状态
-        isNvlMode: _savedSnapshot!.isNvlMode,
-        isNvlMovieMode: _savedSnapshot!.isNvlMovieMode,
-        isNvlnMode: _savedSnapshot!.isNvlnMode,
-        isNvlOverlayVisible: _savedSnapshot!.isNvlOverlayVisible,
-        nvlDialogues: _savedSnapshot!.nvlDialogues,
-        everShownCharacters: _everShownCharacters,
-        isFastForwarding: false, // 修复快进回退bug：强制设置为非快进状态
-      );
-
-      // 设置NVL上下文模式
-      _activeNvlContext = _savedSnapshot!.isNvlMode
-          ? (_savedSnapshot!.isNvlMovieMode
-              ? _NvlContextMode.movie
-              : (_savedSnapshot!.isNvlnMode
-                  ? _NvlContextMode.noMask
-                  : _NvlContextMode.standard))
-          : _NvlContextMode.none;
-      _showNvlOverlayOnNextDialogue = false;
-
-      _isProcessing = false;
-      _isWaitingForTimer = false; // 重置计时器标志
-
-      // 取消当前活跃的计时器
-      _currentTimer?.cancel();
-      _currentTimer = null;
-
-      // 清理旧的场景动画控制器
-      _sceneAnimationController?.dispose();
-      _sceneAnimationController = null;
-
-      // 检测并恢复当前场景的动画
-      await _checkAndRestoreSceneAnimation();
-
-      await _executeScript();
-    }
-  }
-
   Future<void> _transitionToNewMovie(String movieFile,
       [SceneFilter? sceneFilter,
       List<String>? layers,
@@ -2976,7 +2708,8 @@ class GameManager {
 
       // 如果是NVL模式，同时更新nvlDialogues中的最后一条对话
       if (_currentState.isNvlMode && _currentState.nvlDialogues.isNotEmpty) {
-        final updatedNvlDialogues = List<NvlDialogue>.from(_currentState.nvlDialogues);
+        final updatedNvlDialogues =
+            List<NvlDialogue>.from(_currentState.nvlDialogues);
         final lastDialogue = updatedNvlDialogues.last;
         updatedNvlDialogues[updatedNvlDialogues.length - 1] = NvlDialogue(
           speaker: newSpeaker,

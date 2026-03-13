@@ -86,34 +86,31 @@ SakiEngine 是一个基于 Flutter 的现代化视觉小说游戏引擎，专为
 # macOS/Linux
 ./run.sh
 
-# Windows（使用 Git Bash、WSL 或其他 bash 环境）
-./run.sh
+# 或 Node 版本（跨平台）
+node run.js
 ```
 
-**首次运行时会自动：**
+**当前启动流程会自动：**
 
 - 检测您的操作系统（macOS/Linux/Windows）
 - 扫描可用的游戏项目
 - 让您选择默认游戏项目
-- 自动配置并启动项目
+- 直接在 `Game/<项目>` 目录执行 `flutter pub get` 与 `flutter run`
+- 通过 `SAKI_GAME_PATH` 指向当前项目目录（不再拷贝资源到引擎）
 
-##### 传统方式（手动步骤）
+##### 手动方式（项目内直接运行）
 
-1. 选择游戏项目
+1. 进入目标游戏目录（示例：`SakiEngine`）
 
 ```bash
-./scripts/select_game.sh
+cd Game/SakiEngine
 ```
 
-2. 运行对应平台的传统脚本
+2. 获取依赖并运行
 
 ```bash
-# macOS（传统方式）
-./scripts/run_legacy_macos.sh
-
-# 或使用 Flutter 命令（需要先处理资源）
-cd Engine
-flutter run -d macos --dart-define=SAKI_GAME_PATH="$PWD/../Game/YourGameName"
+flutter pub get
+flutter run -d macos --dart-define=SAKI_GAME_PATH="$PWD"
 ```
 
 #### 构建发布版
@@ -130,9 +127,10 @@ flutter run -d macos --dart-define=SAKI_GAME_PATH="$PWD/../Game/YourGameName"
 ./build.sh windows
 ./build.sh android
 ./build.sh ios
+./build.sh web
 ```
 
-**注意：** 构建前请确保已使用 `./run.sh` 或 `./scripts/select_game.sh` 选择了默认游戏项目。
+`build.sh` 会根据 `default_game.txt` 直接在 `Game/<项目>` 目录构建，不再修改 `Engine/pubspec.yaml`。
 
 #### Windows 用户注意事项
 
@@ -163,17 +161,14 @@ SakiEngine/
 │   ├── run_legacy_macos.sh  # 传统macOS启动脚本
 │   └── ...                  # 其他工具脚本
 ├── Engine/             # Flutter引擎主目录
-│   ├── lib/           # 引擎源码
-│   │   ├── src/       # 引擎核心代码
-│   │   ├── projectname/ # 项目特定模块（自动创建）
-│   │   └── main.dart  # 主入口
-│   ├── tool/          # 开发工具
-│   │   └── generate_modules.dart # 模块自动生成器
+│   ├── lib/           # 引擎源码（作为 Flutter package 被引用）
+│   │   ├── src/       # 引擎核心代码（仅通用能力）
+│   │   ├── sakiengine.dart # 对外 API（runSakiEngine/registerProjectModule）
+│   │   └── main.dart  # 兼容入口（内部调用 runSakiEngine）
 │   └── pubspec.yaml   # 依赖配置
 └── Game/              # 游戏项目目录
-    ├── SakiEngine/    # 默认示例游戏
-    ├── SoraNoUta/     # 另一个示例项目
-    └── YourGame/      # 您的游戏项目（创建工具生成）
+    ├── SakiEngine/    # 示例游戏（随引擎仓库）
+    └── YourGame/      # 您的游戏项目（建议独立仓库）
 ```
 
 ### 新项目创建
@@ -191,9 +186,10 @@ SakiEngine 提供了便捷的项目创建工具，可以快速搭建新的视觉
 - 创建完整的项目目录结构
 - 生成基础的配置文件（角色、姿势、系统配置）
 - 创建示例剧情脚本
-- **自动生成项目专用的Flutter模块**
+- 生成 `ProjectCode` 项目代码包（项目逻辑不写入引擎）
+- 创建完整 Flutter 项目骨架（`Game/<项目>/pubspec.yaml`、`lib/main.dart`、平台目录）
 - 配置主题颜色和Bundle ID
-- 更新模块注册表
+- 配置对引擎包 `../../Engine` 的依赖
 
 #### 项目模块化系统
 
@@ -204,7 +200,8 @@ SakiEngine 提供了便捷的项目创建工具，可以快速搭建新的视觉
 - **项目配置**：特殊的引擎参数和功能开关
 - **智能回退**：未自定义的组件自动使用引擎默认实现
 
-项目模块位置：`Engine/lib/项目名小写/项目名_module.dart`
+项目模块位置：`Game/项目名/ProjectCode/lib/项目名小写/项目名_module.dart`
+项目入口：`Game/项目名/lib/main.dart`
 
 #### 快速开始新项目
 
@@ -224,7 +221,7 @@ SakiEngine 提供了便捷的项目创建工具，可以快速搭建新的视觉
 
 ```bash
 # 编辑项目模块文件
-Engine/lib/yourproject/yourproject_module.dart
+Game/yourproject/ProjectCode/lib/yourproject/yourproject_module.dart
 ```
 
 ### VSCode 语法高亮插件

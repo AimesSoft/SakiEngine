@@ -1,116 +1,139 @@
-name: Build & Release
+name: CI / Build / Release
 
 on:
   push:
     branches:
-      - 'main'
+      - main
+  pull_request:
+    branches:
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
-  check-trigger:
-    name: Check Push Message
+  quality:
+    name: Quality Gate
     runs-on: ubuntu-latest
-    outputs:
-      should_run: ${{ steps.evaluate.outputs.should_run }}
     steps:
-      - name: Validate commit message
-        id: evaluate
-        env:
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-        run: |
-          echo "📩 最新提交信息:"
-          echo "$COMMIT_MESSAGE"
-          pattern='[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}'
-          if [[ -n "$COMMIT_MESSAGE" && "$COMMIT_MESSAGE" =~ $pattern ]]; then
-            echo "✅ 检测到日期格式，允许构建"
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "⚠️ 推送信息未包含形如YYYY.MM.DD的文本，跳过构建"
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  # Android构建
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2.12.0
+        with:
+          flutter-version: '3.35.1'
+          channel: stable
+          cache: true
+
+      - name: Engine Pub Get
+        working-directory: Engine
+        run: flutter pub get
+
+      - name: Engine Analyze
+        working-directory: Engine
+        run: flutter analyze
+
+      - name: Engine Test
+        working-directory: Engine
+        run: flutter test
+
+      - name: Demo Pub Get
+        working-directory: Game/SakiEngine
+        run: flutter pub get
+
+      - name: Demo Analyze
+        working-directory: Game/SakiEngine
+        run: flutter analyze
+
+      - name: Demo Test
+        working-directory: Game/SakiEngine
+        run: flutter test
+
   build-android:
-    needs: check-trigger
-    if: needs.check-trigger.outputs.should_run == 'true'
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     name: Build Android
     uses: ./.github/workflows/android-build.yml
     with:
       flutter_version: '3.35.1'
-      working_directory: 'Engine'
-      target_platform: 'android-arm64'
+      working_directory: Engine
+      target_platform: android-arm64
     secrets: inherit
 
-  # iOS构建
   build-ios:
-    needs: check-trigger
-    if: needs.check-trigger.outputs.should_run == 'true'
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     name: Build iOS
     uses: ./.github/workflows/ios-build.yml
     with:
       flutter_version: '3.35.1'
-      working_directory: 'Engine'
+      working_directory: Engine
       enable_codesign: false
     secrets: inherit
 
-  # macOS构建
   build-macos:
-    needs: check-trigger
-    if: needs.check-trigger.outputs.should_run == 'true'
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     name: Build macOS
     uses: ./.github/workflows/macos-build.yml
     with:
       flutter_version: '3.35.1'
-      working_directory: 'Engine'
+      working_directory: Engine
       create_dmg: true
     secrets: inherit
 
-  # Windows构建
   build-windows:
-    needs: check-trigger
-    if: needs.check-trigger.outputs.should_run == 'true'
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     name: Build Windows
     uses: ./.github/workflows/windows-build.yml
     with:
       flutter_version: '3.35.1'
-      working_directory: 'Engine'
-      architecture: 'x64'
+      working_directory: Engine
+      architecture: x64
     secrets: inherit
 
-  # Linux构建
   build-linux:
-    needs: check-trigger
-    if: needs.check-trigger.outputs.should_run == 'true'
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     name: Build Linux
     uses: ./.github/workflows/linux-build.yml
     with:
       flutter_version: '3.35.1'
-      working_directory: 'Engine'
-      architecture: 'amd64'
+      working_directory: Engine
+      architecture: amd64
     secrets: inherit
 
-  # 发布
   publish:
     name: Publish Release
-    needs: [check-trigger, build-android, build-ios, build-macos, build-windows, build-linux]
-    if: needs.check-trigger.outputs.should_run == 'true'
+    needs:
+      - build-android
+      - build-ios
+      - build-macos
+      - build-windows
+      - build-linux
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/publish.yml
     with:
       version: ${{ needs.build-android.outputs.version }}
-      artifacts_pattern: "/tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.zip"
+      artifacts_pattern: /tmp/artifacts/release-Android/*.apk,/tmp/artifacts/release-iOS/*.ipa,/tmp/artifacts/release-macOS/*.dmg,/tmp/artifacts/release-Windows/*.zip,/tmp/artifacts/release-Linux-amd64/*.zip
     secrets: inherit
 
-  # 版本更新
   update-version:
     name: Update Version
-    needs: [check-trigger, build-android, build-ios, build-macos, build-windows, build-linux, publish]
-    if: needs.check-trigger.outputs.should_run == 'true' && github.ref == 'refs/heads/main' && success()
+    needs:
+      - publish
+      - build-android
+      - build-ios
+      - build-macos
+      - build-windows
+      - build-linux
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
     uses: ./.github/workflows/version-update.yml
     with:
-      working_directory: 'Engine'
-      version_increment: 'patch'
-      branch: 'main'
+      working_directory: Engine
+      version_increment: patch
+      branch: main
     secrets: inherit

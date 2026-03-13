@@ -8,3 +8,4 @@ base_review_title: size=45
 base_window: border=0
 base_quick_menu: size=25
 main_menu: background=sky size=200 top=0.3 right=0.05//background是主菜单背景图像 size是标题大小，title是标题使用的图片。top/bottom left/right是标题定位
+settings_defaults: menu_display_mode=windowed

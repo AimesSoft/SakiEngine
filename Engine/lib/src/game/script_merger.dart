@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
+import 'package:sakiengine/src/game/game_script_localization.dart';
+import 'package:sakiengine/src/sks_compiler/compiled_sks_bundle.dart';
+import 'package:sakiengine/src/sks_compiler/compiled_sks_registry.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 import 'package:sakiengine/src/sks_parser/sks_parser.dart';
 
@@ -13,27 +16,31 @@ class ScriptMerger {
   Future<void> _buildGlobalLabelMap() async {
     _globalLabelMap.clear();
     _loadedScripts.clear();
-    
+
+    final precompiledBundle = CompiledSksRegistry.instance.activeBundle;
+    if (precompiledBundle != null && precompiledBundle.hasLabelScripts) {
+      _loadFromCompiledBundle(precompiledBundle);
+      if (_loadedScripts.isNotEmpty) {
+        if (kDebugMode) {
+          //print('[ScriptMerger] 使用预编译脚本，共 ${_loadedScripts.length} 个文件');
+        }
+        return;
+      }
+    }
+
     try {
       // 获取所有 .sks 文件
-      final scriptFiles = await AssetManager().listAssets('assets/GameScript/labels/', '.sks');
-      
+      final scriptFiles =
+          await AssetManager().listAssets('assets/GameScript/labels/', '.sks');
+
       for (final fileName in scriptFiles) {
         final fileNameWithoutExt = fileName.replaceAll('.sks', '');
         try {
-          final scriptContent = await AssetManager().loadString('assets/GameScript/labels/$fileName');
+          final scriptContent =
+              await AssetManager().loadString('assets/GameScript/labels/$fileName');
           final script = SksParser().parse(scriptContent);
           _loadedScripts[fileNameWithoutExt] = script;
-          
-          // 扫描该文件中的所有标签
-          for (final node in script.children) {
-            if (node is LabelNode) {
-              _globalLabelMap[node.name] = fileNameWithoutExt;
-              if (kDebugMode) {
-                //print('[ScriptMerger] 发现标签: ${node.name} 在文件 $fileNameWithoutExt 中');
-              }
-            }
-          }
+          _collectLabels(fileNameWithoutExt, script);
         } catch (e) {
           if (kDebugMode) {
             //print('[ScriptMerger] 加载脚本文件失败: $fileName - $e');
@@ -47,6 +54,69 @@ class ScriptMerger {
     } catch (e) {
       if (kDebugMode) {
         //print('[ScriptMerger] 构建全局标签映射失败: $e');
+      }
+    }
+  }
+
+  void _loadFromCompiledBundle(CompiledSksBundle bundle) {
+    final scriptFiles = _collectLabelFileNames(bundle);
+    for (final fileName in scriptFiles) {
+      final script = _resolveLocalizedLabelScript(bundle, fileName);
+      if (script == null) {
+        continue;
+      }
+
+      final fileNameWithoutExt = fileName.replaceAll('.sks', '');
+      _loadedScripts[fileNameWithoutExt] = script;
+      _collectLabels(fileNameWithoutExt, script);
+    }
+  }
+
+  List<String> _collectLabelFileNames(CompiledSksBundle bundle) {
+    final fileNames = <String>[];
+    final seen = <String>{};
+    final candidateDirs = GameScriptLocalization.candidateDirectories();
+
+    for (final dir in candidateDirs) {
+      final prefix = 'assets/$dir/labels/';
+      for (final assetPath in bundle.labelAssetPaths) {
+        if (!assetPath.startsWith(prefix) || !assetPath.endsWith('.sks')) {
+          continue;
+        }
+        final fileName = assetPath.substring(prefix.length);
+        if (fileName.contains('/')) {
+          continue;
+        }
+        if (seen.add(fileName)) {
+          fileNames.add(fileName);
+        }
+      }
+    }
+    return fileNames;
+  }
+
+  ScriptNode? _resolveLocalizedLabelScript(
+    CompiledSksBundle bundle,
+    String fileName,
+  ) {
+    final candidateDirs = GameScriptLocalization.candidateDirectories();
+    for (final dir in candidateDirs) {
+      final assetPath = 'assets/$dir/labels/$fileName';
+      final script = bundle.loadLabelScriptByAssetPath(assetPath);
+      if (script != null) {
+        return script;
+      }
+    }
+    return null;
+  }
+
+  void _collectLabels(String fileNameWithoutExt, ScriptNode script) {
+    for (final node in script.children) {
+      if (node is LabelNode) {
+        _globalLabelMap[node.name] = fileNameWithoutExt;
+        if (kDebugMode) {
+          //print('[ScriptMerger] 发现标签: ${node.name} 在文件 $fileNameWithoutExt 中');
+        }
       }
     }
   }

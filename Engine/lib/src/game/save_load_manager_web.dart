@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/game/screenshot_generator.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
@@ -13,10 +12,10 @@ import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
 import 'package:sakiengine/src/game/script_merger.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
+import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
 class SaveLoadManager {
   static const String _storageKeyPrefix = 'saki_save_';
-
 
   // 缓存脚本和配置，避免重复加载
   static ScriptNode? _cachedScript;
@@ -36,15 +35,18 @@ class SaveLoadManager {
       if (_cachedCharacterConfigs == null) {
         final charactersContent = await AssetManager()
             .loadString('assets/GameScript/configs/characters.sks');
-        _cachedCharacterConfigs = ConfigParser().parseCharacters(charactersContent);
+        _cachedCharacterConfigs =
+            ConfigParser().parseCharacters(charactersContent);
       }
 
       final currentState = snapshot.currentState;
 
       // 检查是否是选择界面
-      if (currentState.currentNode != null && currentState.currentNode is MenuNode) {
+      if (currentState.currentNode != null &&
+          currentState.currentNode is MenuNode) {
         final menuNode = currentState.currentNode as MenuNode;
-        final choiceTexts = menuNode.choices.map((choice) => '[${choice.text}]').toList();
+        final choiceTexts =
+            menuNode.choices.map((choice) => '[${choice.text}]').toList();
         final localization = LocalizationManager();
         return '${localization.t('saveLoad.choiceMenu')}\n${choiceTexts.join('\n')}';
       }
@@ -80,7 +82,8 @@ class SaveLoadManager {
       // 如果无法从脚本查询，回退到NVL模式检查
       if (currentState.isNvlMode && currentState.nvlDialogues.isNotEmpty) {
         final latestNvlDialogue = currentState.nvlDialogues.last;
-        if (latestNvlDialogue.speaker != null && latestNvlDialogue.speaker!.isNotEmpty) {
+        if (latestNvlDialogue.speaker != null &&
+            latestNvlDialogue.speaker!.isNotEmpty) {
           return '【${latestNvlDialogue.speaker}】${RichTextParser.cleanText(latestNvlDialogue.dialogue)}';
         } else {
           return RichTextParser.cleanText(latestNvlDialogue.dialogue);
@@ -116,13 +119,14 @@ class SaveLoadManager {
   Future<String> _getCurrentProjectName() async {
     try {
       // 从assets读取default_game.txt
-      final assetContent = await rootBundle.loadString('assets/default_game.txt');
+      final assetContent =
+          await EngineAssetLoader.loadString('assets/default_game.txt');
       final projectName = assetContent.trim();
-      
+
       if (projectName.isEmpty) {
         throw Exception('Project name is empty in default_game.txt');
       }
-      
+
       return projectName;
     } catch (e) {
       if (kDebugMode) {
@@ -141,36 +145,44 @@ class SaveLoadManager {
     return '${_storageKeyPrefix}slot_$slotId';
   }
 
-  Future<void> saveGame(int slotId, String currentScript, GameStateSnapshot snapshot, Map<String, PoseConfig> poseConfigs) async {
+  Future<void> saveGame(int slotId, String currentScript,
+      GameStateSnapshot snapshot, Map<String, PoseConfig> poseConfigs) async {
     // 检查目标位置是否有被锁定的存档
     final existingSlot = await loadGame(slotId);
     if (existingSlot?.isLocked == true) {
       throw Exception('存档已锁定，无法覆盖');
     }
-    
+
     String dialoguePreview = '...';
     final currentState = snapshot.currentState;
-    
+
     // 检查是否是选择界面
-    if (currentState.currentNode != null && currentState.currentNode is MenuNode) {
+    if (currentState.currentNode != null &&
+        currentState.currentNode is MenuNode) {
       final menuNode = currentState.currentNode as MenuNode;
-      final choiceTexts = menuNode.choices.map((choice) => '[${choice.text}]').toList();
+      final choiceTexts =
+          menuNode.choices.map((choice) => '[${choice.text}]').toList();
       final localization = LocalizationManager();
-      dialoguePreview = '${localization.t('saveLoad.choiceMenu')}\n${choiceTexts.join('\n')}';
+      dialoguePreview =
+          '${localization.t('saveLoad.choiceMenu')}\n${choiceTexts.join('\n')}';
     }
     // 优先检查 NVL 模式（包括普通nvl和无遮罩nvln模式）
     else if (currentState.isNvlMode && currentState.nvlDialogues.isNotEmpty) {
       // 使用最新的 NVL 对话作为预览
       final latestNvlDialogue = currentState.nvlDialogues.last;
-      if (latestNvlDialogue.speaker != null && latestNvlDialogue.speaker!.isNotEmpty) {
-        dialoguePreview = '【${latestNvlDialogue.speaker}】${RichTextParser.cleanText(latestNvlDialogue.dialogue)}';
+      if (latestNvlDialogue.speaker != null &&
+          latestNvlDialogue.speaker!.isNotEmpty) {
+        dialoguePreview =
+            '【${latestNvlDialogue.speaker}】${RichTextParser.cleanText(latestNvlDialogue.dialogue)}';
       } else {
         dialoguePreview = RichTextParser.cleanText(latestNvlDialogue.dialogue);
       }
-    } else if (currentState.dialogue != null && currentState.dialogue!.isNotEmpty) {
+    } else if (currentState.dialogue != null &&
+        currentState.dialogue!.isNotEmpty) {
       // 普通模式的对话
       if (currentState.speaker != null && currentState.speaker!.isNotEmpty) {
-        dialoguePreview = '【${currentState.speaker}】${RichTextParser.cleanText(currentState.dialogue!)}';
+        dialoguePreview =
+            '【${currentState.speaker}】${RichTextParser.cleanText(currentState.dialogue!)}';
       } else {
         dialoguePreview = RichTextParser.cleanText(currentState.dialogue!);
       }
@@ -198,15 +210,15 @@ class SaveLoadManager {
     );
 
     final binaryData = saveSlot.toBinary();
-    
+
     // 将二进制数据转换为base64字符串存储到localStorage
     final base64Data = base64Encode(binaryData);
     html.window.localStorage[_getSaveKey(slotId)] = base64Data;
   }
 
-
   /// 快速存档功能
-  Future<void> quickSave(String currentScript, GameStateSnapshot snapshot, Map<String, PoseConfig> poseConfigs) async {
+  Future<void> quickSave(String currentScript, GameStateSnapshot snapshot,
+      Map<String, PoseConfig> poseConfigs) async {
     // final directory = await getSavesDirectory();
     // final file = File('$directory/quicksave.sakisav');
     //
@@ -307,7 +319,6 @@ class SaveLoadManager {
     // return false;
   }
 
-
   Future<SaveSlot?> loadGame(int slotId) async {
     try {
       final base64Data = html.window.localStorage[_getSaveKey(slotId)];
@@ -323,9 +334,11 @@ class SaveLoadManager {
 
   Future<List<SaveSlot>> listSaveSlots() async {
     final saveSlots = <SaveSlot>[];
-    
+
     // 遍历localStorage查找存档
-    html.window.localStorage.keys.where((key) => key.startsWith(_storageKeyPrefix)).forEach((key) {
+    html.window.localStorage.keys
+        .where((key) => key.startsWith(_storageKeyPrefix))
+        .forEach((key) {
       try {
         final base64Data = html.window.localStorage[key];
         if (base64Data != null) {
@@ -337,15 +350,16 @@ class SaveLoadManager {
         print('Error loading save slot from key $key: $e');
       }
     });
-    
+
     saveSlots.sort((a, b) => a.id.compareTo(b.id));
     return saveSlots;
   }
 
   /// 获取指定范围的存档位信息（懒加载支持）
-  Future<List<SaveSlot?>> listSaveSlotsInRange(int startSlotId, int endSlotId) async {
+  Future<List<SaveSlot?>> listSaveSlotsInRange(
+      int startSlotId, int endSlotId) async {
     final result = <SaveSlot?>[];
-    
+
     for (int slotId = startSlotId; slotId <= endSlotId; slotId++) {
       try {
         final slot = await loadGame(slotId);
@@ -354,15 +368,17 @@ class SaveLoadManager {
         result.add(null);
       }
     }
-    
+
     return result;
   }
 
   /// 获取所有存在的存档位ID
   Future<List<int>> getExistingSaveSlotIds() async {
     final existingIds = <int>[];
-    
-    html.window.localStorage.keys.where((key) => key.startsWith(_storageKeyPrefix)).forEach((key) {
+
+    html.window.localStorage.keys
+        .where((key) => key.startsWith(_storageKeyPrefix))
+        .forEach((key) {
       try {
         // 从key提取ID: saki_save_slot_123 -> 123
         final parts = key.split('_');
@@ -376,7 +392,7 @@ class SaveLoadManager {
         // 忽略解析错误的key
       }
     });
-    
+
     existingIds.sort();
     return existingIds;
   }
@@ -385,14 +401,14 @@ class SaveLoadManager {
   Future<int> getNextAvailableSlotId() async {
     final existingIds = await getExistingSaveSlotIds();
     if (existingIds.isEmpty) return 1;
-    
+
     // 查找第一个空隙
     for (int i = 1; i <= existingIds.last + 1; i++) {
       if (!existingIds.contains(i)) {
         return i;
       }
     }
-    
+
     return existingIds.last + 1;
   }
 
@@ -401,23 +417,23 @@ class SaveLoadManager {
     if (saveSlot?.isLocked == true) {
       throw Exception('存档已锁定，无法删除');
     }
-    
+
     html.window.localStorage.remove(_getSaveKey(slotId));
   }
 
   Future<bool> moveSave(int fromSlotId, int toSlotId) async {
     if (fromSlotId == toSlotId) return false;
-    
+
     final saveSlot = await loadGame(fromSlotId);
     if (saveSlot == null) return false;
-    
+
     // 检查源存档是否被锁定
     if (saveSlot.isLocked) return false;
-    
+
     // 检查目标位置是否有被锁定的存档
     final targetSlot = await loadGame(toSlotId);
     if (targetSlot?.isLocked == true) return false;
-    
+
     try {
       final updatedSaveSlot = SaveSlot(
         id: toSlotId,
@@ -428,13 +444,13 @@ class SaveLoadManager {
         screenshotData: saveSlot.screenshotData,
         isLocked: saveSlot.isLocked,
       );
-      
+
       final binaryData = updatedSaveSlot.toBinary();
       final base64Data = base64Encode(binaryData);
-      
+
       html.window.localStorage[_getSaveKey(toSlotId)] = base64Data;
       html.window.localStorage.remove(_getSaveKey(fromSlotId));
-      
+
       return true;
     } catch (e) {
       print('Error moving save from slot $fromSlotId to $toSlotId: $e');
@@ -444,19 +460,19 @@ class SaveLoadManager {
 
   Future<bool> swapSaves(int slotId1, int slotId2) async {
     if (slotId1 == slotId2) return false;
-    
+
     final saveSlot1 = await loadGame(slotId1);
     final saveSlot2 = await loadGame(slotId2);
-    
+
     if (saveSlot1?.isLocked == true || saveSlot2?.isLocked == true) {
       return false;
     }
-    
+
     try {
       // 删除原存档
       html.window.localStorage.remove(_getSaveKey(slotId1));
       html.window.localStorage.remove(_getSaveKey(slotId2));
-      
+
       // 交换保存
       if (saveSlot1 != null) {
         final updatedSaveSlot1 = SaveSlot(
@@ -469,9 +485,10 @@ class SaveLoadManager {
           isLocked: saveSlot1.isLocked,
         );
         final binaryData = updatedSaveSlot1.toBinary();
-        html.window.localStorage[_getSaveKey(slotId2)] = base64Encode(binaryData);
+        html.window.localStorage[_getSaveKey(slotId2)] =
+            base64Encode(binaryData);
       }
-      
+
       if (saveSlot2 != null) {
         final updatedSaveSlot2 = SaveSlot(
           id: slotId1,
@@ -483,9 +500,10 @@ class SaveLoadManager {
           isLocked: saveSlot2.isLocked,
         );
         final binaryData = updatedSaveSlot2.toBinary();
-        html.window.localStorage[_getSaveKey(slotId1)] = base64Encode(binaryData);
+        html.window.localStorage[_getSaveKey(slotId1)] =
+            base64Encode(binaryData);
       }
-      
+
       return true;
     } catch (e) {
       print('Error swapping saves between slot $slotId1 and $slotId2: $e');
@@ -496,7 +514,7 @@ class SaveLoadManager {
   Future<bool> toggleSaveLock(int slotId) async {
     final saveSlot = await loadGame(slotId);
     if (saveSlot == null) return false;
-    
+
     final updatedSlot = SaveSlot(
       id: saveSlot.id,
       saveTime: saveSlot.saveTime,
@@ -506,7 +524,7 @@ class SaveLoadManager {
       screenshotData: saveSlot.screenshotData,
       isLocked: !saveSlot.isLocked,
     );
-    
+
     try {
       final binaryData = updatedSlot.toBinary();
       html.window.localStorage[_getSaveKey(slotId)] = base64Encode(binaryData);
@@ -593,18 +611,18 @@ class GameConfig {
   /// 从二进制数据创建配置
   factory GameConfig.fromBinary(Uint8List data) {
     final reader = _BinaryConfigReader(data);
-    
+
     // 验证魔法数字
     final magic = String.fromCharCodes(reader.readBytes(4));
     if (magic != 'CONF') {
       throw FormatException('Invalid config file format');
     }
-    
+
     final version = reader.readInt32();
     if (version != 1) {
       throw FormatException('Unsupported config version: $version');
     }
-    
+
     return GameConfig(
       version: reader.readString(),
       language: reader.readString(),
@@ -624,11 +642,11 @@ class GameConfig {
   /// 转换为二进制数据
   Uint8List toBinary() {
     final buffer = <int>[];
-    
+
     // 写入魔法数字和版本
     buffer.addAll('CONF'.codeUnits);
     buffer.addAll(_writeInt32(1));
-    
+
     // 写入配置数据
     buffer.addAll(_writeString(version));
     buffer.addAll(_writeString(language));
@@ -642,7 +660,7 @@ class GameConfig {
     buffer.addAll(_writeBool(fullscreen));
     buffer.addAll(_writeInt32(windowWidth));
     buffer.addAll(_writeInt32(windowHeight));
-    
+
     return Uint8List.fromList(buffer);
   }
 
@@ -652,7 +670,8 @@ class GameConfig {
   }
 
   static Uint8List _writeDouble(double value) {
-    return Uint8List(8)..buffer.asByteData().setFloat64(0, value, Endian.little);
+    return Uint8List(8)
+      ..buffer.asByteData().setFloat64(0, value, Endian.little);
   }
 
   static Uint8List _writeBool(bool value) {

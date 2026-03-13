@@ -62,7 +62,6 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_launcher_icons: "^0.14.4"
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -70,7 +69,6 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
-  rename: ^3.1.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -87,44 +85,7 @@ flutter:
   assets:
     - assets/default_game.txt
     - assets/fonts/
-    - assets/GameScript_en/
-    - assets/GameScript_en/labels/
-    - assets/GameScript_en/configs/
-    - assets/GameScript/
-    - assets/GameScript/labels/
-    - assets/GameScript/configs/
-    - assets/GameScript_zh-Hant/
-    - assets/GameScript_zh-Hant/labels/
-    - assets/GameScript_zh-Hant/configs/
-    - assets/GameScript_ja/
-    - assets/GameScript_ja/labels/
-    - assets/GameScript_ja/configs/
     - assets/i18n/
-    - assets/Assets/
-    - assets/Assets/music/
-    - assets/Assets/images/
-    - assets/Assets/images/cg/
-    - assets/Assets/images/cg/cg_cp1_1/
-    - assets/Assets/images/cg/cg_tree/
-    - assets/Assets/images/cg/cg_dog/
-    - assets/Assets/images/cg/cg_cp1_5/
-    - assets/Assets/images/cg/cg_cp1_2/
-    - assets/Assets/images/cg/cg_cp0_q2/
-    - assets/Assets/images/cg/cg_cp1_ls/
-    - assets/Assets/images/cg/cg_cp1_3/
-    - assets/Assets/images/cg/cg_cp0_1/
-    - assets/Assets/images/backgrounds/
-    - assets/Assets/images/items/
-    - assets/Assets/images/characters/
-    - assets/Assets/images/characters/story1/
-    - assets/Assets/images/characters/story1/emoji/
-    - assets/Assets/images/characters/story1/pose/
-    - assets/Assets/voice/
-    - assets/Assets/gui/
-    - assets/Assets/movies/
-    - assets/Assets/fonts/
-    - assets/Assets/sound/
-    - pubspec.yaml
 
   shaders:
     # 着色器必须在这里单独声明
@@ -146,9 +107,6 @@ flutter:
       fonts:
         - asset: assets/fonts/SourceHanSansCN-Bold.ttf
           weight: 700
-    - family: ChillJinshuSongPro_Soft
-      fonts:
-        - asset: assets/Assets/fonts/ChillJinshuSongPro_Soft.otf
   #   - family: Schyler
   #     fonts:
   #       - asset: fonts/Schyler-Regular.ttf
@@ -162,14 +120,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
-
-flutter_launcher_icons:
-  android: true
-  ios: true
-  image_path: "assets/icon.png"
-  windows:
-    generate: true
-    image_path: "assets/icon.png"
-  macos:
-    generate: true
-    image_path: "assets/icon.png"

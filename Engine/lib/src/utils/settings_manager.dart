@@ -231,11 +231,8 @@ class SettingsManager extends ChangeNotifier {
   Future<void> resetToDefault() async {
     await init();
 
-    // 根据项目设置不同的默认菜单显示模式
-    String projectDefaultMenuDisplayMode = defaultMenuDisplayMode;
-    if (_projectName == 'SoraNoUta') {
-      projectDefaultMenuDisplayMode = 'fullscreen';
-    }
+    final projectDefaultMenuDisplayMode =
+        SakiEngineConfig().defaultMenuDisplayMode;
 
     await _dataManager.setDialogOpacity(defaultDialogOpacity, _projectName!);
     await _dataManager.setIsFullscreen(defaultIsFullscreen, _projectName!);

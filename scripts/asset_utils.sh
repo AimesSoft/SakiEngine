@@ -1,38 +1,34 @@
 #!/bin/bash
 
 #================================================
-# 资源处理工具脚本
+# 资源处理工具脚本（项目级）
 #================================================
 
-# ANSI Color Codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# 获取项目根目录（脚本所在目录的上级）
 get_project_root() {
     echo "$(dirname "$(dirname "$(realpath "$0")")")"
 }
 
-# 读取默认游戏名称
 read_default_game() {
     local project_root="$1"
     local default_game_file="$project_root/default_game.txt"
-    
+
     if [ -f "$default_game_file" ]; then
-        cat "$default_game_file" | tr -d '\n'
+        cat "$default_game_file" | tr -d '\n\r'
     else
         echo ""
     fi
 }
 
-# 验证游戏目录是否存在
 validate_game_dir() {
     local project_root="$1"
     local game_name="$2"
     local game_dir="$project_root/Game/$game_name"
-    
+
     if [ -d "$game_dir" ]; then
         echo "$game_dir"
         return 0
@@ -41,94 +37,139 @@ validate_game_dir() {
     fi
 }
 
-# 复制游戏资源（跨平台兼容）
-link_game_assets() {
-    local engine_dir="$1"
-    local game_dir="$2"
-    local project_root="$3"
-    local use_symlink="$4"  # 忽略此参数，总是使用复制模式
-    
-    echo -e "${YELLOW}正在清理旧的资源...${NC}"
-    # 删除 Engine/assets 目录下的 Assets 和 GameScript* 目录
-    rm -rf "$engine_dir/assets/Assets"
-    rm -rf "$engine_dir"/assets/GameScript*
-    
-    # 确保顶级 assets 目录存在
-    mkdir -p "$engine_dir/assets"
-    
-    echo -e "${YELLOW}正在复制游戏资源和脚本...${NC}"
-    # 总是使用复制模式以确保跨平台兼容性
-    cp -r "$game_dir/Assets" "$engine_dir/assets/"
-    for script_dir in "$game_dir"/GameScript*; do
-        if [ -d "$script_dir" ]; then
-            cp -r "$script_dir" "$engine_dir/assets/"
-        fi
-    done
-    
-    # 复制 default_game.txt 到 assets 目录
-    echo -e "${YELLOW}正在复制 default_game.txt 到 assets 目录...${NC}"
-    cp "$project_root/default_game.txt" "$engine_dir/assets/"
-    
-    # 处理 icon.png 复制逻辑（优先使用游戏目录，回退到项目根目录）
-    echo -e "${YELLOW}正在处理应用图标...${NC}"
-    if [ -f "$game_dir/icon.png" ]; then
-        echo -e "${GREEN}使用游戏目录中的 icon.png${NC}"
-        cp "$game_dir/icon.png" "$engine_dir/assets/"
-    elif [ -f "$project_root/icon.png" ]; then
-        echo -e "${YELLOW}游戏目录未找到 icon.png，使用项目根目录的图标${NC}"
-        cp "$project_root/icon.png" "$engine_dir/assets/"
-    else
-        echo -e "${RED}警告: 未找到 icon.png 文件${NC}"
-    fi
-    
-    echo -e "${GREEN}资源处理完成。${NC}"
-}
-
-# 读取游戏配置
 read_game_config() {
     local game_dir="$1"
     local config_file="$game_dir/game_config.txt"
-    
+
     if [ -f "$config_file" ]; then
-        local app_name=$(sed -n '1p' "$config_file")
-        local bundle_id=$(sed -n '2p' "$config_file")
-        
+        local app_name
+        local bundle_id
+        app_name=$(sed -n '1p' "$config_file" | tr -d '\r')
+        bundle_id=$(sed -n '2p' "$config_file" | tr -d '\r')
+
         if [ -n "$app_name" ] && [ -n "$bundle_id" ]; then
             echo "$app_name|$bundle_id"
             return 0
         fi
     fi
-    
+
     return 1
 }
 
-# 设置应用名称和包名
+_escape_sed() {
+    printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
+}
+
 set_app_identity() {
-    local engine_dir="$1"
+    local project_dir="$1"
     local app_name="$2"
     local bundle_id="$3"
-    
-    echo -e "${YELLOW}正在设置应用名称: $app_name${NC}"
-    echo -e "${YELLOW}正在设置包名: $bundle_id${NC}"
-    
-    cd "$engine_dir" || return 1
-    
-    # 设置应用名称
-    dart run rename setAppName --targets android,ios,macos,linux,windows,web --value "$app_name"
-    
-    # 设置包名
-    dart run rename setBundleId --targets android,ios,macos --value "$bundle_id"
-    
-    # 手动修改 Linux 和 Windows 的包名
-    if [ -f "$engine_dir/linux/CMakeLists.txt" ]; then
-        sed -i.bak "s/set(APPLICATION_ID \".*\")/set(APPLICATION_ID \"$bundle_id\")/" "$engine_dir/linux/CMakeLists.txt"
-        rm -f "$engine_dir/linux/CMakeLists.txt.bak"
+
+    local app_name_escaped
+    local bundle_id_escaped
+    local company_name
+    local company_name_escaped
+
+    app_name_escaped=$(_escape_sed "$app_name")
+    bundle_id_escaped=$(_escape_sed "$bundle_id")
+    company_name="${bundle_id%.*}"
+    company_name_escaped=$(_escape_sed "$company_name")
+
+    echo -e "${YELLOW}正在同步应用信息: ${app_name} (${bundle_id})${NC}"
+
+    if [ -f "$project_dir/android/app/src/main/AndroidManifest.xml" ]; then
+        sed -i.bak -E "s/android:label=\"[^\"]*\"/android:label=\"$app_name_escaped\"/" \
+            "$project_dir/android/app/src/main/AndroidManifest.xml"
+        rm -f "$project_dir/android/app/src/main/AndroidManifest.xml.bak"
     fi
-    
-    if [ -f "$engine_dir/windows/runner/Runner.rc" ]; then
-        sed -i.bak "s/VALUE \"CompanyName\", \".*\"/VALUE \"CompanyName\", \"${bundle_id%.*}\"/" "$engine_dir/windows/runner/Runner.rc"
-        rm -f "$engine_dir/windows/runner/Runner.rc.bak"
+
+    if [ -f "$project_dir/android/app/build.gradle.kts" ]; then
+        sed -i.bak -E "s/applicationId = \"[^\"]*\"/applicationId = \"$bundle_id_escaped\"/" \
+            "$project_dir/android/app/build.gradle.kts"
+        rm -f "$project_dir/android/app/build.gradle.kts.bak"
     fi
-    
+
+    if [ -f "$project_dir/ios/Runner/Info.plist" ]; then
+        APP_NAME="$app_name" perl -0777 -i.bak -pe \
+            's#(<key>CFBundleDisplayName</key>\s*<string>)[^<]*(</string>)#$1$ENV{APP_NAME}$2#s; s#(<key>CFBundleName</key>\s*<string>)[^<]*(</string>)#$1$ENV{APP_NAME}$2#s' \
+            "$project_dir/ios/Runner/Info.plist"
+        rm -f "$project_dir/ios/Runner/Info.plist.bak"
+    fi
+
+    if [ -f "$project_dir/ios/Runner.xcodeproj/project.pbxproj" ]; then
+        BUNDLE_ID="$bundle_id" perl -i.bak -pe \
+            'if(/PRODUCT_BUNDLE_IDENTIFIER = /){ if(/\.RunnerTests;/){ s/PRODUCT_BUNDLE_IDENTIFIER = [^;]*;/PRODUCT_BUNDLE_IDENTIFIER = $ENV{BUNDLE_ID}.RunnerTests;/; } else { s/PRODUCT_BUNDLE_IDENTIFIER = [^;]*;/PRODUCT_BUNDLE_IDENTIFIER = $ENV{BUNDLE_ID};/; } }' \
+            "$project_dir/ios/Runner.xcodeproj/project.pbxproj"
+        rm -f "$project_dir/ios/Runner.xcodeproj/project.pbxproj.bak"
+    fi
+
+    if [ -f "$project_dir/macos/Runner/Configs/AppInfo.xcconfig" ]; then
+        sed -i.bak -E "s/^PRODUCT_BUNDLE_IDENTIFIER = .*/PRODUCT_BUNDLE_IDENTIFIER = $bundle_id_escaped/" \
+            "$project_dir/macos/Runner/Configs/AppInfo.xcconfig"
+        rm -f "$project_dir/macos/Runner/Configs/AppInfo.xcconfig.bak"
+    fi
+
+    if [ -f "$project_dir/linux/CMakeLists.txt" ]; then
+        sed -i.bak -E "s/set\(APPLICATION_ID \"[^\"]*\"\)/set(APPLICATION_ID \"$bundle_id_escaped\")/" \
+            "$project_dir/linux/CMakeLists.txt"
+        rm -f "$project_dir/linux/CMakeLists.txt.bak"
+    fi
+
+    if [ -f "$project_dir/windows/runner/Runner.rc" ]; then
+        sed -i.bak -E \
+            -e "s/VALUE \"CompanyName\", \"[^\"]*\"/VALUE \"CompanyName\", \"$company_name_escaped\"/" \
+            -e "s/VALUE \"FileDescription\", \"[^\"]*\"/VALUE \"FileDescription\", \"$app_name_escaped\"/" \
+            -e "s/VALUE \"ProductName\", \"[^\"]*\"/VALUE \"ProductName\", \"$app_name_escaped\"/" \
+            "$project_dir/windows/runner/Runner.rc"
+        rm -f "$project_dir/windows/runner/Runner.rc.bak"
+    fi
+
     return 0
+}
+
+ensure_project_icon() {
+    local project_dir="$1"
+    local project_root="$2"
+    local root_icon="$project_root/icon.png"
+    local engine_icon="$project_root/Engine/icon.png"
+
+    if [ -f "$project_dir/icon.png" ]; then
+        echo -e "${GREEN}使用项目图标: $project_dir/icon.png${NC}"
+        return 0
+    fi
+
+    if [ -f "$root_icon" ]; then
+        cp "$root_icon" "$project_dir/icon.png"
+        echo -e "${YELLOW}项目无 icon.png，已复制根目录图标${NC}"
+        return 0
+    fi
+
+    if [ -f "$engine_icon" ]; then
+        cp "$engine_icon" "$project_dir/icon.png"
+        echo -e "${YELLOW}项目无 icon.png，已复制 Engine/icon.png${NC}"
+        return 0
+    fi
+
+    echo -e "${YELLOW}警告: 未找到 icon.png，跳过图标同步${NC}"
+    return 1
+}
+
+generate_app_icons() {
+    local project_dir="$1"
+
+    if [ ! -f "$project_dir/icon.png" ]; then
+        echo -e "${YELLOW}跳过图标生成: 未找到 $project_dir/icon.png${NC}"
+        return 0
+    fi
+
+    if [ ! -f "$project_dir/pubspec.yaml" ] || ! grep -q "flutter_launcher_icons:" "$project_dir/pubspec.yaml"; then
+        echo -e "${YELLOW}跳过图标生成: pubspec 未配置 flutter_launcher_icons${NC}"
+        return 0
+    fi
+
+    echo -e "${YELLOW}正在生成应用图标...${NC}"
+    (
+        cd "$project_dir" || exit 1
+        flutter pub run flutter_launcher_icons:main
+    )
 }
