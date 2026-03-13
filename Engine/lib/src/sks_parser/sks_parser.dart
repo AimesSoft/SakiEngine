@@ -41,7 +41,10 @@ class SksParser {
         i++;
         continue;
       }
-      final parts = trimmedLine.split(' ');
+      final parts = trimmedLine
+          .split(RegExp(r'\s+'))
+          .where((s) => s.isNotEmpty)
+          .toList();
       final command = parts[0];
       switch (command) {
         case 'label':
@@ -548,7 +551,7 @@ class SksParser {
           break;
         case 'play':
           if (parts.length >= 3 && parts[1] == 'music') {
-            final musicFile = parts.sublist(2).join(' ');
+            final musicFile = parts.sublist(2).join(' ').trim();
             nodes.add(PlayMusicNode(musicFile));
           } else if (parts.length >= 3 && parts[1] == 'sound') {
             // play sound filename [loop]

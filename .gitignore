@@ -67,3 +67,4 @@ Engine/.flutter-plugins-dependencies
 
 # 拆分后的独立业务项目仓库（不纳入引擎主仓库）
 /Game/SoraNoUta/
+/.saki_launcher

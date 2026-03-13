@@ -972,6 +972,28 @@ class GameManager {
     }
   }
 
+  String _normalizeMusicFileName(String rawMusicFile) {
+    var musicFile = rawMusicFile.trim();
+    if ((musicFile.startsWith('"') && musicFile.endsWith('"')) ||
+        (musicFile.startsWith("'") && musicFile.endsWith("'"))) {
+      if (musicFile.length >= 2) {
+        musicFile = musicFile.substring(1, musicFile.length - 1).trim();
+      }
+    }
+    return musicFile;
+  }
+
+  String _buildMusicAssetPath(String rawMusicFile) {
+    var musicFile = _normalizeMusicFileName(rawMusicFile);
+    if (musicFile.isEmpty) {
+      return '';
+    }
+    if (!musicFile.contains('.')) {
+      musicFile = '$musicFile.mp3';
+    }
+    return 'Assets/music/$musicFile';
+  }
+
   /// 构建音乐区间列表
   /// 遍历整个脚本，找出所有的play music和stop music节点，创建音乐区间
   void _buildMusicRegions() {
@@ -983,6 +1005,14 @@ class GameManager {
       final node = _script.children[i];
 
       if (node is PlayMusicNode) {
+        final normalizedMusicFile = _normalizeMusicFileName(node.musicFile);
+        if (normalizedMusicFile.isEmpty) {
+          if (kDebugMode) {
+            print(
+                '[MusicRegion] 忽略空音乐名: raw="${node.musicFile}" at index $i');
+          }
+          continue;
+        }
         // 结束当前区间（如果有的话）
         if (currentRegion != null) {
           _musicRegions.add(currentRegion.copyWithEndIndex(i));
@@ -990,11 +1020,12 @@ class GameManager {
 
         // 开始新的音乐区间
         currentRegion = MusicRegion(
-          musicFile: node.musicFile,
+          musicFile: normalizedMusicFile,
           startScriptIndex: i,
         );
         if (kDebugMode) {
-          //print('[MusicRegion] 开始新音乐区间: ${node.musicFile} at index $i');
+          print(
+              '[MusicRegion] 开始新音乐区间: raw="${node.musicFile}" normalized="$normalizedMusicFile" at index $i');
         }
       } else if (node is StopMusicNode) {
         // 结束当前区间
@@ -1038,6 +1069,17 @@ class GameManager {
   /// 如果当前位置不在任何音乐区间内，则停止音乐
   Future<void> _checkMusicRegionAtCurrentIndex(
       {bool forceCheck = false}) async {
+    if (!forceCheck &&
+        _scriptIndex >= 0 &&
+        _scriptIndex < _script.children.length &&
+        _script.children[_scriptIndex] is PlayMusicNode) {
+      if (kDebugMode) {
+        print(
+            '[MusicRegion] 跳过区间触发播放：当前位置($_scriptIndex)是 PlayMusicNode，由节点执行阶段处理');
+      }
+      return;
+    }
+
     final currentRegion = _getMusicRegionForIndex(_scriptIndex);
     final stateRegion = _currentState.currentMusicRegion;
 
@@ -1059,11 +1101,15 @@ class GameManager {
         _currentState = _currentState.copyWith(currentMusicRegion: null);
       } else {
         // 当前位置在音乐区间内
-        String musicFile = currentRegion.musicFile;
-        if (!musicFile.contains('.')) {
-          musicFile = '$musicFile.mp3';
+        final fullMusicPath = _buildMusicAssetPath(currentRegion.musicFile);
+        if (fullMusicPath.isEmpty) {
+          if (kDebugMode) {
+            print(
+                '[MusicRegion] 当前位置($_scriptIndex)音乐名为空，跳过播放: region=$currentRegion');
+          }
+          _currentState = _currentState.copyWith(currentMusicRegion: null);
+          return;
         }
-        final fullMusicPath = 'Assets/music/$musicFile';
 
         // 检查是否需要开始播放或切换音乐
         if (stateRegion == null ||
@@ -1071,7 +1117,8 @@ class GameManager {
             !MusicManager().isPlayingMusic(fullMusicPath) ||
             forceCheck) {
           if (kDebugMode) {
-            //print('[MusicRegion] 当前位置($_scriptIndex)需要播放音乐: ${currentRegion.musicFile}');
+            print(
+                '[MusicRegion] 当前位置($_scriptIndex)需要播放音乐: regionMusic="${currentRegion.musicFile}", resolvedPath="$fullMusicPath", forceCheck=$forceCheck');
           }
 
           await MusicManager().playBackgroundMusic(
@@ -2361,14 +2408,21 @@ class GameManager {
         // 使用音乐区间系统处理音乐播放
         final musicRegion = _getMusicRegionForIndex(_scriptIndex);
         if (musicRegion != null) {
-          // 检查文件名是否已有扩展名，如果没有则尝试添加 .ogg 或 .mp3
-          String musicFile = node.musicFile;
-          if (!musicFile.contains('.')) {
-            // 尝试 .ogg 扩展名（优先）
-            musicFile = '$musicFile.mp3';
+          final fullMusicPath = _buildMusicAssetPath(node.musicFile);
+          if (fullMusicPath.isEmpty) {
+            if (kDebugMode) {
+              print(
+                  '[MusicRegion] PlayMusicNode音乐名为空，跳过播放: raw="${node.musicFile}" at index $_scriptIndex');
+            }
+            _scriptIndex++;
+            continue;
+          }
+          if (kDebugMode) {
+            print(
+                '[MusicRegion] PlayMusicNode触发播放: index=$_scriptIndex, raw="${node.musicFile}", regionMusic="${musicRegion.musicFile}", resolvedPath="$fullMusicPath"');
           }
           await MusicManager().playBackgroundMusic(
-            'Assets/music/$musicFile',
+            fullMusicPath,
             fadeTransition: true,
             fadeDuration: const Duration(milliseconds: 1000),
           );
