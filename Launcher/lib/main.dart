@@ -668,14 +668,14 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
                           setDefault = value;
                         });
                       },
-                    ),
+                  ),
                     if (message != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
                           message!,
-                          style: const TextStyle(
-                            color: Color(0xFF9A4E00),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
                             fontSize: 12,
                           ),
                         ),
@@ -824,6 +824,10 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
 
     try {
       if (_runMode == RunLaunchMode.systemTerminal) {
+        if (_runBuildMode != RunBuildMode.debug) {
+          _appendLog('系统终端模式暂不支持 Profile/Release 发布运行管线，请切换到内置控制台运行');
+          return;
+        }
         final launched = await _launchRunInSystemTerminal(
           game: game,
           gameDir: gameDir,
@@ -838,31 +842,41 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
         return;
       }
 
-      await _prepareProjectForExecution(game, generateIcons: false);
+      int runCode;
+      if (_runBuildMode == RunBuildMode.debug) {
+        await _prepareProjectForExecution(game, generateIcons: false);
 
-      final pubGetCode = await _runCommand(
-        executable: 'flutter',
-        arguments: const <String>['pub', 'get'],
-        workingDirectory: gameDir,
-      );
-      if (pubGetCode != 0) {
-        _appendLog('运行中止: flutter pub get 失败');
-        return;
+        final pubGetCode = await _runCommand(
+          executable: 'flutter',
+          arguments: const <String>['pub', 'get'],
+          workingDirectory: gameDir,
+        );
+        if (pubGetCode != 0) {
+          _appendLog('运行中止: flutter pub get 失败');
+          return;
+        }
+
+        await _prepareProjectForExecution(game, generateIcons: true);
+
+        runCode = await _runCommand(
+          executable: 'flutter',
+          arguments: <String>[
+            'run',
+            ...runModeArgs,
+            '-d',
+            runDevice,
+            '--dart-define=SAKI_GAME_PATH=$gameDir',
+          ],
+          workingDirectory: gameDir,
+        );
+      } else {
+        runCode = await _runWithReleaseAssetPipeline(
+          game: game,
+          gameDir: gameDir,
+          runDevice: runDevice,
+          runModeArgs: runModeArgs,
+        );
       }
-
-      await _prepareProjectForExecution(game, generateIcons: true);
-
-      final runCode = await _runCommand(
-        executable: 'flutter',
-        arguments: <String>[
-          'run',
-          ...runModeArgs,
-          '-d',
-          runDevice,
-          '--dart-define=SAKI_GAME_PATH=$gameDir',
-        ],
-        workingDirectory: gameDir,
-      );
       if (runCode != 0) {
         _appendLog('运行中止: flutter run 失败');
       }
@@ -886,6 +900,107 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
         await Future<void>.delayed(const Duration(milliseconds: 250));
         unawaited(_runSelectedGame());
       }
+    }
+  }
+
+  Future<int> _runWithReleaseAssetPipeline({
+    required String game,
+    required String gameDir,
+    required String runDevice,
+    required List<String> runModeArgs,
+  }) async {
+    final gameDirectory = Directory(gameDir);
+    final gamePubspec = File(_joinPath(gameDir, 'pubspec.yaml'));
+    final cacheDir = Directory(_joinPath(gameDir, '.saki_cache'));
+    final cacheBundle = File(
+      _joinPath(cacheDir.path, 'compiled_sks_bundle.g.dart'),
+    );
+    final engineLoader = File(
+      _joinPath(
+        _repoRoot.path,
+        'Engine/lib/src/sks_compiler/generated/compiled_sks_bundle.g.dart',
+      ),
+    );
+
+    if (!gameDirectory.existsSync() || !gamePubspec.existsSync()) {
+      throw _TaskFailure('运行失败: 无效项目目录 $game');
+    }
+
+    cacheDir.createSync(recursive: true);
+
+    final originalPubspec = await gamePubspec.readAsString();
+    final originalEngineLoader = engineLoader.existsSync()
+        ? await engineLoader.readAsString()
+        : _defaultGeneratedLoader;
+
+    _appendLog('非 Debug 运行启用发布资源管线（与发布构建一致）');
+
+    try {
+      await _prepareProjectForExecution(game, generateIcons: false);
+
+      final firstPubGet = await _runCommand(
+        executable: 'flutter',
+        arguments: const <String>['pub', 'get'],
+        workingDirectory: gameDir,
+      );
+      if (firstPubGet != 0) {
+        throw _TaskFailure('flutter pub get 失败');
+      }
+
+      final compileCode = await _runCommand(
+        executable: 'flutter',
+        arguments: <String>[
+          'pub',
+          'run',
+          '../../Engine/tool/sks_compiler.dart',
+          '--game-dir',
+          gameDir,
+          '--output',
+          cacheBundle.path,
+          '--game-name',
+          game,
+        ],
+        workingDirectory: gameDir,
+      );
+      if (compileCode != 0 || !cacheBundle.existsSync()) {
+        throw _TaskFailure('.sks 预编译失败');
+      }
+
+      await cacheBundle.copy(engineLoader.path);
+      final summary = await _prepareReleasePubspec(
+        gameDir: gameDirectory,
+        pubspecFile: gamePubspec,
+      );
+      _appendLog(
+        '发布运行资源清单已生成: ${summary.totalAssets} 项，图片/视频 ${summary.mediaAssets} 项',
+      );
+
+      final secondPubGet = await _runCommand(
+        executable: 'flutter',
+        arguments: const <String>['pub', 'get'],
+        workingDirectory: gameDir,
+      );
+      if (secondPubGet != 0) {
+        throw _TaskFailure('更新发布资源后 pub get 失败');
+      }
+
+      await _prepareProjectForExecution(game, generateIcons: true);
+
+      return await _runCommand(
+        executable: 'flutter',
+        arguments: <String>[
+          'run',
+          ...runModeArgs,
+          '-d',
+          runDevice,
+          '--dart-define=SAKI_GAME_PATH=$gameDir',
+        ],
+        workingDirectory: gameDir,
+      );
+    } finally {
+      await gamePubspec.writeAsString(originalPubspec);
+      await engineLoader.writeAsString(originalEngineLoader);
+      _appendLog('已恢复运行前临时修改（pubspec + 编译入口）');
     }
   }
 
@@ -1590,17 +1705,40 @@ endlocal
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: <Color>[
-              Color(0xFFE7F4F1),
-              Color(0xFFF7F4EA),
-              Color(0xFFEAF0FA),
-            ],
+            colors: isDark
+                ? <Color>[
+                    Color.alphaBlend(
+                      scheme.primary.withValues(alpha: 0.08),
+                      scheme.surface,
+                    ),
+                    scheme.surface,
+                    Color.alphaBlend(
+                      scheme.tertiary.withValues(alpha: 0.07),
+                      scheme.surface,
+                    ),
+                  ]
+                : <Color>[
+                    Color.alphaBlend(
+                      scheme.primary.withValues(alpha: 0.10),
+                      scheme.surface,
+                    ),
+                    Color.alphaBlend(
+                      scheme.secondary.withValues(alpha: 0.08),
+                      scheme.surface,
+                    ),
+                    Color.alphaBlend(
+                      scheme.tertiary.withValues(alpha: 0.10),
+                      scheme.surface,
+                    ),
+                  ],
           ),
         ),
         child: SafeArea(
@@ -1646,14 +1784,16 @@ endlocal
 
   Widget _buildHeader() {
     final engineIconFile = File(_joinPath(_repoRoot.path, 'Engine/icon.png'));
-    final primary = Theme.of(context).colorScheme.primary;
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primary = scheme.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.82),
+        color: scheme.surface.withValues(alpha: isDark ? 0.86 : 0.9),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: primary.withValues(alpha: 0.18),
+          color: scheme.outlineVariant.withValues(alpha: isDark ? 0.52 : 0.34),
         ),
       ),
       child: Row(
@@ -1674,9 +1814,9 @@ endlocal
                       color: primary,
                       borderRadius: BorderRadius.circular(11),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.rocket_launch_rounded,
-                      color: Colors.white,
+                      color: scheme.onPrimary,
                     ),
                   ),
           ),
@@ -1684,8 +1824,8 @@ endlocal
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const <Widget>[
-                Text(
+              children: <Widget>[
+                const Text(
                   'SakiEngine 开发启动器',
                   style: TextStyle(
                     fontSize: 24,
@@ -1696,7 +1836,7 @@ endlocal
                 SizedBox(height: 2),
                 Text(
                   '统一执行创建、运行与发布构建任务',
-                  style: TextStyle(color: Color(0xFF4E5E5A)),
+                  style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -1725,13 +1865,14 @@ endlocal
 
   Widget _buildControlPanel() {
     final defaultLabel = _defaultGame == null ? '未设置' : _defaultGame!;
-    final primary = Theme.of(context).colorScheme.primary;
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.88),
+        color: scheme.surface.withValues(alpha: isDark ? 0.88 : 0.92),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: primary.withValues(alpha: 0.15),
+          color: scheme.outlineVariant.withValues(alpha: isDark ? 0.48 : 0.3),
         ),
       ),
       child: ListView(
@@ -1744,7 +1885,7 @@ endlocal
           const SizedBox(height: 8),
           Text(
             _repoRoot.path,
-            style: const TextStyle(color: Color(0xFF53635F), fontSize: 12),
+            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
@@ -1971,9 +2112,12 @@ endlocal
             label: Text(_isRunTask ? '停止运行任务' : '停止当前任务'),
           ),
           const SizedBox(height: 10),
-          const Text(
+          Text(
             '说明: 启动器已覆盖 run.sh/build.sh 主要流程，可直接在此完成创建、运行、构建。',
-            style: TextStyle(fontSize: 12, color: Color(0xFF5A6A66)),
+            style: TextStyle(
+              fontSize: 12,
+              color: scheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -1981,26 +2125,38 @@ endlocal
   }
 
   Widget _buildLogPanel() {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final panelBackground = Color.alphaBlend(
+      (isDark ? Colors.black : scheme.primary).withValues(
+        alpha: isDark ? 0.22 : 0.06,
+      ),
+      scheme.surfaceContainerLow,
+    );
+    final panelBorder = scheme.outlineVariant.withValues(alpha: isDark ? 0.6 : 0.36);
+    final headerTextColor = scheme.onSurface;
+    final bodyTextColor = scheme.onSurface.withValues(alpha: isDark ? 0.92 : 0.95);
+
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF111418),
+        color: panelBackground,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF2A313A)),
+        border: Border.all(color: panelBorder),
       ),
       child: Column(
         children: <Widget>[
           Container(
             padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: Color(0xFF2A313A))),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: panelBorder)),
             ),
             child: Row(
               children: <Widget>[
-                const Expanded(
+                Expanded(
                   child: Text(
                     '终端输出',
                     style: TextStyle(
-                      color: Color(0xFFC9D1D9),
+                      color: headerTextColor,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -2031,8 +2187,8 @@ endlocal
                 itemBuilder: (context, index) {
                   return SelectableText.rich(
                     _buildLogLineSpan(_logs[index]),
-                    style: const TextStyle(
-                      color: Color(0xFFD3DEE8),
+                    style: TextStyle(
+                      color: bodyTextColor,
                       fontFamily: 'monospace',
                       fontSize: 12.5,
                       height: 1.35,
@@ -2062,6 +2218,9 @@ endlocal
   }
 
   TextSpan _buildLogLineSpan(String line) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final timeColor = scheme.outline.withValues(alpha: isDark ? 0.95 : 0.85);
     final timeMatch = RegExp(r'^\[\d{2}:\d{2}:\d{2}\]\s?').firstMatch(line);
     final children = <InlineSpan>[];
     var body = line;
@@ -2071,8 +2230,8 @@ endlocal
       children.add(
         TextSpan(
           text: prefix,
-          style: const TextStyle(
-            color: Color(0xFF7B8A98),
+          style: TextStyle(
+            color: timeColor,
             fontFamily: 'monospace',
             fontSize: 12.5,
             height: 1.35,
@@ -2087,8 +2246,10 @@ endlocal
   }
 
   TextStyle _resolveLogBodyStyle(String body) {
-    const base = TextStyle(
-      color: Color(0xFFD3DEE8),
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final base = TextStyle(
+      color: scheme.onSurface.withValues(alpha: isDark ? 0.92 : 0.95),
       fontFamily: 'monospace',
       fontSize: 12.5,
       height: 1.35,
@@ -2096,7 +2257,7 @@ endlocal
     final normalized = body.toLowerCase();
 
     if (body.startsWith('\$ ') || normalized.contains('flutter run')) {
-      return base.copyWith(color: const Color(0xFF7DD3FC));
+      return base.copyWith(color: scheme.primary);
     }
     if (body.startsWith('[stderr]') ||
         normalized.contains('error') ||
@@ -2104,17 +2265,17 @@ endlocal
         body.contains('失败') ||
         body.contains('错误') ||
         RegExp(r'退出码:\s*[1-9]\d*').hasMatch(body)) {
-      return base.copyWith(color: const Color(0xFFF87171));
+      return base.copyWith(color: scheme.error);
     }
     if (normalized.contains('warning') || body.contains('警告')) {
-      return base.copyWith(color: const Color(0xFFFBBF24));
+      return base.copyWith(color: scheme.tertiary);
     }
     if (body.contains('成功') ||
         body.contains('完成') ||
         body.contains('可用') ||
         body.contains('已复制') ||
         body.contains('退出码: 0')) {
-      return base.copyWith(color: const Color(0xFF86EFAC));
+      return base.copyWith(color: scheme.secondary);
     }
 
     return base;
