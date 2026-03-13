@@ -126,9 +126,12 @@ async function createNewProject() {
         
         // 创建项目模块
         await createProjectModule(projectRoot, projectDir, projectName, primaryColor);
-        
+
         // 创建 Flutter App 并写入引擎依赖
         await createFlutterAppProject(projectRoot, projectDir, projectName, bundleId);
+
+        // 安装项目级 CI 与构建脚本（尽量对齐 shell 版本）
+        installProjectCiIfPossible(projectRoot, projectDir);
         
         console.log();
         colorLog('✓ 项目创建完成！', 'green');
@@ -159,6 +162,72 @@ async function createNewProject() {
         
     } finally {
         rl.close();
+    }
+}
+
+/**
+ * 非交互模式创建项目（供启动器调用）
+ */
+async function createNewProjectNonInteractive({
+    projectName,
+    bundleId,
+    primaryColor = '137B8B',
+    setDefault = true,
+}) {
+    const projectRoot = path.dirname(__dirname);
+    const gameBaseDir = path.join(projectRoot, 'Game');
+
+    if (!validateProjectName(projectName)) {
+        throw new Error('项目名称无效，只允许字母、数字、下划线和连字符');
+    }
+    if (!validateBundleId(bundleId)) {
+        throw new Error('Bundle ID 格式无效，应为 com.company.app');
+    }
+    if (!validateHexColor(primaryColor)) {
+        throw new Error('主色调无效，应为 6 位十六进制颜色');
+    }
+
+    const cleanProjectName = projectName.trim();
+    const cleanBundleId = bundleId.trim();
+    const cleanColor = primaryColor.replace('#', '').trim();
+
+    const projectDir = path.join(gameBaseDir, cleanProjectName);
+    if (fs.existsSync(projectDir)) {
+        throw new Error(`项目已存在: ${cleanProjectName}`);
+    }
+
+    const rgbColor = hexToRgb(cleanColor);
+    colorLog(`创建项目: ${cleanProjectName}`, 'blue');
+    colorLog(`Bundle ID: ${cleanBundleId}`, 'blue');
+    colorLog(`主色调: #${cleanColor} (${rgbColor})`, 'blue');
+
+    await createProjectStructure(projectDir, cleanProjectName, cleanBundleId, cleanColor, rgbColor);
+    await createProjectModule(projectRoot, projectDir, cleanProjectName, cleanColor);
+    await createFlutterAppProject(projectRoot, projectDir, cleanProjectName, cleanBundleId);
+    installProjectCiIfPossible(projectRoot, projectDir);
+
+    if (setDefault) {
+        assetUtils.writeDefaultGame(projectRoot, cleanProjectName);
+        colorLog(`✓ 已设置默认项目: ${cleanProjectName}`, 'green');
+    }
+
+    colorLog(`✓ 项目创建完成: ${projectDir}`, 'green');
+    return cleanProjectName;
+}
+
+function installProjectCiIfPossible(projectRoot, projectDir) {
+    const installScript = path.join(projectRoot, 'scripts', 'install_project_ci.sh');
+    if (!fs.existsSync(installScript)) {
+        return;
+    }
+
+    try {
+        // Unix/macOS 优先用 bash 安装；Windows 若无 bash 会自动跳过
+        execSync(`bash "${installScript}" "${projectDir}" "${projectRoot}"`, {
+            stdio: 'inherit',
+        });
+    } catch (error) {
+        colorLog(`警告: 安装项目级 CI 失败，已跳过 (${error.message})`, 'yellow');
     }
 }
 
@@ -730,6 +799,7 @@ if (require.main === module) {
 
 module.exports = {
     createNewProject,
+    createNewProjectNonInteractive,
     validateProjectName,
     validateBundleId,
     validateHexColor,

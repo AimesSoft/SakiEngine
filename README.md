@@ -82,21 +82,34 @@ SakiEngine 是一个基于 Flutter 的现代化视觉小说游戏引擎，专为
 
 ##### 开发环境启动（推荐）
 
-```bash
-# macOS/Linux
-./run.sh
+克隆仓库后，在根目录执行以下单命令即可进入启动器：
 
-# 或 Node 版本（跨平台）
-node run.js
+```bash
+# macOS/Linux 启动器
+./saki.sh
+
+# Windows 启动器
+saki.bat
 ```
 
-**当前启动流程会自动：**
+启动器（`Launcher/`）当前已覆盖：
 
 - 检测您的操作系统（macOS/Linux/Windows）
 - 扫描可用的游戏项目
-- 让您选择默认游戏项目
-- 直接在 `Game/<项目>` 目录执行 `flutter pub get` 与 `flutter run`
-- 通过 `SAKI_GAME_PATH` 指向当前项目目录（不再拷贝资源到引擎）
+- GUI 创建新项目（替代 `scripts/create_new_project.sh` 交互）
+- 设置默认游戏项目（写入 `default_game.txt`）
+- 在程序内执行 `run.sh/build.sh` 对应的核心流程（含日志输出）
+- 运行模式可切换为 `内置控制台` / `系统终端`（系统终端模式更适合 `flutter run` 热重载）
+
+##### 兼容旧脚本入口
+
+```bash
+# 旧版 shell 启动方式（仍可用）
+./run.sh
+
+# Node 版本（跨平台）
+node run.js
+```
 
 ##### 手动方式（项目内直接运行）
 
@@ -141,7 +154,13 @@ flutter run -d macos --dart-define=SAKI_GAME_PATH="$PWD"
 
 #### Windows 用户注意事项
 
-Windows 用户需要使用以下方式之一来运行 shell 脚本：
+Windows 推荐直接使用：
+
+```bat
+saki.bat
+```
+
+如果需要继续使用 shell 脚本，可使用以下方式之一：
 
 1. **Git Bash**（推荐）
 
@@ -159,9 +178,12 @@ Windows 用户需要使用以下方式之一来运行 shell 脚本：
 
 ```
 SakiEngine/
+├── saki.sh             # Launcher 单入口（macOS/Linux）
+├── saki.bat            # Launcher 单入口（Windows）
 ├── run.sh              # 统一启动脚本（跨平台）
 ├── build.sh            # 发布构建脚本（支持交互选择项目/平台）
 ├── default_game.txt    # 默认游戏配置文件
+├── Launcher/           # SakiEngine 图形化启动器（Flutter 项目）
 ├── scripts/            # 工具脚本目录
 │   ├── select_game.sh       # 游戏项目选择器
 │   ├── create_new_project.sh # 新项目创建工具

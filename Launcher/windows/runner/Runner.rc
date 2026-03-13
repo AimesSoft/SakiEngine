@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.aimessoft" "\0"
-            VALUE "FileDescription", "SakiEngine" "\0"
+            VALUE "FileDescription", "SakiEngine 开发启动器" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "SakiEngine" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.sakiengine. All rights reserved." "\0"
-            VALUE "OriginalFilename", "SakiEngine.exe" "\0"
-            VALUE "ProductName", "SakiEngine" "\0"
+            VALUE "InternalName", "sakiengine_dev_launcher" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.aimessoft. All rights reserved." "\0"
+            VALUE "OriginalFilename", "sakiengine_dev_launcher.exe" "\0"
+            VALUE "ProductName", "SakiEngine 开发启动器" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
