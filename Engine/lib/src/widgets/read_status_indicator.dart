@@ -45,10 +45,14 @@ class ReadStatusIndicator extends StatelessWidget {
         ),
         child: Text(
           '已读',
+          maxLines: 1,
+          softWrap: false,
+          overflow: TextOverflow.clip,
           style: TextStyle(
             color: config.themeColors.surface,
             fontSize: 14.0 * textScale,
             fontWeight: FontWeight.bold,
+            decoration: TextDecoration.none,
           ),
         ),
       ),
