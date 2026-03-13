@@ -5,33 +5,157 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-void main() {
-  runApp(const SakiLauncherApp());
+enum RunBuildMode {
+  debug,
+  profile,
+  release,
+}
+
+class LauncherUiSettings {
+  final ThemeMode themeMode;
+  final Color seedColor;
+  final RunBuildMode defaultRunBuildMode;
+
+  const LauncherUiSettings({
+    required this.themeMode,
+    required this.seedColor,
+    required this.defaultRunBuildMode,
+  });
+
+  factory LauncherUiSettings.defaults() => const LauncherUiSettings(
+    themeMode: ThemeMode.system,
+    seedColor: Color(0xFF17685A),
+    defaultRunBuildMode: RunBuildMode.debug,
+  );
+
+  LauncherUiSettings copyWith({
+    ThemeMode? themeMode,
+    Color? seedColor,
+    RunBuildMode? defaultRunBuildMode,
+  }) {
+    return LauncherUiSettings(
+      themeMode: themeMode ?? this.themeMode,
+      seedColor: seedColor ?? this.seedColor,
+      defaultRunBuildMode: defaultRunBuildMode ?? this.defaultRunBuildMode,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'theme_mode': _themeModeToString(themeMode),
+      'seed_color': seedColor.toARGB32(),
+      'run_build_mode': defaultRunBuildMode.name,
+    };
+  }
+
+  static LauncherUiSettings fromJson(Map<String, dynamic> json) {
+    final defaults = LauncherUiSettings.defaults();
+    final mode = _themeModeFromString(json['theme_mode']?.toString());
+    final colorValue = json['seed_color'];
+    final runModeName = json['run_build_mode']?.toString();
+    RunBuildMode? runMode;
+    for (final modeItem in RunBuildMode.values) {
+      if (modeItem.name == runModeName) {
+        runMode = modeItem;
+        break;
+      }
+    }
+
+    return LauncherUiSettings(
+      themeMode: mode ?? defaults.themeMode,
+      seedColor: colorValue is int ? Color(colorValue) : defaults.seedColor,
+      defaultRunBuildMode: runMode ?? defaults.defaultRunBuildMode,
+    );
+  }
+
+  static String _themeModeToString(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.system:
+        return 'system';
+      case ThemeMode.light:
+        return 'light';
+      case ThemeMode.dark:
+        return 'dark';
+    }
+  }
+
+  static ThemeMode? _themeModeFromString(String? value) {
+    switch (value) {
+      case 'system':
+        return ThemeMode.system;
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      default:
+        return null;
+    }
+  }
+}
+
+final ValueNotifier<LauncherUiSettings> _settingsNotifier = ValueNotifier<LauncherUiSettings>(
+  LauncherUiSettings.defaults(),
+);
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  _settingsNotifier.value = await _loadLauncherUiSettings();
+  runApp(SakiLauncherApp(settingsNotifier: _settingsNotifier));
 }
 
 class SakiLauncherApp extends StatelessWidget {
-  const SakiLauncherApp({super.key});
+  const SakiLauncherApp({
+    required this.settingsNotifier,
+    super.key,
+  });
+
+  final ValueNotifier<LauncherUiSettings> settingsNotifier;
+
+  ThemeData _buildTheme({
+    required Brightness brightness,
+    required Color seedColor,
+  }) {
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: seedColor,
+        brightness: brightness,
+      ),
+      fontFamily: 'Noto Sans',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'SakiEngine 开发启动器',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF17685A),
-          brightness: Brightness.light,
-        ),
-        fontFamily: 'Noto Sans',
-      ),
-      home: const LauncherPage(),
+    return ValueListenableBuilder<LauncherUiSettings>(
+      valueListenable: settingsNotifier,
+      builder: (context, settings, _) {
+        return MaterialApp(
+          title: 'SakiEngine 开发启动器',
+          debugShowCheckedModeBanner: false,
+          themeMode: settings.themeMode,
+          theme: _buildTheme(
+            brightness: Brightness.light,
+            seedColor: settings.seedColor,
+          ),
+          darkTheme: _buildTheme(
+            brightness: Brightness.dark,
+            seedColor: settings.seedColor,
+          ),
+          home: LauncherPage(settingsNotifier: settingsNotifier),
+        );
+      },
     );
   }
 }
 
 class LauncherPage extends StatefulWidget {
-  const LauncherPage({super.key});
+  const LauncherPage({
+    required this.settingsNotifier,
+    super.key,
+  });
+
+  final ValueNotifier<LauncherUiSettings> settingsNotifier;
 
   @override
   State<LauncherPage> createState() => _LauncherPageState();
@@ -60,6 +184,14 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
 }
 ''';
 
+  static const List<_SeedChoice> _seedChoices = <_SeedChoice>[
+    _SeedChoice('引擎青绿', Color(0xFF17685A)),
+    _SeedChoice('深海蓝', Color(0xFF0E5A8A)),
+    _SeedChoice('琥珀橙', Color(0xFF9A5A00)),
+    _SeedChoice('石墨灰', Color(0xFF455A64)),
+    _SeedChoice('绯红', Color(0xFF9F2A3F)),
+  ];
+
   late final Directory _repoRoot;
 
   final List<String> _gameProjects = <String>[];
@@ -70,9 +202,11 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
   String? _defaultGame;
   String _runTarget = 'web';
   RunLaunchMode _runMode = RunLaunchMode.embedded;
+  RunBuildMode _runBuildMode = RunBuildMode.debug;
   String _buildTarget = 'web';
   bool _busy = false;
   bool _isRunTask = false;
+  bool _pendingSafeRestart = false;
   Process? _activeProcess;
 
   @override
@@ -81,6 +215,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     _repoRoot = _discoverRepoRoot();
     _runTarget = _recommendedRunTarget();
     _buildTarget = _recommendedBuildTarget();
+    _runBuildMode = widget.settingsNotifier.value.defaultRunBuildMode;
     if (!_buildTargets.contains(_buildTarget)) {
       _buildTarget = _buildTargets.first;
     }
@@ -185,6 +320,39 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     }
   }
 
+  String _runBuildModeLabel(RunBuildMode mode) {
+    switch (mode) {
+      case RunBuildMode.debug:
+        return 'Debug';
+      case RunBuildMode.profile:
+        return 'Profile';
+      case RunBuildMode.release:
+        return 'Release';
+    }
+  }
+
+  List<String> _runBuildModeArgs(RunBuildMode mode) {
+    switch (mode) {
+      case RunBuildMode.debug:
+        return const <String>[];
+      case RunBuildMode.profile:
+        return const <String>['--profile'];
+      case RunBuildMode.release:
+        return const <String>['--release'];
+    }
+  }
+
+  String _runBuildModeFlag(RunBuildMode mode) {
+    switch (mode) {
+      case RunBuildMode.debug:
+        return '';
+      case RunBuildMode.profile:
+        return '--profile';
+      case RunBuildMode.release:
+        return '--release';
+    }
+  }
+
   Future<void> _checkToolchain() async {
     final flutterReady = await _isCommandAvailable('flutter');
     if (flutterReady) {
@@ -199,6 +367,134 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     } else {
       _appendLog('环境检测警告: 未检测到 node，项目准备与创建会失败');
     }
+  }
+
+  String _themeModeLabel(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.system:
+        return '跟随系统';
+      case ThemeMode.light:
+        return '浅色';
+      case ThemeMode.dark:
+        return '深色';
+    }
+  }
+
+  Future<void> _saveSettings(LauncherUiSettings settings) async {
+    widget.settingsNotifier.value = settings;
+    await _saveLauncherUiSettings(settings);
+  }
+
+  Future<void> _showSettingsDialog() async {
+    final current = widget.settingsNotifier.value;
+    var selectedThemeMode = current.themeMode;
+    var selectedSeedColor = current.seedColor;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('启动器设置'),
+              content: SizedBox(
+                width: 430,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    DropdownButtonFormField<ThemeMode>(
+                      initialValue: selectedThemeMode,
+                      decoration: const InputDecoration(
+                        labelText: '主题模式',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: ThemeMode.values
+                          .map(
+                            (mode) => DropdownMenuItem<ThemeMode>(
+                              value: mode,
+                              child: Text(_themeModeLabel(mode)),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) {
+                          return;
+                        }
+                        setDialogState(() {
+                          selectedThemeMode = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      '主题色调',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _seedChoices.map((choice) {
+                        final selected =
+                            choice.color.toARGB32() == selectedSeedColor.toARGB32();
+                        return ChoiceChip(
+                          label: Text(choice.label),
+                          selected: selected,
+                          selectedColor: choice.color.withValues(alpha: 0.22),
+                          side: BorderSide(
+                            color: selected
+                                ? choice.color
+                                : Theme.of(context).dividerColor,
+                          ),
+                          avatar: CircleAvatar(
+                            radius: 8,
+                            backgroundColor: choice.color,
+                          ),
+                          onSelected: (_) {
+                            setDialogState(() {
+                              selectedSeedColor = choice.color;
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final next = current.copyWith(
+                      themeMode: selectedThemeMode,
+                      seedColor: selectedSeedColor,
+                    );
+                    await _saveSettings(next);
+                    if (!mounted) {
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop();
+                    final hex =
+                        (selectedSeedColor.toARGB32() & 0xFFFFFF)
+                            .toRadixString(16)
+                            .padLeft(6, '0')
+                            .toUpperCase();
+                    _appendLog(
+                      '设置已更新: 主题=${_themeModeLabel(selectedThemeMode)}, 色调=#$hex',
+                    );
+                  },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _refreshProjects() async {
@@ -516,13 +812,14 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
 
     final gameDir = _joinPath(_joinPath(_repoRoot.path, 'Game'), game);
     final runDevice = _runTarget == 'web' ? 'chrome' : _runTarget;
+    final runModeArgs = _runBuildModeArgs(_runBuildMode);
 
     setState(() {
       _busy = true;
       _isRunTask = true;
     });
     _appendLog(
-      '开始运行游戏: $game (target=$runDevice, mode=${_runModeLabel(_runMode)})',
+      '开始运行游戏: $game (target=$runDevice, launch=${_runModeLabel(_runMode)}, build=${_runBuildModeLabel(_runBuildMode)})',
     );
 
     try {
@@ -531,6 +828,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
           game: game,
           gameDir: gameDir,
           runDevice: runDevice,
+          runBuildMode: _runBuildMode,
         );
         if (launched) {
           _appendLog('已在系统终端启动运行任务，可在终端中使用 r/R/q');
@@ -558,6 +856,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
         executable: 'flutter',
         arguments: <String>[
           'run',
+          ...runModeArgs,
           '-d',
           runDevice,
           '--dart-define=SAKI_GAME_PATH=$gameDir',
@@ -572,6 +871,8 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     } catch (e) {
       _appendLog('运行异常: $e');
     } finally {
+      final shouldSafeRestart = _pendingSafeRestart;
+      _pendingSafeRestart = false;
       if (mounted) {
         setState(() {
           _busy = false;
@@ -580,6 +881,11 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
         });
       }
       _appendLog('运行任务结束');
+      if (shouldSafeRestart && mounted) {
+        _appendLog('开始安全重启运行任务...');
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        unawaited(_runSelectedGame());
+      }
     }
   }
 
@@ -888,6 +1194,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     required String game,
     required String gameDir,
     required String runDevice,
+    required RunBuildMode runBuildMode,
   }) async {
     final scriptDir = Directory(_joinPath(_repoRoot.path, '.saki_launcher'));
     scriptDir.createSync(recursive: true);
@@ -900,6 +1207,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
           game: game,
           gameDir: gameDir,
           runDevice: runDevice,
+          runBuildMode: runBuildMode,
         ),
       );
       final code = await _runDetachedCommand(
@@ -917,7 +1225,12 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
 
     final scriptFile = File(_joinPath(scriptDir.path, 'run_$ts.command'));
     await scriptFile.writeAsString(
-      _buildPosixRunScript(game: game, gameDir: gameDir, runDevice: runDevice),
+      _buildPosixRunScript(
+        game: game,
+        gameDir: gameDir,
+        runDevice: runDevice,
+        runBuildMode: runBuildMode,
+      ),
     );
 
     final chmod = await _runCommand(
@@ -969,6 +1282,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     required String game,
     required String gameDir,
     required String runDevice,
+    required RunBuildMode runBuildMode,
   }) {
     final repoEsc = _shellEscape(_repoRoot.path);
     final gameEsc = _shellEscape(game);
@@ -978,6 +1292,8 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     );
     final deviceEsc = _shellEscape(runDevice);
     final defineEsc = _shellEscape('--dart-define=SAKI_GAME_PATH=$gameDir');
+    final modeFlag = _runBuildModeFlag(runBuildMode);
+    final modePart = modeFlag.isEmpty ? '' : '${_shellEscape(modeFlag)} ';
 
     return '''#!/usr/bin/env bash
 set -euo pipefail
@@ -991,7 +1307,7 @@ node $bridgeEsc prepare-project --game $gameEsc --generate-icons
 echo ""
 echo "启动 Flutter 运行（支持 r/R/q 热更新命令）..."
 set +e
-flutter run -d $deviceEsc $defineEsc
+flutter run ${modePart}-d $deviceEsc $defineEsc
 status=\$?
 set -e
 
@@ -1006,12 +1322,15 @@ exit \$status
     required String game,
     required String gameDir,
     required String runDevice,
+    required RunBuildMode runBuildMode,
   }) {
     final repoPath = _toWindowsPath(_repoRoot.path);
     final gamePath = _toWindowsPath(gameDir);
     final bridgeScript = _toWindowsPath(
       _joinPath(_repoRoot.path, 'scripts/launcher-bridge.js'),
     );
+    final modeFlag = _runBuildModeFlag(runBuildMode);
+    final modePart = modeFlag.isEmpty ? '' : '$modeFlag ';
 
     return '''@echo off
 setlocal
@@ -1033,7 +1352,7 @@ if errorlevel 1 goto end
 
 echo.
 echo 启动 Flutter 运行（支持 r/R/q 热更新命令）...
-flutter run -d $runDevice "--dart-define=SAKI_GAME_PATH=$gamePath"
+flutter run ${modePart}-d $runDevice "--dart-define=SAKI_GAME_PATH=$gamePath"
 
 :end
 echo.
@@ -1133,6 +1452,26 @@ endlocal
       _appendLog('已发送运行指令: $label');
     } catch (e) {
       _appendLog('发送运行指令失败: $e');
+    }
+  }
+
+  Future<void> _requestSafeRestart() async {
+    final process = _activeProcess;
+    if (process == null || !_isRunTask) {
+      _appendLog('没有可重启的运行进程');
+      return;
+    }
+    if (_runMode != RunLaunchMode.embedded) {
+      _appendLog('系统终端模式请在终端内手动重启');
+      return;
+    }
+
+    _pendingSafeRestart = true;
+    _appendLog('已请求安全重启：将停止当前运行并自动重新启动（规避原生插件热重启崩溃）');
+    await _sendRunControl('q', '退出运行');
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (identical(process, _activeProcess)) {
+      await _stopActiveTask();
     }
   }
 
@@ -1290,13 +1629,14 @@ endlocal
 
   Widget _buildHeader() {
     final engineIconFile = File(_joinPath(_repoRoot.path, 'Engine/icon.png'));
+    final primary = Theme.of(context).colorScheme.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.82),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: const Color(0xFF17685A).withValues(alpha: 0.18),
+          color: primary.withValues(alpha: 0.18),
         ),
       ),
       child: Row(
@@ -1314,7 +1654,7 @@ endlocal
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF17685A),
+                      color: primary,
                       borderRadius: BorderRadius.circular(11),
                     ),
                     child: const Icon(
@@ -1344,6 +1684,11 @@ endlocal
               ],
             ),
           ),
+          IconButton(
+            onPressed: _showSettingsDialog,
+            tooltip: '设置',
+            icon: const Icon(Icons.tune_rounded),
+          ),
           if (_busy)
             const Row(
               children: <Widget>[
@@ -1363,12 +1708,13 @@ endlocal
 
   Widget _buildControlPanel() {
     final defaultLabel = _defaultGame == null ? '未设置' : _defaultGame!;
+    final primary = Theme.of(context).colorScheme.primary;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: const Color(0xFF17685A).withValues(alpha: 0.15),
+          color: primary.withValues(alpha: 0.15),
         ),
       ),
       child: ListView(
@@ -1491,6 +1837,36 @@ endlocal
                   },
           ),
           const SizedBox(height: 8),
+          DropdownButtonFormField<RunBuildMode>(
+            initialValue: _runBuildMode,
+            decoration: const InputDecoration(
+              labelText: '运行配置',
+              border: OutlineInputBorder(),
+            ),
+            items: RunBuildMode.values
+                .map(
+                  (mode) => DropdownMenuItem<RunBuildMode>(
+                    value: mode,
+                    child: Text(_runBuildModeLabel(mode)),
+                  ),
+                )
+                .toList(),
+            onChanged: _busy
+                ? null
+                : (value) async {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      _runBuildMode = value;
+                    });
+                    final next = widget.settingsNotifier.value.copyWith(
+                      defaultRunBuildMode: value,
+                    );
+                    await _saveSettings(next);
+                  },
+          ),
+          const SizedBox(height: 8),
           FilledButton.icon(
             onPressed: _busy || _selectedGame == null ? null : _runSelectedGame,
             icon: const Icon(Icons.play_arrow_rounded),
@@ -1505,16 +1881,18 @@ endlocal
               runSpacing: 8,
               children: <Widget>[
                 OutlinedButton(
-                  onPressed: () {
-                    unawaited(_sendRunControl('r', '热重载'));
-                  },
+                  onPressed: _runBuildMode == RunBuildMode.debug
+                      ? () {
+                          unawaited(_sendRunControl('r', '热重载'));
+                        }
+                      : null,
                   child: const Text('热重载 r'),
                 ),
                 OutlinedButton(
                   onPressed: () {
-                    unawaited(_sendRunControl('R', '热重启'));
+                    unawaited(_requestSafeRestart());
                   },
-                  child: const Text('热重启 R'),
+                  child: const Text('安全重启'),
                 ),
                 OutlinedButton(
                   onPressed: () {
@@ -1715,6 +2093,52 @@ endlocal
     }
 
     return base;
+  }
+}
+
+class _SeedChoice {
+  final String label;
+  final Color color;
+
+  const _SeedChoice(this.label, this.color);
+}
+
+String _launcherSettingsFilePath() {
+  final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? '.';
+  return '$home/.sakiengine_launcher_settings.json';
+}
+
+Future<LauncherUiSettings> _loadLauncherUiSettings() async {
+  final file = File(_launcherSettingsFilePath());
+  if (!file.existsSync()) {
+    return LauncherUiSettings.defaults();
+  }
+
+  try {
+    final raw = await file.readAsString();
+    final jsonMap = jsonDecode(raw);
+    if (jsonMap is Map<String, dynamic>) {
+      return LauncherUiSettings.fromJson(jsonMap);
+    }
+    if (jsonMap is Map) {
+      return LauncherUiSettings.fromJson(
+        jsonMap.map((key, value) => MapEntry('$key', value)),
+      );
+    }
+  } catch (_) {
+    // ignore and fallback to defaults.
+  }
+  return LauncherUiSettings.defaults();
+}
+
+Future<void> _saveLauncherUiSettings(LauncherUiSettings settings) async {
+  final file = File(_launcherSettingsFilePath());
+  try {
+    await file.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(settings.toJson()),
+    );
+  } catch (_) {
+    // ignore write failure; runtime settings still applied in memory.
   }
 }
 
