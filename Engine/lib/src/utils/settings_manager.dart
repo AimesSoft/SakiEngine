@@ -112,6 +112,8 @@ class SettingsManager extends ChangeNotifier {
     return _dataManager.typewriterCharsPerSecond;
   }
 
+  double get currentTypewriterCharsPerSecond => _dataManager.typewriterCharsPerSecond;
+
   Future<void> setTypewriterCharsPerSecond(double charsPerSecond) async {
     await init();
     await _dataManager.setTypewriterCharsPerSecond(charsPerSecond, _projectName!);
@@ -123,6 +125,8 @@ class SettingsManager extends ChangeNotifier {
     await init();
     return _dataManager.skipPunctuationDelay;
   }
+
+  bool get currentSkipPunctuationDelay => _dataManager.skipPunctuationDelay;
 
   Future<void> setSkipPunctuationDelay(bool skip) async {
     await init();

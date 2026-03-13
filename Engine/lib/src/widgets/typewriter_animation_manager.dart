@@ -1,4 +1,4 @@
-import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/utils/settings_manager.dart';
 import 'package:sakiengine/src/utils/rich_text_parser.dart';
@@ -22,7 +22,11 @@ class TypewriterAnimationManager extends ChangeNotifier {
   
   // 动画控制
   AnimationController? _animationController;
-  Timer? _typeTimer;
+  bool _isInitialized = false;
+  Duration _lastElapsed = Duration.zero;
+  int _accumulatedMs = 0;
+  int _pendingWaitMs = 0;
+  int _pendingCharDelayMs = 0;
   
   // 配置参数 - 简化为两个参数
   double _charsPerSecond = 50.0; // 每秒字符数
@@ -31,6 +35,8 @@ class TypewriterAnimationManager extends ChangeNotifier {
   
   // 静态变量用于全局通知
   static final List<TypewriterAnimationManager> _instances = [];
+  static const int _frameGapLogThresholdMs = 800;
+  static const int _waitSegmentLogThresholdMs = 1000;
   
   // Getters
   String get displayedText => _displayedText;
@@ -60,11 +66,210 @@ class TypewriterAnimationManager extends ChangeNotifier {
   }
 
   void initialize(TickerProvider vsync) {
+    if (_isInitialized) {
+      return;
+    }
+
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 16), // 60 FPS
+      duration: const Duration(hours: 24),
       vsync: vsync,
-    );
+    )..addListener(_onAnimationTick);
+
+    // 先同步读取当前设置，避免startTyping先于异步设置加载导致首句速度错误
+    final settings = SettingsManager();
+    _charsPerSecond = settings.currentTypewriterCharsPerSecond;
+    _skipPunctuation = settings.currentSkipPunctuationDelay;
+
+    _isInitialized = true;
     _loadSettings();
+  }
+
+  void _debugLog(String message) {
+    if (!kDebugMode) {
+      return;
+    }
+    // 允许在debug/profile中看到日志，便于追踪现场卡顿
+    debugPrint('[TypewriterAnimationManager] $message');
+  }
+
+  void _onAnimationTick() {
+    if (_state != TypewriterState.typing) {
+      return;
+    }
+
+    final elapsed = _animationController?.lastElapsedDuration;
+    if (elapsed == null) {
+      return;
+    }
+
+    if (_lastElapsed == Duration.zero) {
+      _lastElapsed = elapsed;
+      return;
+    }
+
+    final delta = elapsed - _lastElapsed;
+    _lastElapsed = elapsed;
+    final deltaMs = delta.inMilliseconds;
+
+    if (deltaMs <= 0) {
+      return;
+    }
+
+    if (deltaMs >= _frameGapLogThresholdMs) {
+      _debugLog(
+        'frame gap detected: delta=${deltaMs}ms, '
+        'progress=$_currentCharIndex/${_cleanedText.length}, '
+        'segment=$_currentSegmentIndex/${_textSegments.length}',
+      );
+    }
+
+    _accumulatedMs += deltaMs;
+    _advanceTypingWithBudget();
+  }
+
+  void _startFrameLoop() {
+    _accumulatedMs = 0;
+    _pendingWaitMs = 0;
+    _pendingCharDelayMs = 0;
+    _lastElapsed = Duration.zero;
+    _animationController?.stop();
+    _animationController?.reset();
+    _animationController?.repeat();
+  }
+
+  void _stopFrameLoop() {
+    _animationController?.stop();
+    _lastElapsed = Duration.zero;
+    _accumulatedMs = 0;
+    _pendingWaitMs = 0;
+    _pendingCharDelayMs = 0;
+  }
+
+  void _advanceTypingWithBudget() {
+    bool hasVisualUpdate = false;
+    int guard = 0;
+
+    while (_state == TypewriterState.typing && guard < 10000) {
+      guard++;
+
+      if (_currentSegmentIndex >= _textSegments.length) {
+        _completeTyping();
+        return;
+      }
+
+      final currentSegment = _textSegments[_currentSegmentIndex];
+
+      // 等待段：消耗时间预算，不更新可见文本
+      if (currentSegment.waitSeconds != null && currentSegment.waitSeconds! > 0) {
+        if (_pendingWaitMs <= 0) {
+          _pendingWaitMs = (currentSegment.waitSeconds! * 1000).round();
+          if (_pendingWaitMs >= _waitSegmentLogThresholdMs) {
+            _debugLog(
+              'wait segment detected: wait=${_pendingWaitMs}ms, '
+              'segment=$_currentSegmentIndex',
+            );
+          }
+        }
+
+        if (_accumulatedMs <= 0) {
+          break;
+        }
+
+        if (_accumulatedMs < _pendingWaitMs) {
+          _pendingWaitMs -= _accumulatedMs;
+          _accumulatedMs = 0;
+          break;
+        }
+
+        _accumulatedMs -= _pendingWaitMs;
+        _pendingWaitMs = 0;
+        _currentSegmentIndex++;
+        _currentSegmentCharIndex = 0;
+        continue;
+      }
+
+      // 非等待段时清空等待预算
+      _pendingWaitMs = 0;
+
+      if (currentSegment.isInstantDisplay) {
+        final remainingChars = currentSegment.text.length - _currentSegmentCharIndex;
+        if (remainingChars > 0) {
+          _currentSegmentCharIndex = currentSegment.text.length;
+          _currentCharIndex += remainingChars;
+          if (_currentCharIndex > _cleanedText.length) {
+            _currentCharIndex = _cleanedText.length;
+          }
+          _displayedText = _cleanedText.substring(0, _currentCharIndex);
+          hasVisualUpdate = true;
+        }
+
+        if (_currentCharIndex >= _cleanedText.length) {
+          _completeTyping();
+          return;
+        }
+
+        _currentSegmentIndex++;
+        _currentSegmentCharIndex = 0;
+        _pendingCharDelayMs = 0;
+        continue;
+      }
+
+      // 当前段已经打完，切到下一段
+      if (_currentSegmentCharIndex >= currentSegment.text.length) {
+        _currentSegmentIndex++;
+        _currentSegmentCharIndex = 0;
+        _pendingCharDelayMs = 0;
+        continue;
+      }
+
+      // 先消耗下一字符前的延迟
+      if (_pendingCharDelayMs > 0) {
+        if (_accumulatedMs <= 0) {
+          break;
+        }
+
+        if (_accumulatedMs < _pendingCharDelayMs) {
+          _pendingCharDelayMs -= _accumulatedMs;
+          _accumulatedMs = 0;
+          break;
+        }
+
+        _accumulatedMs -= _pendingCharDelayMs;
+        _pendingCharDelayMs = 0;
+      }
+
+      // 延迟已满足，显示一个新字符
+      final currentChar = currentSegment.text[_currentSegmentCharIndex];
+      _currentSegmentCharIndex++;
+      _currentCharIndex++;
+      if (_currentCharIndex > _cleanedText.length) {
+        _currentCharIndex = _cleanedText.length;
+      }
+      _displayedText = _cleanedText.substring(0, _currentCharIndex);
+      hasVisualUpdate = true;
+
+      if (_currentCharIndex >= _cleanedText.length) {
+        _completeTyping();
+        return;
+      }
+
+      _pendingCharDelayMs = _getCharDelay(currentChar);
+      if (_accumulatedMs <= 0 && _pendingCharDelayMs > 0) {
+        break;
+      }
+    }
+
+    if (guard >= 10000) {
+      _debugLog(
+        'typing guard reached, force break: '
+        'progress=$_currentCharIndex/${_cleanedText.length}, '
+        'segment=$_currentSegmentIndex/${_textSegments.length}',
+      );
+    }
+
+    if (hasVisualUpdate && _state == TypewriterState.typing) {
+      notifyListeners();
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -109,12 +314,19 @@ class TypewriterAnimationManager extends ChangeNotifier {
     _currentSegmentIndex = 0;
     _currentSegmentCharIndex = 0;
     _state = TypewriterState.typing;
+
+    _debugLog(
+      'start typing: length=${_cleanedText.length}, segments=${_textSegments.length}, '
+      'charsPerSecond=${_charsPerSecond.toStringAsFixed(1)}, '
+      'skipPunctuation=$_skipPunctuation',
+    );
     
     // 快进模式下直接显示完整文本
     if (_fastForwardMode) {
       _displayedText = _cleanedText;
       _currentCharIndex = _cleanedText.length;
       _state = TypewriterState.completed;
+      _stopFrameLoop();
       notifyListeners();
       return;
     }
@@ -124,88 +336,14 @@ class TypewriterAnimationManager extends ChangeNotifier {
       _displayedText = _cleanedText;
       _currentCharIndex = _cleanedText.length;
       _state = TypewriterState.completed;
+      _stopFrameLoop();
       notifyListeners();
-      return;
-    }
-    
-    _startTypewriterAnimation();
-    notifyListeners();
-  }
-
-  void _startTypewriterAnimation() {
-    _typeTimer?.cancel();
-    
-    if (_currentSegmentIndex >= _textSegments.length) {
-      _completeTyping();
-      return;
-    }
-    
-    final currentSegment = _textSegments[_currentSegmentIndex];
-    
-    // 如果是等待段
-    if (currentSegment.waitSeconds != null && currentSegment.waitSeconds! > 0) {
-      final waitMs = (currentSegment.waitSeconds! * 1000).round();
-      _typeTimer = Timer(Duration(milliseconds: waitMs), () {
-        if (_state != TypewriterState.typing) return;
-        _currentSegmentIndex++;
-        _currentSegmentCharIndex = 0;
-        _startTypewriterAnimation();
-      });
-      return;
-    }
-    
-    // 检查是否是瞬间显示的段落
-    if (currentSegment.isInstantDisplay) {
-      // 瞬间显示整个段落
-      _currentSegmentCharIndex = currentSegment.text.length;
-      _currentCharIndex += currentSegment.text.length;
-      _displayedText = _cleanedText.substring(0, _currentCharIndex);
-      
-      if (_currentCharIndex >= _cleanedText.length) {
-        _completeTyping();
-        notifyListeners();
-        return;
-      }
-      
-      // 立即进入下一个段落
-      _currentSegmentIndex++;
-      _currentSegmentCharIndex = 0;
-      notifyListeners();
-      
-      // 继续处理下一个段落，不等待
-      _startTypewriterAnimation();
-      return;
-    }
-    
-    // 普通文本段
-    if (_currentSegmentCharIndex >= currentSegment.text.length) {
-      _currentSegmentIndex++;
-      _currentSegmentCharIndex = 0;
-      _startTypewriterAnimation();
       return;
     }
 
-    final currentChar = currentSegment.text[_currentSegmentCharIndex];
-    
-    _currentSegmentCharIndex++;
-    _currentCharIndex++;
-    _displayedText = _cleanedText.substring(0, _currentCharIndex);
-    
-    if (_currentCharIndex >= _cleanedText.length) {
-      _completeTyping();
-      notifyListeners();
-      return;
-    }
-    
-    // 显示字符后，检查是否需要为标点符号停顿
-    final delay = _getCharDelay(currentChar);
-    
-    _typeTimer = Timer(Duration(milliseconds: delay), () {
-      if (_state != TypewriterState.typing) return;
-      _startTypewriterAnimation();
-    });
-    
-    notifyListeners();
+    _startFrameLoop();
+    // 先跑一轮无预算推进，让首字符立即出现
+    _advanceTypingWithBudget();
   }
 
   int _getCharDelay(String char) {
@@ -256,7 +394,8 @@ class TypewriterAnimationManager extends ChangeNotifier {
     _state = TypewriterState.completed;
     _displayedText = _cleanedText;
     _currentCharIndex = _cleanedText.length;
-    _typeTimer?.cancel();
+    _stopFrameLoop();
+    _debugLog('typing completed: length=${_cleanedText.length}');
     notifyListeners();
   }
 
@@ -266,12 +405,13 @@ class TypewriterAnimationManager extends ChangeNotifier {
     _state = TypewriterState.skipped;
     _displayedText = _cleanedText;
     _currentCharIndex = _cleanedText.length;
-    _typeTimer?.cancel();
+    _stopFrameLoop();
+    _debugLog('typing skipped at progress=$_currentCharIndex/${_cleanedText.length}');
     notifyListeners();
   }
 
   void reset() {
-    _typeTimer?.cancel();
+    _stopFrameLoop();
     _originalText = '';
     _cleanedText = '';
     _displayedText = '';
@@ -287,8 +427,10 @@ class TypewriterAnimationManager extends ChangeNotifier {
   void dispose() {
     // 从静态列表中移除实例
     _instances.remove(this);
-    _typeTimer?.cancel();
+    _stopFrameLoop();
+    _animationController?.removeListener(_onAnimationTick);
     _animationController?.dispose();
+    _isInitialized = false;
     super.dispose();
   }
 }
@@ -318,6 +460,7 @@ class _TypewriterTextState extends State<TypewriterText>
     with TickerProviderStateMixin {
   late TypewriterAnimationManager _typewriterController;
   bool _isExternalController = false;
+  bool _rebuildScheduled = false;
 
   @override
   void initState() {
@@ -331,7 +474,9 @@ class _TypewriterTextState extends State<TypewriterText>
       _isExternalController = false;
     }
     
-    _typewriterController.initialize(this);
+    if (!_isExternalController) {
+      _typewriterController.initialize(this);
+    }
     _typewriterController.addListener(_onTypewriterStateChanged);
     
     if (widget.autoStart) {
@@ -347,9 +492,27 @@ class _TypewriterTextState extends State<TypewriterText>
     
     if (widget.text != oldWidget.text) {
       if (widget.autoStart) {
-        _typewriterController.startTyping(widget.text);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _typewriterController.startTyping(widget.text);
+          }
+        });
       }
     }
+  }
+
+  void _scheduleRebuild() {
+    if (!mounted || _rebuildScheduled) {
+      return;
+    }
+
+    _rebuildScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _rebuildScheduled = false;
+      if (mounted) {
+        setState(() {}); // 更新UI
+      }
+    });
   }
 
   void _onTypewriterStateChanged() {
@@ -357,12 +520,8 @@ class _TypewriterTextState extends State<TypewriterText>
         _typewriterController.state == TypewriterState.skipped) {
       widget.onComplete?.call();
     }
-    // 使用post frame callback避免在build期间调用setState
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() {}); // 更新UI
-      }
-    });
+    // 合并同一帧内的多次刷新，避免回调堆积
+    _scheduleRebuild();
   }
 
   @override

@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -10,10 +11,12 @@ import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:sakiengine/src/config/runtime_project_config.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
+import 'package:sakiengine/src/core/game_module.dart';
 import 'package:sakiengine/src/core/project_module_loader.dart';
 import 'package:sakiengine/src/game/save_load_manager.dart';
 import 'package:sakiengine/src/integrations/steam/steamworks_manager.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
+import 'package:sakiengine/src/screens/save_load_screen.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
 import 'package:sakiengine/src/utils/debug_logger.dart';
 import 'package:sakiengine/src/utils/global_variable_manager.dart';
@@ -22,6 +25,7 @@ import 'package:sakiengine/src/utils/transition_prewarming.dart';
 import 'package:sakiengine/src/utils/ui_sound_manager.dart';
 import 'package:sakiengine/src/widgets/common/black_screen_transition.dart';
 import 'package:sakiengine/src/widgets/common/exit_confirmation_dialog.dart';
+import 'package:sakiengine/src/widgets/settings_screen.dart';
 
 import '../utils/platform_window_manager_io.dart'
     if (dart.library.html) '../utils/platform_window_manager_web.dart';
@@ -29,7 +33,9 @@ import '../utils/platform_window_manager_io.dart'
 enum AppState { mainMenu, inGame }
 
 class GameContainer extends StatefulWidget {
-  const GameContainer({super.key});
+  final VoidCallback? onMenuWarmupFinished;
+
+  const GameContainer({super.key, this.onMenuWarmupFinished});
 
   @override
   State<GameContainer> createState() => _GameContainerState();
@@ -39,6 +45,12 @@ class _GameContainerState extends State<GameContainer> with WindowListener {
   AppState _currentState = AppState.mainMenu;
   SaveSlot? _saveSlotToLoad;
   bool _isReturningFromGame = false;
+  bool _menuWarmupRunning = false;
+  bool _menuWarmupComplete = false;
+  bool _menuWarmupNotified = false;
+  int _menuWarmupPageIndex = 0;
+  GameModule? _menuWarmupModule;
+  List<Widget>? _menuWarmupExtraPages;
 
   @override
   void initState() {
@@ -67,6 +79,145 @@ class _GameContainerState extends State<GameContainer> with WindowListener {
   Future<bool> _showExitConfirmation() async {
     return ExitConfirmationDialog.showExitConfirmation(context,
         hasProgress: true);
+  }
+
+  bool get _shouldPrewarmMenuPages {
+    if (kIsWeb) {
+      return false;
+    }
+    return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+  }
+
+  void _notifyMenuWarmupFinished() {
+    if (_menuWarmupNotified) {
+      return;
+    }
+    _menuWarmupNotified = true;
+    widget.onMenuWarmupFinished?.call();
+  }
+
+  void _ensureMenuWarmupPages(GameModule gameModule) {
+    if (_menuWarmupExtraPages != null &&
+        identical(_menuWarmupModule, gameModule)) {
+      return;
+    }
+
+    _menuWarmupModule = gameModule;
+    _menuWarmupExtraPages = <Widget>[
+      gameModule.createSaveLoadScreen(
+        mode: SaveLoadMode.load,
+        onClose: () {},
+      ),
+      SettingsScreen(
+        onClose: () {},
+      ),
+    ];
+    _menuWarmupPageIndex = 0;
+  }
+
+  Widget _buildMainMenuScreen(GameModule gameModule) {
+    final mainMenuScreen = gameModule.createMainMenuScreen(
+      onNewGame: () => _enterGame(),
+      onLoadGame: () {},
+      onLoadGameWithSave: (saveSlot) => _enterGame(saveSlot: saveSlot),
+      onContinueGame: _continueGame,
+      skipMusicDelay: _isReturningFromGame,
+    );
+
+    if (_isReturningFromGame) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _isReturningFromGame = false;
+        });
+      });
+    }
+
+    if (_menuWarmupComplete || !_shouldPrewarmMenuPages) {
+      _notifyMenuWarmupFinished();
+      return mainMenuScreen;
+    }
+
+    _ensureMenuWarmupPages(gameModule);
+    final warmupExtraPages = _menuWarmupExtraPages;
+    if (warmupExtraPages == null || warmupExtraPages.isEmpty) {
+      _notifyMenuWarmupFinished();
+      return mainMenuScreen;
+    }
+
+    if (!_menuWarmupRunning) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _startMenuWarmupSequence();
+      });
+    }
+
+    final warmupPages = <Widget>[
+      mainMenuScreen,
+      ...warmupExtraPages,
+    ];
+    final index = _menuWarmupPageIndex.clamp(0, warmupPages.length - 1);
+    return IndexedStack(
+      index: index,
+      children: warmupPages,
+    );
+  }
+
+  Future<void> _startMenuWarmupSequence() async {
+    if (!mounted ||
+        _menuWarmupRunning ||
+        _menuWarmupComplete ||
+        _currentState != AppState.mainMenu ||
+        !_shouldPrewarmMenuPages) {
+      _notifyMenuWarmupFinished();
+      return;
+    }
+
+    final warmupExtraPages = _menuWarmupExtraPages;
+    if (warmupExtraPages == null || warmupExtraPages.isEmpty) {
+      _menuWarmupComplete = true;
+      _notifyMenuWarmupFinished();
+      return;
+    }
+
+    _menuWarmupRunning = true;
+
+    try {
+      final lastIndex = warmupExtraPages.length;
+      final warmupOrder = <int>[
+        for (int i = 0; i <= lastIndex; i++) i,
+        0,
+      ];
+
+      for (final pageIndex in warmupOrder) {
+        if (!mounted || _currentState != AppState.mainMenu) {
+          return;
+        }
+
+        if (_menuWarmupPageIndex != pageIndex) {
+          setState(() {
+            _menuWarmupPageIndex = pageIndex;
+          });
+        }
+
+        await SchedulerBinding.instance.endOfFrame;
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _menuWarmupComplete = true;
+        _menuWarmupPageIndex = 0;
+        _menuWarmupExtraPages = null;
+      });
+    } finally {
+      _menuWarmupRunning = false;
+      _notifyMenuWarmupFinished();
+    }
   }
 
   void _enterGame({SaveSlot? saveSlot}) {
@@ -124,22 +275,10 @@ class _GameContainerState extends State<GameContainer> with WindowListener {
 
         switch (_currentState) {
           case AppState.mainMenu:
-            currentScreen = gameModule.createMainMenuScreen(
-              onNewGame: () => _enterGame(),
-              onLoadGame: () {},
-              onLoadGameWithSave: (saveSlot) => _enterGame(saveSlot: saveSlot),
-              onContinueGame: _continueGame,
-              skipMusicDelay: _isReturningFromGame,
-            );
-            if (_isReturningFromGame) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                setState(() {
-                  _isReturningFromGame = false;
-                });
-              });
-            }
+            currentScreen = _buildMainMenuScreen(gameModule);
             break;
           case AppState.inGame:
+            _notifyMenuWarmupFinished();
             currentScreen = gameModule.createGamePlayScreen(
               key: ValueKey(_saveSlotToLoad?.id ?? 'new_game'),
               saveSlotToLoad: _saveSlotToLoad,
@@ -351,6 +490,14 @@ class _StartupMaskWrapperState extends State<StartupMaskWrapper>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   bool _prewarmingComplete = false;
+  final Completer<void> _menuWarmupCompleter = Completer<void>();
+
+  void _onMenuWarmupFinished() {
+    if (_menuWarmupCompleter.isCompleted) {
+      return;
+    }
+    _menuWarmupCompleter.complete();
+  }
 
   @override
   void initState() {
@@ -385,7 +532,13 @@ class _StartupMaskWrapperState extends State<StartupMaskWrapper>
       final delay = kIsWeb ? 1500 : 1000;
       await Future.delayed(Duration(milliseconds: delay));
       if (mounted) {
-        await TransitionPrewarmingManager.instance.prewarm(context);
+        await Future.wait<void>([
+          TransitionPrewarmingManager.instance.prewarm(context),
+          _menuWarmupCompleter.future.timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {},
+          ),
+        ]);
       }
       if (mounted) {
         _prewarmingComplete = true;
@@ -409,7 +562,9 @@ class _StartupMaskWrapperState extends State<StartupMaskWrapper>
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        const GameContainer(),
+        GameContainer(
+          onMenuWarmupFinished: _onMenuWarmupFinished,
+        ),
         AnimatedBuilder(
           animation: _fadeAnimation,
           builder: (context, child) {

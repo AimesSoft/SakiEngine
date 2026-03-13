@@ -194,7 +194,6 @@ class _NvlScreenState extends State<NvlScreen> with TickerProviderStateMixin imp
     _scrollController.dispose();
     // 从推进管理器注销打字机
     widget.progressionManager?.registerTypewriter(null);
-    _currentTypewriterController?.removeListener(_onTypewriterStateChanged);
     _currentTypewriterController?.dispose();
     // 清理所有文本淡入动画控制器
     for (final controller in _textFadeControllers.values) {
@@ -217,8 +216,11 @@ class _NvlScreenState extends State<NvlScreen> with TickerProviderStateMixin imp
     
     // 先清理旧的控制器
     if (_currentTypewriterController != null) {
-      _currentTypewriterController!.removeListener(_onTypewriterStateChanged);
-      // 不dispose，因为可能还在使用中，让系统自动GC
+      final oldController = _currentTypewriterController!;
+      // 延迟一帧释放，确保旧TypewriterText先完成dispose
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        oldController.dispose();
+      });
     }
     
     // 创建新的控制器
@@ -228,30 +230,14 @@ class _NvlScreenState extends State<NvlScreen> with TickerProviderStateMixin imp
     // 设置快进模式
     _currentTypewriterController!.setFastForwardMode(widget.isFastForwarding);
     
-    // 添加监听器
-    _currentTypewriterController!.addListener(_onTypewriterStateChanged);
-    
     // 注册到推进管理器
     widget.progressionManager?.registerTypewriter(_currentTypewriterController);
     
     // 记录当前索引
     _lastTypewriterIndex = index;
+    _isLastDialogueComplete = false;
     
     return _currentTypewriterController!;
-  }
-  
-  void _onTypewriterStateChanged() {
-    if (mounted) {
-      final isCompleted = _currentTypewriterController?.isCompleted ?? false;
-      // 使用post frame callback避免在build期间调用setState
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {
-            _isLastDialogueComplete = isCompleted;
-          });
-        }
-      });
-    }
   }
   
   /// 控制电影模式黑边的显示/隐藏
@@ -415,7 +401,7 @@ class _NvlScreenState extends State<NvlScreen> with TickerProviderStateMixin imp
                   onComplete: () {
                     // 使用post frame callback避免在build期间调用setState
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) {
+                      if (mounted && !_isLastDialogueComplete) {
                         setState(() {
                           _isLastDialogueComplete = true;
                         });
