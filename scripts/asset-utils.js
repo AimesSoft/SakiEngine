@@ -85,6 +85,10 @@ function getGameDirectories(projectRoot) {
 
 function setAppIdentity(projectDir, appName, bundleId) {
     colorLog(`正在同步应用信息: ${appName} (${bundleId})`, 'yellow');
+    const binaryName = String(appName)
+        .replace(/[^A-Za-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'saki_game';
+    colorLog(`正在同步产物名称: ${binaryName}`, 'yellow');
 
     try {
         const androidManifest = path.join(projectDir, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
@@ -134,6 +138,7 @@ function setAppIdentity(projectDir, appName, bundleId) {
         if (fs.existsSync(macosAppInfo)) {
             let content = fs.readFileSync(macosAppInfo, 'utf8');
             content = content.replace(/^PRODUCT_BUNDLE_IDENTIFIER = .*$/m, `PRODUCT_BUNDLE_IDENTIFIER = ${bundleId}`);
+            content = content.replace(/^PRODUCT_NAME = .*$/m, `PRODUCT_NAME = ${binaryName}`);
             fs.writeFileSync(macosAppInfo, content);
         }
 
@@ -141,7 +146,31 @@ function setAppIdentity(projectDir, appName, bundleId) {
         if (fs.existsSync(linuxCmake)) {
             let content = fs.readFileSync(linuxCmake, 'utf8');
             content = content.replace(/set\(APPLICATION_ID "[^"]*"\)/, `set(APPLICATION_ID "${bundleId}")`);
+            content = content.replace(/set\(BINARY_NAME "[^"]*"\)/, `set(BINARY_NAME "${binaryName}")`);
             fs.writeFileSync(linuxCmake, content);
+        }
+
+        const linuxApplication = path.join(projectDir, 'linux', 'runner', 'my_application.cc');
+        if (fs.existsSync(linuxApplication)) {
+            let content = fs.readFileSync(linuxApplication, 'utf8');
+            content = content.replace(/gtk_header_bar_set_title\(header_bar, "[^"]*"\);/, `gtk_header_bar_set_title(header_bar, "${appName}");`);
+            content = content.replace(/gtk_window_set_title\(window, "[^"]*"\);/, `gtk_window_set_title(window, "${appName}");`);
+            fs.writeFileSync(linuxApplication, content);
+        }
+
+        const windowsCmake = path.join(projectDir, 'windows', 'CMakeLists.txt');
+        if (fs.existsSync(windowsCmake)) {
+            let content = fs.readFileSync(windowsCmake, 'utf8');
+            content = content.replace(/^project\([^)]+ LANGUAGES CXX\)/m, `project(${binaryName} LANGUAGES CXX)`);
+            content = content.replace(/^set\(BINARY_NAME "[^"]*"\)/m, `set(BINARY_NAME "${binaryName}")`);
+            fs.writeFileSync(windowsCmake, content);
+        }
+
+        const windowsMain = path.join(projectDir, 'windows', 'runner', 'main.cpp');
+        if (fs.existsSync(windowsMain)) {
+            let content = fs.readFileSync(windowsMain, 'utf8');
+            content = content.replace(/window\.Create\(L"[^"]*"/, `window.Create(L"${appName}"`);
+            fs.writeFileSync(windowsMain, content);
         }
 
         const windowsRunnerRc = path.join(projectDir, 'windows', 'runner', 'Runner.rc');
@@ -151,6 +180,8 @@ function setAppIdentity(projectDir, appName, bundleId) {
             content = content.replace(/VALUE "CompanyName", "[^"]*"/, `VALUE "CompanyName", "${companyName}"`);
             content = content.replace(/VALUE "FileDescription", "[^"]*"/, `VALUE "FileDescription", "${appName}"`);
             content = content.replace(/VALUE "ProductName", "[^"]*"/, `VALUE "ProductName", "${appName}"`);
+            content = content.replace(/VALUE "InternalName", "[^"]*"\s+"\\0"/, `VALUE "InternalName", "${binaryName}" "\\0"`);
+            content = content.replace(/VALUE "OriginalFilename", "[^"]*"\s+"\\0"/, `VALUE "OriginalFilename", "${binaryName}.exe" "\\0"`);
             fs.writeFileSync(windowsRunnerRc, content);
         }
 

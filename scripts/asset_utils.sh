@@ -60,22 +60,36 @@ _escape_sed() {
     printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
 }
 
+_sanitize_binary_name() {
+    local name="$1"
+    name=$(printf '%s' "$name" | sed -E 's/[^A-Za-z0-9]+/_/g; s/^_+|_+$//g')
+    if [ -z "$name" ]; then
+        name="saki_game"
+    fi
+    printf '%s' "$name"
+}
+
 set_app_identity() {
     local project_dir="$1"
     local app_name="$2"
     local bundle_id="$3"
+    local binary_name
 
     local app_name_escaped
     local bundle_id_escaped
+    local binary_name_escaped
     local company_name
     local company_name_escaped
 
+    binary_name=$(_sanitize_binary_name "$app_name")
     app_name_escaped=$(_escape_sed "$app_name")
     bundle_id_escaped=$(_escape_sed "$bundle_id")
+    binary_name_escaped=$(_escape_sed "$binary_name")
     company_name="${bundle_id%.*}"
     company_name_escaped=$(_escape_sed "$company_name")
 
     echo -e "${YELLOW}正在同步应用信息: ${app_name} (${bundle_id})${NC}"
+    echo -e "${YELLOW}正在同步产物名称: ${binary_name}${NC}"
 
     if [ -f "$project_dir/android/app/src/main/AndroidManifest.xml" ]; then
         sed -i.bak -E "s/android:label=\"[^\"]*\"/android:label=\"$app_name_escaped\"/" \
@@ -104,15 +118,42 @@ set_app_identity() {
     fi
 
     if [ -f "$project_dir/macos/Runner/Configs/AppInfo.xcconfig" ]; then
-        sed -i.bak -E "s/^PRODUCT_BUNDLE_IDENTIFIER = .*/PRODUCT_BUNDLE_IDENTIFIER = $bundle_id_escaped/" \
+        sed -i.bak -E \
+            -e "s/^PRODUCT_BUNDLE_IDENTIFIER = .*/PRODUCT_BUNDLE_IDENTIFIER = $bundle_id_escaped/" \
+            -e "s/^PRODUCT_NAME = .*/PRODUCT_NAME = $binary_name_escaped/" \
             "$project_dir/macos/Runner/Configs/AppInfo.xcconfig"
         rm -f "$project_dir/macos/Runner/Configs/AppInfo.xcconfig.bak"
     fi
 
     if [ -f "$project_dir/linux/CMakeLists.txt" ]; then
-        sed -i.bak -E "s/set\(APPLICATION_ID \"[^\"]*\"\)/set(APPLICATION_ID \"$bundle_id_escaped\")/" \
+        sed -i.bak -E \
+            -e "s/set\(APPLICATION_ID \"[^\"]*\"\)/set(APPLICATION_ID \"$bundle_id_escaped\")/" \
+            -e "s/set\(BINARY_NAME \"[^\"]*\"\)/set(BINARY_NAME \"$binary_name_escaped\")/" \
             "$project_dir/linux/CMakeLists.txt"
         rm -f "$project_dir/linux/CMakeLists.txt.bak"
+    fi
+
+    if [ -f "$project_dir/linux/runner/my_application.cc" ]; then
+        sed -i.bak -E \
+            -e "s/gtk_header_bar_set_title\(header_bar, \"[^\"]*\"\);/gtk_header_bar_set_title(header_bar, \"$app_name_escaped\");/" \
+            -e "s/gtk_window_set_title\(window, \"[^\"]*\"\);/gtk_window_set_title(window, \"$app_name_escaped\");/" \
+            "$project_dir/linux/runner/my_application.cc"
+        rm -f "$project_dir/linux/runner/my_application.cc.bak"
+    fi
+
+    if [ -f "$project_dir/windows/CMakeLists.txt" ]; then
+        sed -i.bak -E \
+            -e "s/^project\([^)]+ LANGUAGES CXX\)/project($binary_name_escaped LANGUAGES CXX)/" \
+            -e "s/^set\(BINARY_NAME \"[^\"]*\"\)/set(BINARY_NAME \"$binary_name_escaped\")/" \
+            "$project_dir/windows/CMakeLists.txt"
+        rm -f "$project_dir/windows/CMakeLists.txt.bak"
+    fi
+
+    if [ -f "$project_dir/windows/runner/main.cpp" ]; then
+        sed -i.bak -E \
+            -e "s/window\.Create\(L\"[^\"]*\"/window.Create(L\"$app_name_escaped\"/" \
+            "$project_dir/windows/runner/main.cpp"
+        rm -f "$project_dir/windows/runner/main.cpp.bak"
     fi
 
     if [ -f "$project_dir/windows/runner/Runner.rc" ]; then
@@ -120,6 +161,8 @@ set_app_identity() {
             -e "s/VALUE \"CompanyName\", \"[^\"]*\"/VALUE \"CompanyName\", \"$company_name_escaped\"/" \
             -e "s/VALUE \"FileDescription\", \"[^\"]*\"/VALUE \"FileDescription\", \"$app_name_escaped\"/" \
             -e "s/VALUE \"ProductName\", \"[^\"]*\"/VALUE \"ProductName\", \"$app_name_escaped\"/" \
+            -e "s/VALUE \"InternalName\", \"[^\"]*\"[[:space:]]+\"\\\\0\"/VALUE \"InternalName\", \"$binary_name_escaped\" \"\\\\0\"/" \
+            -e "s/VALUE \"OriginalFilename\", \"[^\"]*\"[[:space:]]+\"\\\\0\"/VALUE \"OriginalFilename\", \"$binary_name_escaped.exe\" \"\\\\0\"/" \
             "$project_dir/windows/runner/Runner.rc"
         rm -f "$project_dir/windows/runner/Runner.rc.bak"
     fi

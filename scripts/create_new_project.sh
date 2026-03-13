@@ -477,7 +477,7 @@ EOF
 
 # 生成 Flutter 项目骨架
 echo -e "${YELLOW}创建 Flutter 项目骨架...${NC}"
-APP_PACKAGE_NAME="$(echo "${PROJECT_NAME_LOWER}_app" | tr '-' '_')"
+APP_PACKAGE_NAME="$(echo "${PROJECT_NAME_LOWER}" | tr '-' '_')"
 if [[ ! "$APP_PACKAGE_NAME" =~ ^[a-z] ]]; then
   APP_PACKAGE_NAME="game_$APP_PACKAGE_NAME"
 fi

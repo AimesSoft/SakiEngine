@@ -589,7 +589,7 @@ async function createFlutterAppProject(projectRoot, projectDir, projectName, bun
     colorLog('创建 Flutter 项目骨架...', 'yellow');
 
     const moduleId = toSnakeIdentifier(projectName);
-    const appPackageName = `${moduleId}_app`;
+    const appPackageName = moduleId;
     const orgParts = String(bundleId).split('.');
     const appOrg = orgParts.length > 1 ? orgParts.slice(0, -1).join('.') : 'com.sakiengine';
     const projectPackageName = `${moduleId}_project`;
