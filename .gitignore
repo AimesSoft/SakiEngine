@@ -1,3 +1,9 @@
+# 拆分后的独立业务项目仓库（不纳入引擎主仓库）
+# 默认忽略 Game 下所有项目，仅保留示例项目 SakiEngine。
+/Game/*
+!/Game/SakiEngine/
+!/Game/SakiEngine/**
+
 # C# / .NET
 
 ## User-specific files
@@ -65,9 +71,4 @@ Engine/.flutter-plugins-dependencies
 /Game/TheFirstLoveLetter_source
 /Game/*/.saki_cache/
 
-# 拆分后的独立业务项目仓库（不纳入引擎主仓库）
-# 默认忽略 Game 下所有项目，仅保留示例项目 SakiEngine。
-/Game/*
-!/Game/SakiEngine/
-!/Game/SakiEngine/**
 /.saki_launcher
