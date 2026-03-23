@@ -16,6 +16,7 @@ extension _GameManagerLifecycle on GameManager {
   }
 
   Future<void> _startGameLifecycle(String scriptName) async {
+    resetScriptDiagCounters();
     // 平滑清除主菜单音乐
     await MusicManager().clearBackgroundMusic(
       fadeOut: true,
@@ -34,6 +35,12 @@ extension _GameManagerLifecycle on GameManager {
     await AnimationManager.loadAnimations(); // 加载动画
     _script = await _scriptMerger.getMergedScript();
     _buildLabelIndexMap();
+    GameManager._scriptDiag(
+      'startGame: mergedNodes=${_script.children.length}, '
+      'labels=${_labelIndexMap.length}, '
+      'files=${_scriptMerger.fileStartIndices.length}, '
+      'startFileIndex=${_scriptMerger.getFileStartIndex('start')}',
+    );
     _buildMusicRegions(); // 构建音乐区间
 
     // 分析脚本中的所有CG组合并预热
@@ -73,6 +80,7 @@ extension _GameManagerLifecycle on GameManager {
   Future<void> _restoreFromSnapshotLifecycle(
       String scriptName, GameStateSnapshot snapshot,
       {bool shouldReExecute = true}) async {
+    resetScriptDiagCounters();
     //print('📚 restoreFromSnapshot: scriptName = $scriptName');
     //print('📚 restoreFromSnapshot: snapshot.scriptIndex = ${snapshot.scriptIndex}');
     //print('📚 restoreFromSnapshot: isNvlMode = ${snapshot.isNvlMode}');
@@ -83,6 +91,12 @@ extension _GameManagerLifecycle on GameManager {
     await AnimationManager.loadAnimations(); // 加载动画
     _script = await _scriptMerger.getMergedScript();
     _buildLabelIndexMap();
+    GameManager._scriptDiag(
+      'restoreFromSnapshot: mergedNodes=${_script.children.length}, '
+      'labels=${_labelIndexMap.length}, '
+      'files=${_scriptMerger.fileStartIndices.length}, '
+      'startFileIndex=${_scriptMerger.getFileStartIndex('start')}',
+    );
     _buildMusicRegions(); // 构建音乐区间
 
     //print('📚 加载合并脚本后: _script.children.length = ${_script.children.length}');
@@ -240,6 +254,7 @@ extension _GameManagerLifecycle on GameManager {
   }
 
   Future<void> _hotReloadLifecycle(String scriptName) async {
+    resetScriptDiagCounters();
     if (_dialogueHistory.isNotEmpty) {
       _dialogueHistory.removeLast();
     }
@@ -255,6 +270,12 @@ extension _GameManagerLifecycle on GameManager {
     await AnimationManager.loadAnimations(); // 加载动画
     _script = await _scriptMerger.getMergedScript();
     _buildLabelIndexMap();
+    GameManager._scriptDiag(
+      'hotReload: mergedNodes=${_script.children.length}, '
+      'labels=${_labelIndexMap.length}, '
+      'files=${_scriptMerger.fileStartIndices.length}, '
+      'startFileIndex=${_scriptMerger.getFileStartIndex('start')}',
+    );
     _buildMusicRegions(); // 构建音乐区间
 
     if (_savedSnapshot != null) {

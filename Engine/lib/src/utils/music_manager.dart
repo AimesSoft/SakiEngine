@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/config/game_path_resolver.dart';
@@ -570,8 +571,8 @@ class MusicManager extends ChangeNotifier {
       final fallbackFilePath = await _resolveGameAssetFallbackPath(resolved);
       if (fallbackFilePath != null) {
         if (kEngineDebugMode) {
-          print(
-              '[MusicManager] try setFilePath first via SAKI_GAME_PATH: $fallbackFilePath');
+          print('[MusicManager] try setFilePath first via fallback: '
+              '$fallbackFilePath');
         }
         try {
           await player.setFilePath(fallbackFilePath);
@@ -634,20 +635,79 @@ class MusicManager extends ChangeNotifier {
 
   Future<String?> _resolveGameAssetFallbackPath(
       String resolvedAssetPath) async {
-    if (!GamePathResolver.shouldUseFileSystemAssets) {
-      return null;
-    }
-
-    final gamePath = await GamePathResolver.resolveGamePath();
-    if (gamePath == null || gamePath.isEmpty) {
-      return null;
-    }
-
     if (resolvedAssetPath.startsWith('/')) {
       return resolvedAssetPath;
     }
 
-    return p.normalize(p.join(gamePath, resolvedAssetPath));
+    if (GamePathResolver.shouldUseFileSystemAssets) {
+      final gamePath = await GamePathResolver.resolveGamePath();
+      if (gamePath == null || gamePath.isEmpty) {
+        return null;
+      }
+
+      return p.normalize(p.join(gamePath, resolvedAssetPath));
+    }
+
+    return _resolveBundledDesktopAssetPath(resolvedAssetPath);
+  }
+
+  Future<String?> _resolveBundledDesktopAssetPath(
+      String resolvedAssetPath) async {
+    if (kIsWeb ||
+        !(Platform.isMacOS || Platform.isLinux || Platform.isWindows)) {
+      return null;
+    }
+
+    final executablePath = Platform.resolvedExecutable;
+    if (executablePath.isEmpty) {
+      return null;
+    }
+
+    final executableDir = p.dirname(executablePath);
+    final candidates = <String>[
+      // macOS Flutter app bundle
+      p.join(
+        executableDir,
+        '..',
+        'Frameworks',
+        'App.framework',
+        'Versions',
+        'A',
+        'Resources',
+        'flutter_assets',
+        resolvedAssetPath,
+      ),
+      // macOS fallback for older framework layouts
+      p.join(
+        executableDir,
+        '..',
+        'Frameworks',
+        'App.framework',
+        'Resources',
+        'flutter_assets',
+        resolvedAssetPath,
+      ),
+      // macOS/Linux common layout
+      p.join(
+        executableDir,
+        '..',
+        'Resources',
+        'flutter_assets',
+        resolvedAssetPath,
+      ),
+      // Linux/Windows common layouts
+      p.join(executableDir, 'data', 'flutter_assets', resolvedAssetPath),
+      p.join(executableDir, '..', 'data', 'flutter_assets', resolvedAssetPath),
+      p.join(executableDir, 'flutter_assets', resolvedAssetPath),
+    ];
+
+    for (final candidate in candidates) {
+      final normalized = p.normalize(candidate);
+      if (await File(normalized).exists()) {
+        return normalized;
+      }
+    }
+    return null;
   }
 
   bool _isNetworkPath(String path) {

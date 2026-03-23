@@ -254,7 +254,9 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
           if (mounted &&
               !_isShowingMenu &&
               _gameManager.currentState.movieFile == null) {
-            _dialogueProgressionManager.progressDialogue();
+            _dialogueProgressionManager.progressDialogue(
+              source: 'arrow_down_hotkey',
+            );
           }
         },
       );
@@ -421,7 +423,9 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     _mouseWheelHandler = MouseWheelHandler(
       onScrollForward: () {
         // 向前滚动: 推进对话
-        _dialogueProgressionManager.progressDialogue();
+        _dialogueProgressionManager.progressDialogue(
+          source: 'mouse_wheel_forward',
+        );
         _autoPlayManager?.onManualProgress();
       },
       onScrollBackward: () {

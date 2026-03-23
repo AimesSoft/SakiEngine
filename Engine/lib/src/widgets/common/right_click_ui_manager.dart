@@ -32,15 +32,19 @@ class RightClickUIManager extends StatefulWidget {
 
 class _RightClickUIManagerState extends State<RightClickUIManager>
     with TickerProviderStateMixin {
-  
   /// UI是否被隐藏
   bool _isUIHidden = false;
 
+  static void _uiDiag(String message) {
+    final now = DateTime.now().toIso8601String();
+    debugPrint('[SAKI_UI_DIAG][$now] $message');
+  }
+
   late final GlobalRightClickUIManager _globalManager;
-  
+
   /// 动画控制器
   late AnimationController _animationController;
-  
+
   /// 淡出动画
   late Animation<double> _fadeAnimation;
 
@@ -50,14 +54,14 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
 
     _globalManager = GlobalRightClickUIManager();
     _isUIHidden = _globalManager.isUIHidden;
+    _uiDiag('RightClickUIManager init: isUIHidden=$_isUIHidden');
 
-    
     // 初始化动画控制器
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    
+
     // 初始化淡出动画
     _fadeAnimation = Tween<double>(
       begin: 1.0,
@@ -88,6 +92,7 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
     setState(() {
       _isUIHidden = hidden;
     });
+    _uiDiag('Global visibility changed: isUIHidden=$_isUIHidden');
     if (_isUIHidden) {
       _animationController.forward();
     } else {
@@ -99,6 +104,7 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
   void _setUIHidden() {
     if (!_globalManager.isUIHidden) {
       _globalManager.setUIHidden(true);
+      _uiDiag('Set UI hidden by right-click');
       HapticFeedback.lightImpact();
     }
   }
@@ -106,6 +112,7 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
   void _setUIVisible() {
     if (_globalManager.isUIHidden) {
       _globalManager.setUIHidden(false);
+      _uiDiag('Set UI visible by left/right-click');
     }
   }
 
@@ -134,18 +141,20 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
         children: [
           // 背景层 - 不会被隐藏
           widget.backgroundChild,
-          
+
           // 右键检测层 - 放在背景上面，UI下面
           Positioned.fill(
             child: Listener(
               onPointerDown: (event) {
-                if (event.buttons == 2) { // 右键按下
+                if (event.buttons == 2) {
+                  // 右键按下
                   if (_isUIHidden) {
                     _setUIVisible();
                   } else {
                     _setUIHidden();
                   }
-                } else if (event.buttons == 1) { // 左键按下
+                } else if (event.buttons == 1) {
+                  // 左键按下
                   if (_isUIHidden) {
                     _setUIVisible();
                   } else {
@@ -160,7 +169,7 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
               ),
             ),
           ),
-          
+
           // UI层 - 可以被隐藏，在最上面
           AnimatedBuilder(
             animation: _fadeAnimation,
@@ -182,7 +191,8 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
 
 /// 全局右键UI管理器状态
 class GlobalRightClickUIManager extends ChangeNotifier {
-  static final GlobalRightClickUIManager _instance = GlobalRightClickUIManager._internal();
+  static final GlobalRightClickUIManager _instance =
+      GlobalRightClickUIManager._internal();
   factory GlobalRightClickUIManager() => _instance;
   GlobalRightClickUIManager._internal();
 
@@ -194,6 +204,9 @@ class GlobalRightClickUIManager extends ChangeNotifier {
   void setUIHidden(bool hidden) {
     if (_isUIHidden != hidden) {
       _isUIHidden = hidden;
+      final now = DateTime.now().toIso8601String();
+      debugPrint(
+          '[SAKI_UI_DIAG][$now] GlobalRightClickUIManager.setUIHidden: hidden=$hidden');
       notifyListeners();
     }
   }
@@ -207,27 +220,27 @@ class GlobalRightClickUIManager extends ChangeNotifier {
 /// 右键UI管理Mixin，方便其他组件使用
 mixin RightClickUIManagerMixin<T extends StatefulWidget> on State<T> {
   final GlobalRightClickUIManager _globalManager = GlobalRightClickUIManager();
-  
+
   bool get isUIHidden => _globalManager.isUIHidden;
-  
+
   @override
   void initState() {
     super.initState();
     _globalManager.addListener(_onUIVisibilityChanged);
   }
-  
+
   @override
   void dispose() {
     _globalManager.removeListener(_onUIVisibilityChanged);
     super.dispose();
   }
-  
+
   void _onUIVisibilityChanged() {
     if (mounted) {
       setState(() {});
     }
   }
-  
+
   /// 子类可以重写此方法来处理UI隐藏状态变化
   void onUIVisibilityChanged(bool isHidden) {}
 }
@@ -254,7 +267,7 @@ class HideableUI extends StatelessWidget {
       builder: (context, child) {
         final isHidden = GlobalRightClickUIManager().isUIHidden;
         final shouldHide = hideWhenUIHidden && isHidden;
-        
+
         return AnimatedOpacity(
           opacity: shouldHide ? hiddenOpacity : 1.0,
           duration: animationDuration,

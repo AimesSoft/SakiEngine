@@ -88,6 +88,107 @@ class MusicRegion {
 }
 
 class GameManager {
+  static const bool _forceScriptDiagnostics =
+      bool.fromEnvironment('SAKI_SCRIPT_DIAG', defaultValue: true);
+  static const int _maxStepDiagLines = 320;
+  static const int _maxProgressDiagLines = 320;
+  static final String _diagFilePath = (() {
+    const configuredPath =
+        String.fromEnvironment('SAKI_SCRIPT_DIAG_FILE', defaultValue: '');
+    if (configuredPath.trim().isNotEmpty) {
+      return configuredPath.trim();
+    }
+    return '${Directory.systemTemp.path}${Platform.pathSeparator}saki_script_diag.log';
+  })();
+
+  static bool _shouldScriptDiagnostics() {
+    if (kEngineDebugMode) {
+      return true;
+    }
+    return _forceScriptDiagnostics;
+  }
+
+  static void _scriptDiag(String message) {
+    if (!_shouldScriptDiagnostics()) {
+      return;
+    }
+    final now = DateTime.now().toIso8601String();
+    final line = '[SAKI_SCRIPT_DIAG][$now] $message';
+    stderr.writeln(line);
+    try {
+      File(_diagFilePath).writeAsStringSync(
+        '$line\n',
+        mode: FileMode.append,
+      );
+    } catch (_) {}
+  }
+
+  static String _nodeDiagName(SksNode node) {
+    if (node is LabelNode) {
+      return 'Label(${node.name})';
+    }
+    if (node is JumpNode) {
+      return 'Jump(${node.targetLabel})';
+    }
+    if (node is SayNode) {
+      return 'Say';
+    }
+    if (node is ConditionalSayNode) {
+      return 'ConditionalSay';
+    }
+    if (node is MenuNode) {
+      return 'Menu';
+    }
+    if (node is NvlNode) {
+      return 'Nvl';
+    }
+    if (node is NvlnNode) {
+      return 'Nvln';
+    }
+    if (node is NvlMovieNode) {
+      return 'NvlMovie';
+    }
+    if (node is EndNvlNode) {
+      return 'EndNvl';
+    }
+    if (node is EndNvlnNode) {
+      return 'EndNvln';
+    }
+    if (node is EndNvlMovieNode) {
+      return 'EndNvlMovie';
+    }
+    if (node is BackgroundNode) {
+      return 'Background(${node.background})';
+    }
+    if (node is MovieNode) {
+      return 'Movie(${node.movieFile})';
+    }
+    if (node is PlayMusicNode) {
+      return 'PlayMusic(${node.musicFile})';
+    }
+    if (node is PlaySoundNode) {
+      return 'PlaySound(${node.soundFile})';
+    }
+    return node.runtimeType.toString();
+  }
+
+  static bool _shouldStepLogNode(SksNode node) {
+    return node is JumpNode ||
+        node is MenuNode ||
+        node is SayNode ||
+        node is ConditionalSayNode ||
+        node is NvlNode ||
+        node is NvlnNode ||
+        node is NvlMovieNode ||
+        node is EndNvlNode ||
+        node is EndNvlnNode ||
+        node is EndNvlMovieNode ||
+        node is BackgroundNode ||
+        node is MovieNode ||
+        node is PlayMusicNode ||
+        node is StopMusicNode;
+  }
+
   final _gameStateController = StreamController<GameState>.broadcast();
   Stream<GameState> get gameStateStream => _gameStateController.stream;
 
@@ -98,6 +199,8 @@ class GameManager {
   bool _isWaitingForTimer = false; // 新增：专门的计时器等待标志
   Timer? _currentTimer; // 新增：当前活跃的计时器引用
   Map<String, int> _labelIndexMap = {};
+  int _stepDiagCount = 0;
+  int _progressDiagCount = 0;
 
   // 脚本合并器
   final ScriptMerger _scriptMerger = ScriptMerger();
@@ -139,6 +242,53 @@ class GameManager {
 
   // 剧情流程图管理器
   final StoryFlowchartManager _flowchartManager = StoryFlowchartManager();
+
+  void _diagStep(
+    String phase,
+    SksNode node,
+    int index, {
+    String? detail,
+  }) {
+    if (!_shouldScriptDiagnostics()) {
+      return;
+    }
+    if (_stepDiagCount >= _maxStepDiagLines) {
+      return;
+    }
+    if (!_shouldStepLogNode(node)) {
+      return;
+    }
+    _stepDiagCount++;
+    final extra = (detail != null && detail.isNotEmpty) ? ', $detail' : '';
+    _scriptDiag(
+      'STEP[$phase] index=$index, node=${_nodeDiagName(node)}, '
+      'fast=$_isFastForwardMode, auto=$_isAutoPlayMode, '
+      'waiting=$_isWaitingForTimer, nvl=$_activeNvlContext$extra',
+    );
+  }
+
+  void resetScriptDiagCounters() {
+    _stepDiagCount = 0;
+    _progressDiagCount = 0;
+  }
+
+  void diagProgress(
+    String source, {
+    String? detail,
+  }) {
+    if (!_shouldScriptDiagnostics()) {
+      return;
+    }
+    if (_progressDiagCount >= _maxProgressDiagLines) {
+      return;
+    }
+    _progressDiagCount++;
+    final extra = (detail != null && detail.isNotEmpty) ? ', $detail' : '';
+    _scriptDiag(
+      'PROGRESS source=$source, index=$_scriptIndex, '
+      'fast=$_isFastForwardMode, auto=$_isAutoPlayMode$extra',
+    );
+  }
 
   /// 检查是否需要创建自动存档
   Future<void> _checkAndCreateAutoSave(int scriptIndex,
@@ -831,7 +981,20 @@ class GameManager {
   // 快进模式控制
   bool get isFastForwardMode => _isFastForwardMode;
   void setFastForwardMode(bool enabled) {
+    if (_isFastForwardMode == enabled) {
+      return;
+    }
     _isFastForwardMode = enabled;
+    var currentNodeName = 'script_uninitialized';
+    try {
+      currentNodeName = _scriptIndex < _script.children.length
+          ? _nodeDiagName(_script.children[_scriptIndex])
+          : 'EOF';
+    } catch (_) {}
+    _scriptDiag(
+      'FastForward 状态变化: enabled=$enabled, index=$_scriptIndex, '
+      'currentNode=$currentNodeName',
+    );
     // 更新GameState中的快进状态
     _currentState = _currentState.copyWith(
         isFastForwarding: enabled, everShownCharacters: _everShownCharacters);
@@ -843,7 +1006,20 @@ class GameManager {
   bool _isAutoPlayMode = false;
   bool get isAutoPlayMode => _isAutoPlayMode;
   void setAutoPlayMode(bool enabled) {
+    if (_isAutoPlayMode == enabled) {
+      return;
+    }
     _isAutoPlayMode = enabled;
+    var currentNodeName = 'script_uninitialized';
+    try {
+      currentNodeName = _scriptIndex < _script.children.length
+          ? _nodeDiagName(_script.children[_scriptIndex])
+          : 'EOF';
+    } catch (_) {}
+    _scriptDiag(
+      'AutoPlay 状态变化: enabled=$enabled, index=$_scriptIndex, '
+      'currentNode=$currentNodeName',
+    );
     // 更新GameState中的自动播放状态
     _currentState = _currentState.copyWith(
         isAutoPlaying: enabled, everShownCharacters: _everShownCharacters);
@@ -904,6 +1080,8 @@ class GameManager {
     _activeLanguage = LocalizationManager().currentLanguage;
     _languageListener = _handleLanguageChange;
     LocalizationManager().addListener(_languageListener);
+    _scriptDiag(
+        'GameManager 初始化: language=$_activeLanguage, diagFile=$_diagFilePath');
   }
 
   Future<void> startGame(String scriptName) {
@@ -1008,8 +1186,7 @@ class GameManager {
         final normalizedMusicFile = _normalizeMusicFileName(node.musicFile);
         if (normalizedMusicFile.isEmpty) {
           if (kEngineDebugMode) {
-            print(
-                '[MusicRegion] 忽略空音乐名: raw="${node.musicFile}" at index $i');
+            print('[MusicRegion] 忽略空音乐名: raw="${node.musicFile}" at index $i');
           }
           continue;
         }
@@ -1121,10 +1298,19 @@ class GameManager {
                 '[MusicRegion] 当前位置($_scriptIndex)需要播放音乐: regionMusic="${currentRegion.musicFile}", resolvedPath="$fullMusicPath", forceCheck=$forceCheck');
           }
 
+          final playMusicStopwatch = Stopwatch()..start();
+          _scriptDiag(
+            'PlayMusic 请求: source=music_region_check, index=$_scriptIndex, '
+            'path="$fullMusicPath", fadeMs=1200',
+          );
           await MusicManager().playBackgroundMusic(
             fullMusicPath,
             fadeTransition: true,
             fadeDuration: const Duration(milliseconds: 1200),
+          );
+          _scriptDiag(
+            'PlayMusic 完成: source=music_region_check, index=$_scriptIndex, '
+            'path="$fullMusicPath", elapsedMs=${playMusicStopwatch.elapsedMilliseconds}',
           );
           _currentState =
               _currentState.copyWith(currentMusicRegion: currentRegion);
@@ -1144,15 +1330,26 @@ class GameManager {
         }
       }
     }
+    final preview = _labelIndexMap.keys.take(12).join(', ');
+    _scriptDiag(
+      'LabelMap 构建完成: labels=${_labelIndexMap.length}, '
+      'scriptNodes=${_script.children.length}, preview=[$preview]',
+    );
   }
 
   Future<void> jumpToLabel(String label) async {
+    _scriptDiag(
+      'jumpToLabel 请求: target=$label, currentIndex=$_scriptIndex, '
+      'currentScript=$currentScriptFile',
+    );
+
     // 在合并的脚本中查找标签
     if (_labelIndexMap.containsKey(label)) {
       _scriptIndex = _labelIndexMap[label]!;
       _currentState = _currentState.copyWith(
           forceNullCurrentNode: true,
           everShownCharacters: _everShownCharacters);
+      _scriptDiag('jumpToLabel 命中: target=$label -> index=$_scriptIndex');
       if (kEngineDebugMode) {
         //////print('[GameManager] 跳转到标签: $label, 索引: $_scriptIndex');
       }
@@ -1161,6 +1358,20 @@ class GameManager {
       await _checkMusicRegionAtCurrentIndex(forceCheck: true);
       await _executeScript();
     } else {
+      final prefix = label.contains('_') ? label.split('_').first : label;
+      final candidates = _labelIndexMap.keys
+          .where((key) => key.startsWith(prefix))
+          .take(20)
+          .toList(growable: false);
+      final nearest = _labelIndexMap.entries
+          .where((entry) => (entry.value - _scriptIndex).abs() <= 50)
+          .map((entry) => '${entry.key}:${entry.value}')
+          .take(20)
+          .join(', ');
+      _scriptDiag(
+        'jumpToLabel 失败: target=$label, labelCount=${_labelIndexMap.length}, '
+        'prefixCandidates=$candidates, nearCurrent=[$nearest]',
+      );
       if (kEngineDebugMode) {
         //////print('[GameManager] 错误: 标签 $label 未找到');
       }
@@ -1168,6 +1379,7 @@ class GameManager {
   }
 
   void next() async {
+    diagProgress('game_manager.next');
     // 检查是否需要清除anime覆盖层（在用户交互时）
     if (_currentState.animeOverlay != null && !_currentState.animeKeep) {
       ////print('[GameManager] 用户点击继续，清除anime覆盖层: ${_currentState.animeOverlay}');
@@ -1201,7 +1413,10 @@ class GameManager {
 
   /// 视频播放完成后继续执行脚本
   void executeScriptAfterMovie() {
-    //print('[GameManager] 视频播放完成，开始黑屏转场');
+    _scriptDiag(
+      'executeScriptAfterMovie: index=$_scriptIndex, '
+      'movie=${_currentState.movieFile}, contextReady=${_context != null}',
+    );
 
     // 如果有context，使用转场效果；否则直接切换
     if (_context != null) {
@@ -1209,6 +1424,10 @@ class GameManager {
         context: _context!,
         duration: const Duration(milliseconds: 600), // 转场时长
         onMidTransition: () {
+          _scriptDiag(
+            'executeScriptAfterMovie.onMidTransition: '
+            'clear movie and continue script at index=$_scriptIndex',
+          );
           // 在黑屏最深时清理movie状态并继续执行脚本
           //print('[GameManager] 转场中点：清理movie状态并继续执行脚本');
           _currentState = _currentState.copyWith(
@@ -1219,6 +1438,10 @@ class GameManager {
         },
       );
     } else {
+      _scriptDiag(
+        'executeScriptAfterMovie fallback(no context): '
+        'clear movie and continue script at index=$_scriptIndex',
+      );
       // 兼容性处理：如果没有context，直接切换
       //print('[GameManager] 无context，直接清理movie状态并继续执行脚本');
       _currentState = _currentState.copyWith(
@@ -1231,6 +1454,13 @@ class GameManager {
 
   Future<void> _executeScript() async {
     if (_isProcessing || _isWaitingForTimer) {
+      if (_shouldScriptDiagnostics() && _stepDiagCount < _maxStepDiagLines) {
+        _stepDiagCount++;
+        _scriptDiag(
+          '_executeScript 阻塞: processing=$_isProcessing, '
+          'waitingTimer=$_isWaitingForTimer, index=$_scriptIndex',
+        );
+      }
       return;
     }
     _isProcessing = true;
@@ -1240,6 +1470,7 @@ class GameManager {
     while (_scriptIndex < _script.children.length) {
       final node = _script.children[_scriptIndex];
       final currentNodeIndex = _scriptIndex; // 保存当前节点索引
+      _diagStep('visit', node, currentNodeIndex);
 
       // 触发CG预分析（后台异步执行，不阻塞主流程）
       _cgPreAnalyzer.preAnalyzeScript(
@@ -1956,6 +2187,14 @@ class GameManager {
           }
 
           // NVL/NVLN 模式下每句话都要停下来等待点击
+          _diagStep(
+            'pause_dialogue',
+            node,
+            currentNodeIndex,
+            detail:
+                'dialogueLen=${node.dialogue.length}, nvlDialogues=${updatedNvlDialogues.length}, '
+                'overlayVisible=${_currentState.isNvlOverlayVisible}',
+          );
           _scriptIndex++;
           _isProcessing = false;
           return;
@@ -1979,6 +2218,13 @@ class GameManager {
           );
 
           _gameStateController.add(_currentState);
+          _diagStep(
+            'pause_dialogue',
+            node,
+            currentNodeIndex,
+            detail:
+                'dialogueLen=${node.dialogue.length}, normal=true, overlayVisible=${_currentState.isNvlOverlayVisible}',
+          );
           _scriptIndex++;
           _isProcessing = false;
           return;
@@ -2204,6 +2450,14 @@ class GameManager {
           }
 
           // NVL/NVLN 模式下每句话都要停下来等待点击
+          _diagStep(
+            'pause_dialogue',
+            node,
+            currentNodeIndex,
+            detail:
+                'dialogueLen=${node.dialogue.length}, nvlDialogues=${updatedNvlDialogues.length}, '
+                'overlayVisible=${_currentState.isNvlOverlayVisible}',
+          );
           _scriptIndex++;
           _isProcessing = false;
           return;
@@ -2248,6 +2502,13 @@ class GameManager {
           }
 
           _scriptIndex++;
+          _diagStep(
+            'pause_dialogue',
+            node,
+            currentNodeIndex,
+            detail:
+                'dialogueLen=${node.dialogue.length}, normal=true, overlayVisible=${_currentState.isNvlOverlayVisible}',
+          );
           _isProcessing = false;
           return;
         }
@@ -2262,6 +2523,12 @@ class GameManager {
             clearDialogueAndSpeaker: true,
             everShownCharacters: _everShownCharacters);
         _gameStateController.add(_currentState);
+        _diagStep(
+          'pause_menu',
+          node,
+          currentNodeIndex,
+          detail: 'choices=${node.choices.length}',
+        );
         // 注意：不立即推进脚本索引，让存档能够保存到MenuNode的位置
         // _scriptIndex 将在选择完成后由 jumpToLabel 推进
         _isProcessing = false;
@@ -2279,6 +2546,16 @@ class GameManager {
       }
 
       if (node is JumpNode) {
+        _scriptDiag(
+          '执行 JumpNode: fromIndex=$currentNodeIndex, '
+          'target=${node.targetLabel}, nextIndex=${_scriptIndex + 1}',
+        );
+        _diagStep(
+          'jump',
+          node,
+          currentNodeIndex,
+          detail: 'target=${node.targetLabel}',
+        );
         _scriptIndex++;
         _isProcessing = false;
         jumpToLabel(node.targetLabel);
@@ -2421,10 +2698,19 @@ class GameManager {
             print(
                 '[MusicRegion] PlayMusicNode触发播放: index=$_scriptIndex, raw="${node.musicFile}", regionMusic="${musicRegion.musicFile}", resolvedPath="$fullMusicPath"');
           }
+          final playMusicStopwatch = Stopwatch()..start();
+          _scriptDiag(
+            'PlayMusic 请求: source=play_music_node, index=$currentNodeIndex, '
+            'path="$fullMusicPath", fadeMs=1000',
+          );
           await MusicManager().playBackgroundMusic(
             fullMusicPath,
             fadeTransition: true,
             fadeDuration: const Duration(milliseconds: 1000),
+          );
+          _scriptDiag(
+            'PlayMusic 完成: source=play_music_node, index=$currentNodeIndex, '
+            'path="$fullMusicPath", elapsedMs=${playMusicStopwatch.elapsedMilliseconds}',
           );
           _currentState =
               _currentState.copyWith(currentMusicRegion: musicRegion);

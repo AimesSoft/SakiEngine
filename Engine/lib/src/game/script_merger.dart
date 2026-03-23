@@ -1,3 +1,5 @@
+import 'dart:io' show Directory, File, FileMode, Platform, stderr;
+
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/game/game_script_localization.dart';
@@ -7,25 +9,86 @@ import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 import 'package:sakiengine/src/sks_parser/sks_parser.dart';
 
 class ScriptMerger {
+  static const bool _forceScriptDiagnostics =
+      bool.fromEnvironment('SAKI_SCRIPT_DIAG', defaultValue: true);
+  static final String _diagFilePath = (() {
+    const configuredPath =
+        String.fromEnvironment('SAKI_SCRIPT_DIAG_FILE', defaultValue: '');
+    if (configuredPath.trim().isNotEmpty) {
+      return configuredPath.trim();
+    }
+    return '${Directory.systemTemp.path}${Platform.pathSeparator}saki_script_diag.log';
+  })();
+  static const int _maxResolvePathDiagLines = 120;
+  static int _resolvePathDiagCount = 0;
+
   final Map<String, ScriptNode> _loadedScripts = {};
   final Map<String, int> _fileStartIndices = {}; // 记录每个文件在合并脚本中的起始索引
   final Map<String, String> _globalLabelMap = {}; // label -> filename
   ScriptNode? _mergedScript;
-  
+
+  static bool _shouldScriptDiagnostics() {
+    if (kEngineDebugMode) {
+      return true;
+    }
+    return _forceScriptDiagnostics;
+  }
+
+  static void _scriptDiag(String message) {
+    if (!_shouldScriptDiagnostics()) {
+      return;
+    }
+    final now = DateTime.now().toIso8601String();
+    final line = '[SAKI_SCRIPT_DIAG][$now] $message';
+    stderr.writeln(line);
+    try {
+      File(_diagFilePath).writeAsStringSync(
+        '$line\n',
+        mode: FileMode.append,
+      );
+    } catch (_) {}
+  }
+
+  static void _scriptDiagResolvePath(String message) {
+    if (_resolvePathDiagCount >= _maxResolvePathDiagLines) {
+      return;
+    }
+    _resolvePathDiagCount++;
+    _scriptDiag(message);
+  }
+
   /// 构建全局标签映射，扫描所有脚本文件
   Future<void> _buildGlobalLabelMap() async {
     _globalLabelMap.clear();
     _loadedScripts.clear();
+    _resolvePathDiagCount = 0;
 
     final precompiledBundle = CompiledSksRegistry.instance.activeBundle;
+    _scriptDiag(
+      '构建标签映射开始: precompiled=${precompiledBundle != null}, '
+      'hasLabelScripts=${precompiledBundle?.hasLabelScripts ?? false}, '
+      'diagFile=$_diagFilePath',
+    );
     if (precompiledBundle != null && precompiledBundle.hasLabelScripts) {
       _loadFromCompiledBundle(precompiledBundle);
+      _scriptDiag(
+        '预编译加载完成: loadedScripts=${_loadedScripts.length}, '
+        'labels=${_globalLabelMap.length}',
+      );
       if (_loadedScripts.isNotEmpty) {
-        if (kEngineDebugMode) {
-          //print('[ScriptMerger] 使用预编译脚本，共 ${_loadedScripts.length} 个文件');
+        if (!_loadedScripts.containsKey('start')) {
+          _scriptDiag(
+              '预编译脚本缺少 start.sks，当前脚本: ${_loadedScripts.keys.toList()}');
+          throw StateError(
+            '[ScriptMerger] 预编译脚本缺少 start.sks，无法继续构建脚本图',
+          );
         }
+        _scriptDiag(
+            '使用预编译脚本: files=${_loadedScripts.length}, labels=${_globalLabelMap.length}');
         return;
       }
+      _scriptDiag('预编译脚本为空，无法构建脚本图');
+      throw StateError('[ScriptMerger] 预编译脚本为空，无法继续构建脚本图');
     }
 
     try {
@@ -36,33 +99,36 @@ class ScriptMerger {
       for (final fileName in scriptFiles) {
         final fileNameWithoutExt = fileName.replaceAll('.sks', '');
         try {
-          final scriptContent =
-              await AssetManager().loadString('assets/GameScript/labels/$fileName');
+          final scriptContent = await AssetManager()
+              .loadString('assets/GameScript/labels/$fileName');
           final script = SksParser().parse(scriptContent);
           _loadedScripts[fileNameWithoutExt] = script;
           _collectLabels(fileNameWithoutExt, script);
         } catch (e) {
-          if (kEngineDebugMode) {
-            //print('[ScriptMerger] 加载脚本文件失败: $fileName - $e');
-          }
+          _scriptDiag('文件系统脚本加载失败: $fileName, error=$e');
         }
       }
-      
-      if (kEngineDebugMode) {
-        //print('[ScriptMerger] 全局标签映射构建完成，共 ${_globalLabelMap.length} 个标签');
-      }
+      _scriptDiag(
+        '文件系统脚本加载完成: scripts=${_loadedScripts.length}, '
+        'labels=${_globalLabelMap.length}',
+      );
     } catch (e) {
-      if (kEngineDebugMode) {
-        //print('[ScriptMerger] 构建全局标签映射失败: $e');
-      }
+      _scriptDiag('构建全局标签映射失败: $e');
     }
   }
 
   void _loadFromCompiledBundle(CompiledSksBundle bundle) {
     final scriptFiles = _collectLabelFileNames(bundle);
+    _scriptDiag(
+      '扫描预编译标签文件: bundleLabelAssets=${bundle.labelAssetPaths.length}, '
+      'uniqueLabelFiles=${scriptFiles.length}',
+    );
+
+    var unresolvedCount = 0;
     for (final fileName in scriptFiles) {
       final script = _resolveLocalizedLabelScript(bundle, fileName);
       if (script == null) {
+        unresolvedCount++;
         continue;
       }
 
@@ -70,28 +136,38 @@ class ScriptMerger {
       _loadedScripts[fileNameWithoutExt] = script;
       _collectLabels(fileNameWithoutExt, script);
     }
+    if (unresolvedCount > 0) {
+      _scriptDiag('预编译标签解析缺失: unresolved=$unresolvedCount');
+    }
   }
 
   List<String> _collectLabelFileNames(CompiledSksBundle bundle) {
     final fileNames = <String>[];
     final seen = <String>{};
-    final candidateDirs = GameScriptLocalization.candidateDirectories();
 
-    for (final dir in candidateDirs) {
-      final prefix = 'assets/$dir/labels/';
-      for (final assetPath in bundle.labelAssetPaths) {
-        if (!assetPath.startsWith(prefix) || !assetPath.endsWith('.sks')) {
-          continue;
-        }
-        final fileName = assetPath.substring(prefix.length);
-        if (fileName.contains('/')) {
-          continue;
-        }
-        if (seen.add(fileName)) {
-          fileNames.add(fileName);
-        }
+    for (final rawAssetPath in bundle.labelAssetPaths) {
+      final assetPath = CompiledSksBundle.normalizeAssetPath(rawAssetPath);
+      if (!assetPath.startsWith('assets/GameScript') ||
+          !assetPath.endsWith('.sks')) {
+        continue;
+      }
+
+      final markerIndex = assetPath.indexOf('/labels/');
+      if (markerIndex < 0) {
+        continue;
+      }
+
+      final fileName = assetPath.substring(markerIndex + '/labels/'.length);
+      if (fileName.isEmpty || fileName.contains('/')) {
+        continue;
+      }
+
+      if (seen.add(fileName)) {
+        fileNames.add(fileName);
       }
     }
+
+    fileNames.sort();
     return fileNames;
   }
 
@@ -104,9 +180,32 @@ class ScriptMerger {
       final assetPath = 'assets/$dir/labels/$fileName';
       final script = bundle.loadLabelScriptByAssetPath(assetPath);
       if (script != null) {
+        _scriptDiagResolvePath('标签解析命中(首选目录): $fileName <- $assetPath');
         return script;
       }
     }
+
+    // 发布模式下如果当前语言目录不完整，回退到任意可用语言目录的同名脚本。
+    final fallbackAssetPaths = <String>[];
+    for (final rawAssetPath in bundle.labelAssetPaths) {
+      final assetPath = CompiledSksBundle.normalizeAssetPath(rawAssetPath);
+      if (!assetPath.startsWith('assets/GameScript')) {
+        continue;
+      }
+      if (assetPath.endsWith('/labels/$fileName')) {
+        fallbackAssetPaths.add(assetPath);
+      }
+    }
+
+    fallbackAssetPaths.sort();
+    for (final assetPath in fallbackAssetPaths) {
+      final script = bundle.loadLabelScriptByAssetPath(assetPath);
+      if (script != null) {
+        _scriptDiagResolvePath('标签解析命中(回退目录): $fileName <- $assetPath');
+        return script;
+      }
+    }
+    _scriptDiag('标签解析失败: $fileName');
     return null;
   }
 
@@ -124,42 +223,59 @@ class ScriptMerger {
   /// 合并所有脚本文件成一个连续的脚本
   Future<ScriptNode> getMergedScript() async {
     if (_mergedScript != null) {
+      _scriptDiag(
+        '复用已合并脚本缓存: nodes=${_mergedScript!.children.length}, '
+        'files=${_fileStartIndices.length}',
+      );
       return _mergedScript!;
     }
 
     await _buildGlobalLabelMap();
-    
+
     final mergedChildren = <SksNode>[];
     _fileStartIndices.clear();
-    
+
     // 从 start 文件开始，按照 jump 顺序拼接
     final processedFiles = <String>{};
     await _mergeFileRecursively('start', mergedChildren, processedFiles);
-    
+
     _mergedScript = ScriptNode(mergedChildren);
+    _scriptDiag(
+      '合并脚本完成: mergedNodes=${mergedChildren.length}, '
+      'processedFiles=${processedFiles.length}, '
+      'fileStartIndices=${_fileStartIndices.length}',
+    );
     return _mergedScript!;
   }
 
   /// 递归合并文件，按照 jump 顺序
-  Future<void> _mergeFileRecursively(String fileName, List<SksNode> mergedChildren, Set<String> processedFiles) async {
-    if (processedFiles.contains(fileName) || !_loadedScripts.containsKey(fileName)) {
+  Future<void> _mergeFileRecursively(String fileName,
+      List<SksNode> mergedChildren, Set<String> processedFiles) async {
+    if (processedFiles.contains(fileName)) {
+      _scriptDiag('递归跳过(已处理): $fileName');
       return;
     }
-    
+    if (!_loadedScripts.containsKey(fileName)) {
+      _scriptDiag(
+        '递归跳过(缺文件): $fileName, loadedScripts=${_loadedScripts.length}',
+      );
+      return;
+    }
+
     processedFiles.add(fileName);
     final script = _loadedScripts[fileName]!;
     _fileStartIndices[fileName] = mergedChildren.length;
-    
+
     // 添加文件开始标记
     mergedChildren.add(CommentNode('=== 文件: $fileName ==='));
-    
+
     // 收集当前文件中的所有 jump 目标
     final jumpTargets = <String>[];
-    
+
     for (final node in script.children) {
       // 先添加当前节点
       mergedChildren.add(_cloneNode(node));
-      
+
       // 如果是 jump 节点，记录目标但不立即处理
       if (node is JumpNode) {
         final targetLabel = node.targetLabel;
@@ -170,7 +286,7 @@ class ScriptMerger {
           }
         }
       }
-      
+
       // 如果是 menu 节点，也要处理选项中的目标标签
       if (node is MenuNode) {
         for (final choice in node.choices) {
@@ -184,10 +300,10 @@ class ScriptMerger {
         }
       }
     }
-    
+
     // 添加文件结束标记
     mergedChildren.add(CommentNode('=== 文件 $fileName 结束 ==='));
-    
+
     // 递归处理所有被 jump 的文件
     for (final targetFile in jumpTargets) {
       await _mergeFileRecursively(targetFile, mergedChildren, processedFiles);
@@ -261,14 +377,14 @@ class ScriptMerger {
   String? getFileNameByIndex(int index) {
     String? result;
     int maxStartIndex = -1;
-    
+
     for (final entry in _fileStartIndices.entries) {
       if (entry.value <= index && entry.value > maxStartIndex) {
         maxStartIndex = entry.value;
         result = entry.key;
       }
     }
-    
+
     return result;
   }
 

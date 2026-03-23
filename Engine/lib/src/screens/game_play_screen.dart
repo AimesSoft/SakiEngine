@@ -129,6 +129,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   void initState() {
     super.initState();
 
+    // 进入游戏时强制恢复UI可见，避免继承到上一局残留的隐藏状态。
+    GlobalRightClickUIManager().setUIHidden(false);
+
     _settingsManager.addListener(_handleSettingsChanged);
     _loadMouseRollbackBehavior();
 
@@ -270,7 +273,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   event.logicalKey == LogicalKeyboardKey.space) {
                 // 检查是否正在播放视频，如果是则不推进剧情
                 if (_gameManager.currentState.movieFile == null) {
-                  _gameManager.next();
+                  _dialogueProgressionManager.progressDialogue(
+                    source: 'key_enter_space',
+                  );
                   // 通知自动播放管理器有手动推进
                   _autoPlayManager?.onManualProgress();
                 }
@@ -365,7 +370,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
 
                       // 只有在没有弹窗且没有播放视频时才推进剧情
                       if (!hasOverlayOpen && !isPlayingMovie) {
-                        _dialogueProgressionManager.progressDialogue();
+                        _dialogueProgressionManager.progressDialogue(
+                          source: 'left_click_overlay',
+                        );
                         // 通知自动播放管理器有手动推进
                         _autoPlayManager?.onManualProgress();
                       }
@@ -436,7 +443,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                             setState(() => _showFlowchart = false);
                           },
                           onProgressDialogue: () =>
-                              _dialogueProgressionManager.progressDialogue(),
+                              _dialogueProgressionManager.progressDialogue(
+                            source: 'ui_layer_progress',
+                          ),
                           expressionSelectorManager: _expressionSelectorManager,
                           createDialogueBox: _createDialogueBox,
                         ),

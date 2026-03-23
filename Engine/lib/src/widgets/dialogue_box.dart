@@ -236,37 +236,38 @@ class _DialogueBoxState extends State<DialogueBox>
   }
 
   Widget _buildReadStatusTag() {
-    final RenderBox? renderBox = _dialogueKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? renderBox =
+        _dialogueKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) {
       return const SizedBox.shrink();
     }
-    
+
     final position = renderBox.localToGlobal(Offset.zero);
     final uiScale = context.scaleFor(ComponentType.ui);
     final textScale = context.scaleFor(ComponentType.text);
-    
+
     // 计算旋转后的标签尺寸以正确对齐中心点
     final labelWidth = 36.0 * uiScale + 18.0 * 2 * uiScale;
     final labelHeight = 14.0 * textScale + 4.0 * 2 * uiScale;
-    
+
     final diagonal = (labelWidth + labelHeight) / 2;
     final centerOffsetX = diagonal * 0.5;
     final centerOffsetY = diagonal * 0.3;
-    
+
     final finalLeft = position.dx - centerOffsetX;
     final finalTop = position.dy - centerOffsetY;
-    
+
     // 转换为相对于Stack的坐标
     final stackPosition = context.findRenderObject() as RenderBox?;
     if (stackPosition == null) return const SizedBox.shrink();
-    
+
     final stackGlobalPosition = stackPosition.localToGlobal(Offset.zero);
     final relativeLeft = finalLeft - stackGlobalPosition.dx;
     final relativeTop = finalTop - stackGlobalPosition.dy;
-    
+
     return Positioned(
-      left: relativeLeft + 20*uiScale,
-      top: relativeTop + 20*uiScale,
+      left: relativeLeft + 20 * uiScale,
+      top: relativeTop + 20 * uiScale,
       child: ReadStatusIndicator(
         isRead: _isRead,
         uiScale: uiScale,
@@ -296,7 +297,7 @@ class _DialogueBoxState extends State<DialogueBox>
   }
 
   void _handleTap() {
-    widget.progressionManager?.progressDialogue();
+    widget.progressionManager?.progressDialogue(source: 'dialogue_box_tap');
   }
 
   @override
