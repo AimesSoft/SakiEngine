@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
+import 'package:sakiengine/src/utils/bundle_asset_path_probe.dart';
 import 'package:sakiengine/src/config/game_path_resolver.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
@@ -45,6 +46,7 @@ class MusicManager extends ChangeNotifier {
   static final MusicManager _instance = MusicManager._internal();
   factory MusicManager() => _instance;
   MusicManager._internal();
+  static const bool _musicSourceDiagnostics = true;
 
   // 统一的音频轨道管理
   final Map<AudioTrackType, AudioPlayer> _trackPlayers = {
@@ -73,6 +75,12 @@ class MusicManager extends ChangeNotifier {
   double get soundVolume => _dataManager.soundVolume;
   String? get currentBackgroundMusic => _currentBackgroundMusic;
   String? get currentSound => _currentSound;
+
+  void _musicSourceLog(String message) {
+    if (_musicSourceDiagnostics) {
+      print('[MusicSourceDiag] $message');
+    }
+  }
 
   Future<void> initialize() async {
     // 获取项目名称
@@ -417,6 +425,9 @@ class MusicManager extends ChangeNotifier {
     required bool loop,
   }) async {
     final musicPlayer = _trackPlayers[AudioTrackType.music]!;
+    _musicSourceLog(
+      'playMusic request: assetPath="$assetPath", old="$_currentBackgroundMusic", fade=$fadeTransition, loop=$loop',
+    );
     if (kEngineDebugMode) {
       print(
           '[MusicManager] _playMusic begin: new=$assetPath, current=$_currentBackgroundMusic, playerPlaying=${musicPlayer.playing}, fade=$fadeTransition');
@@ -442,9 +453,14 @@ class MusicManager extends ChangeNotifier {
 
     Future<void> startNewMusic() async {
       try {
+        _musicSourceLog('startNewMusic: stop current player then set source');
         await musicPlayer.stop();
         await musicPlayer.setLoopMode(loop ? LoopMode.one : LoopMode.off);
-        await _setPlayerSource(musicPlayer, assetPath);
+        await _setPlayerSource(
+          musicPlayer,
+          assetPath,
+          sourceLabel: 'music',
+        );
         final playFuture = musicPlayer.play();
         unawaited(playFuture.catchError((Object e, StackTrace stackTrace) {
           if (kEngineDebugMode) {
@@ -526,7 +542,11 @@ class MusicManager extends ChangeNotifier {
 
     await player.stop();
     await player.setLoopMode(loop ? LoopMode.one : LoopMode.off);
-    await _setPlayerSource(player, assetPath);
+    await _setPlayerSource(
+      player,
+      assetPath,
+      sourceLabel: 'sound',
+    );
     await player.play();
 
     if (fadeTransition) {
@@ -541,42 +561,129 @@ class MusicManager extends ChangeNotifier {
     }
   }
 
-  Future<void> _setPlayerSource(AudioPlayer player, String assetPath) async {
+  Future<void> _setPlayerSource(
+    AudioPlayer player,
+    String assetPath, {
+    String sourceLabel = '',
+  }) async {
+    final traceMusic = sourceLabel == 'music' && _musicSourceDiagnostics;
     final trimmed = assetPath.trim();
+    if (traceMusic) {
+      _musicSourceLog(
+        'setPlayerSource input: assetPath="$assetPath", trimmed="$trimmed"',
+      );
+    }
     if (kEngineDebugMode) {
       print(
           '[MusicManager] _setPlayerSource input=$assetPath trimmed=$trimmed');
     }
     if (trimmed.isEmpty) {
+      if (traceMusic) {
+        _musicSourceLog('setPlayerSource failed: empty assetPath');
+      }
       throw ArgumentError('assetPath must not be empty');
     }
     try {
       if (_isNetworkPath(trimmed)) {
+        if (traceMusic) {
+          _musicSourceLog('try setUrl("$trimmed")');
+        }
         await player.setUrl(trimmed);
+        if (traceMusic) {
+          _musicSourceLog('setUrl success: "$trimmed"');
+        }
         return;
       }
       if (trimmed.startsWith('file://')) {
-        await player.setFilePath(Uri.parse(trimmed).toFilePath());
+        final path = Uri.parse(trimmed).toFilePath();
+        if (traceMusic) {
+          _musicSourceLog('try setFilePath(from file://): "$path"');
+        }
+        await player.setFilePath(path);
+        if (traceMusic) {
+          _musicSourceLog('setFilePath success: "$path"');
+        }
         return;
       }
       if (trimmed.startsWith('/')) {
+        if (traceMusic) {
+          _musicSourceLog('try setFilePath(absolute): "$trimmed"');
+        }
         await player.setFilePath(trimmed);
+        if (traceMusic) {
+          _musicSourceLog('setFilePath success: "$trimmed"');
+        }
         return;
       }
       final resolved = _normalizeBundleAssetPath(trimmed);
+      final absoluteBundlePath = probeBundleAssetAbsolutePath(resolved);
+      final absoluteBundleExists = probeBundleAssetExists(resolved);
+      if (traceMusic) {
+        _musicSourceLog(
+          'normalized asset="$resolved", shouldUseFileSystemAssets=${GamePathResolver.shouldUseFileSystemAssets}',
+        );
+        _musicSourceLog(
+          'bundle absolute candidate: ${absoluteBundlePath ?? "<unavailable on this platform>"}, exists=${absoluteBundleExists ?? "<unknown>"}',
+        );
+      }
+      if (absoluteBundlePath != null && absoluteBundleExists == true) {
+        if (traceMusic) {
+          _musicSourceLog(
+            'try setFilePath(bundle absolute first): "$absoluteBundlePath"',
+          );
+        }
+        try {
+          await player.setFilePath(absoluteBundlePath);
+          if (traceMusic) {
+            _musicSourceLog(
+              'setFilePath(bundle absolute first) success: "$absoluteBundlePath"',
+            );
+          }
+          return;
+        } catch (bundleFileError, bundleFileStackTrace) {
+          if (traceMusic) {
+            _musicSourceLog(
+              'setFilePath(bundle absolute first) failed: "$absoluteBundlePath", error=$bundleFileError',
+            );
+          }
+          if (kEngineDebugMode) {
+            print(
+                '[MusicManager] bundle absolute setFilePath failed: path=$absoluteBundlePath, error=$bundleFileError');
+            print(bundleFileStackTrace);
+          }
+        }
+      }
       if (kEngineDebugMode) {
         print('[MusicManager] _setPlayerSource resolvedAsset=$resolved');
       }
       final fallbackFilePath = await _resolveGameAssetFallbackPath(resolved);
+      if (traceMusic) {
+        _musicSourceLog(
+          'fallback path resolve result: ${fallbackFilePath ?? "<null>"}',
+        );
+      }
       if (fallbackFilePath != null) {
+        if (traceMusic) {
+          _musicSourceLog('try setFilePath(primary fallback): "$fallbackFilePath"');
+        }
         if (kEngineDebugMode) {
           print(
               '[MusicManager] try setFilePath first via SAKI_GAME_PATH: $fallbackFilePath');
         }
         try {
           await player.setFilePath(fallbackFilePath);
+          if (traceMusic) {
+            _musicSourceLog(
+              'setFilePath(primary fallback) success: "$fallbackFilePath"',
+            );
+          }
           return;
         } catch (fileError, fileStackTrace) {
+          if (traceMusic) {
+            _musicSourceLog(
+              'setFilePath(primary fallback) failed: "$fallbackFilePath", error=$fileError',
+            );
+          }
           if (kEngineDebugMode) {
             print(
                 '[MusicManager] setFilePath primary failed, fallback to setAsset: path=$fallbackFilePath, error=$fileError');
@@ -585,18 +692,42 @@ class MusicManager extends ChangeNotifier {
         }
       }
       try {
+        if (traceMusic) {
+          _musicSourceLog('try setAsset("$resolved")');
+        }
         await player.setAsset(resolved);
+        if (traceMusic) {
+          _musicSourceLog('setAsset success: "$resolved"');
+        }
         return;
       } catch (assetError, assetStackTrace) {
+        if (traceMusic) {
+          _musicSourceLog('setAsset failed: "$resolved", error=$assetError');
+        }
         if (fallbackFilePath != null) {
           if (kEngineDebugMode) {
             print(
                 '[MusicManager] setAsset failed, fallback to file path: $fallbackFilePath, error=$assetError');
           }
           try {
+            if (traceMusic) {
+              _musicSourceLog(
+                'try setFilePath(secondary fallback): "$fallbackFilePath"',
+              );
+            }
             await player.setFilePath(fallbackFilePath);
+            if (traceMusic) {
+              _musicSourceLog(
+                'setFilePath(secondary fallback) success: "$fallbackFilePath"',
+              );
+            }
             return;
           } catch (fallbackError, fallbackStackTrace) {
+            if (traceMusic) {
+              _musicSourceLog(
+                'setFilePath(secondary fallback) failed: "$fallbackFilePath", error=$fallbackError',
+              );
+            }
             if (kEngineDebugMode) {
               print(
                   '[MusicManager] fallback setFilePath failed: path=$fallbackFilePath, error=$fallbackError');
@@ -612,6 +743,11 @@ class MusicManager extends ChangeNotifier {
         rethrow;
       }
     } catch (e, stackTrace) {
+      if (traceMusic) {
+        _musicSourceLog(
+          'setPlayerSource final failure: input="$assetPath", trimmed="$trimmed", error=$e',
+        );
+      }
       if (kEngineDebugMode) {
         print(
             '[MusicManager] _setPlayerSource failed: input=$assetPath, trimmed=$trimmed, error=$e');

@@ -2409,6 +2409,8 @@ class GameManager {
         final musicRegion = _getMusicRegionForIndex(_scriptIndex);
         if (musicRegion != null) {
           final fullMusicPath = _buildMusicAssetPath(node.musicFile);
+          print(
+              '[MusicSourceDiag] PlayMusicNode: index=$_scriptIndex, raw="${node.musicFile}", resolved="$fullMusicPath"');
           if (fullMusicPath.isEmpty) {
             if (kEngineDebugMode) {
               print(
