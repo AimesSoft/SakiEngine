@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'dart:ui';
 import 'dart:io';
 import 'package:sakiengine/src/game/story_flowchart_manager.dart';
@@ -799,7 +799,7 @@ class _StoryFlowchartScreenState extends State<StoryFlowchartScreen> {
           final binaryData = await file.readAsBytes();
           final saveSlot = SaveSlot.fromBinary(binaryData);
 
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             //print('[StoryFlowchart] 从节点 ${node.id} 的自动存档加载成功');
           }
 
@@ -814,7 +814,7 @@ class _StoryFlowchartScreenState extends State<StoryFlowchartScreen> {
             }
           }
         } else {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             //print('[StoryFlowchart] 自动存档文件不存在: ${node.autoSaveId}');
           }
           ScaffoldMessenger.of(context).showSnackBar(
@@ -828,7 +828,7 @@ class _StoryFlowchartScreenState extends State<StoryFlowchartScreen> {
           );
         }
       } catch (e) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[StoryFlowchart] 加载自动存档失败: $e');
         }
         ScaffoldMessenger.of(context).showSnackBar(

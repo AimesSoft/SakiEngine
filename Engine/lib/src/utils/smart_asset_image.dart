@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';

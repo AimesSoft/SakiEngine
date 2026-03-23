@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/runtime_project_config.dart';
 import 'package:sakiengine/src/sks_compiler/compiled_sks_bundle.dart';
 import 'package:sakiengine/src/sks_compiler/generated/compiled_sks_bundle.g.dart'
@@ -22,7 +22,7 @@ class CompiledSksRegistry {
   }
 
   CompiledSksBundle? get activeBundle {
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       return null;
     }
 

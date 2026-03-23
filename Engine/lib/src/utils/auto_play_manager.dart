@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/utils/dialogue_progression_manager.dart';
 
 /// 自动播放管理器
@@ -31,7 +31,7 @@ class AutoPlayManager {
     
     // 检查是否可以自动播放
     if (canAutoPlay != null && !canAutoPlay!()) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('AutoPlayManager: 当前状态不允许自动播放');
       }
       return;
@@ -40,7 +40,7 @@ class AutoPlayManager {
     _isAutoPlaying = true;
     onAutoPlayStateChanged?.call();
     
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('AutoPlayManager: 开始自动播放');
     }
     
@@ -57,7 +57,7 @@ class AutoPlayManager {
     _cancelReadingTimer();
     onAutoPlayStateChanged?.call();
     
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('AutoPlayManager: 停止自动播放');
     }
   }
@@ -79,7 +79,7 @@ class AutoPlayManager {
     if (dialogueProgressionManager.isTypewriterActive) {
       // 打字机正在播放，等待完成
       _isWaitingForTypewriter = true;
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('AutoPlayManager: 等待打字机完成...');
       }
       
@@ -104,7 +104,7 @@ class AutoPlayManager {
       }
       _isWaitingForTypewriter = false;
       
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('AutoPlayManager: 打字机完成，开始阅读等待');
       }
       
@@ -129,7 +129,7 @@ class AutoPlayManager {
     
     // 再次检查是否可以自动播放
     if (canAutoPlay != null && !canAutoPlay!()) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('AutoPlayManager: 检测到不允许自动播放的状态，停止自动播放');
       }
       stopAutoPlay();
@@ -147,7 +147,7 @@ class AutoPlayManager {
         }
       });
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('AutoPlayManager: 推进对话时发生错误: $e');
       }
       stopAutoPlay();
@@ -163,7 +163,7 @@ class AutoPlayManager {
   /// 手动推进对话时的处理 - 停止自动播放
   void onManualProgress() {
     if (_isAutoPlaying) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('AutoPlayManager: 检测到手动推进，停止自动播放');
       }
       stopAutoPlay();
@@ -173,7 +173,7 @@ class AutoPlayManager {
   /// 当遇到选择菜单或其他阻塞情况时强制停止自动播放
   void forceStopOnBlocking() {
     if (_isAutoPlaying) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('AutoPlayManager: 遇到阻塞情况，强制停止自动播放');
       }
       stopAutoPlay();
@@ -190,7 +190,7 @@ class AutoPlayManager {
     
     _cancelReadingTimer();
     
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('AutoPlayManager: 已释放资源');
     }
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 import 'package:sakiengine/src/utils/image_loader.dart';

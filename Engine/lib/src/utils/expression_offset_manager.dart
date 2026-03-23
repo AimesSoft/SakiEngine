@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/utils/character_composite_cache.dart';
 
 /// 差分偏移配置类

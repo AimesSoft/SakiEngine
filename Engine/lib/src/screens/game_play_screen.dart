@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -152,7 +152,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
     _setupHotkey();
 
     // 初始化表情选择器管理器（仅在Debug模式下）
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       _setupExpressionSelectorManager();
     }
 

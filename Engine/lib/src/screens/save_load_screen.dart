@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';

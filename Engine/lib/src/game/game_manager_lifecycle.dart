@@ -46,7 +46,7 @@ extension _GameManagerLifecycle on GameManager {
     try {
       await _analyzeAndPreloadAnimeResources();
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         ////print('[GameManager] 预加载anime资源失败: $e');
       }
     }
@@ -96,7 +96,7 @@ extension _GameManagerLifecycle on GameManager {
     try {
       await _analyzeAndPreloadAnimeResources();
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         ////print('[GameManager] 存档恢复：预加载anime资源失败: $e');
       }
     }
@@ -118,7 +118,7 @@ extension _GameManagerLifecycle on GameManager {
     _sceneAnimationController = null;
 
     // 恢复 NVL 状态
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[GameManager] 存档恢复：cgCharacters数量 = ${snapshot.currentState.cgCharacters.length}');
       //print('[GameManager] 存档恢复：cgCharacters内容 = ${snapshot.currentState.cgCharacters.keys.toList()}');
     }
@@ -230,7 +230,7 @@ extension _GameManagerLifecycle on GameManager {
             currentNode: currentNode,
             everShownCharacters: _everShownCharacters,
           );
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             //print('[GameManager] 存档恢复：检测到MenuNode，设置currentNode');
           }
         }

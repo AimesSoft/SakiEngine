@@ -5,11 +5,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-enum RunBuildMode {
-  debug,
-  profile,
-  release,
-}
+enum RunBuildMode { debug, showcase, profile, release }
+
+enum BuildMode { release, showcase }
 
 class LauncherUiSettings {
   final ThemeMode themeMode;
@@ -93,9 +91,8 @@ class LauncherUiSettings {
   }
 }
 
-final ValueNotifier<LauncherUiSettings> _settingsNotifier = ValueNotifier<LauncherUiSettings>(
-  LauncherUiSettings.defaults(),
-);
+final ValueNotifier<LauncherUiSettings> _settingsNotifier =
+    ValueNotifier<LauncherUiSettings>(LauncherUiSettings.defaults());
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -104,10 +101,7 @@ Future<void> main() async {
 }
 
 class SakiLauncherApp extends StatelessWidget {
-  const SakiLauncherApp({
-    required this.settingsNotifier,
-    super.key,
-  });
+  const SakiLauncherApp({required this.settingsNotifier, super.key});
 
   final ValueNotifier<LauncherUiSettings> settingsNotifier;
 
@@ -150,10 +144,7 @@ class SakiLauncherApp extends StatelessWidget {
 }
 
 class LauncherPage extends StatefulWidget {
-  const LauncherPage({
-    required this.settingsNotifier,
-    super.key,
-  });
+  const LauncherPage({required this.settingsNotifier, super.key});
 
   final ValueNotifier<LauncherUiSettings> settingsNotifier;
 
@@ -161,10 +152,7 @@ class LauncherPage extends StatefulWidget {
   State<LauncherPage> createState() => _LauncherPageState();
 }
 
-enum RunLaunchMode {
-  embedded,
-  systemTerminal,
-}
+enum RunLaunchMode { embedded, systemTerminal }
 
 class _LauncherPageState extends State<LauncherPage> {
   static const List<String> _allBuildTargets = <String>[
@@ -204,6 +192,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
   RunLaunchMode _runMode = RunLaunchMode.embedded;
   RunBuildMode _runBuildMode = RunBuildMode.debug;
   String _buildTarget = 'web';
+  BuildMode _buildMode = BuildMode.release;
   bool _busy = false;
   bool _isRunTask = false;
   bool _pendingSafeRestart = false;
@@ -324,6 +313,8 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     switch (mode) {
       case RunBuildMode.debug:
         return 'Debug';
+      case RunBuildMode.showcase:
+        return '演出模式';
       case RunBuildMode.profile:
         return 'Profile';
       case RunBuildMode.release:
@@ -335,6 +326,8 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     switch (mode) {
       case RunBuildMode.debug:
         return const <String>[];
+      case RunBuildMode.showcase:
+        return const <String>['--release'];
       case RunBuildMode.profile:
         return const <String>['--profile'];
       case RunBuildMode.release:
@@ -346,11 +339,43 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     switch (mode) {
       case RunBuildMode.debug:
         return '';
+      case RunBuildMode.showcase:
+        return '--release';
       case RunBuildMode.profile:
         return '--profile';
       case RunBuildMode.release:
         return '--release';
     }
+  }
+
+  bool _isShowcaseMode(RunBuildMode mode) {
+    return mode == RunBuildMode.showcase;
+  }
+
+  bool _shouldUseReleaseAssetPipeline(RunBuildMode mode) {
+    return mode == RunBuildMode.profile || mode == RunBuildMode.release;
+  }
+
+  String _buildModeLabel(BuildMode mode) {
+    switch (mode) {
+      case BuildMode.release:
+        return '发布模式';
+      case BuildMode.showcase:
+        return '演出模式';
+    }
+  }
+
+  List<String> _buildRunDefines({
+    required String game,
+    required String gameDir,
+    required RunBuildMode mode,
+  }) {
+    final defines = <String>['--dart-define=SAKI_GAME_PATH=$gameDir'];
+    if (_isShowcaseMode(mode)) {
+      defines.add('--dart-define=SAKI_SHOW_MODE=true');
+      defines.add('--dart-define=SAKI_SHOWCASE_GAME_DIR=Game/$game');
+    }
+    return defines;
   }
 
   Future<void> _checkToolchain() async {
@@ -437,7 +462,8 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
                       runSpacing: 8,
                       children: _seedChoices.map((choice) {
                         final selected =
-                            choice.color.toARGB32() == selectedSeedColor.toARGB32();
+                            choice.color.toARGB32() ==
+                            selectedSeedColor.toARGB32();
                         return ChoiceChip(
                           label: Text(choice.label),
                           selected: selected,
@@ -478,11 +504,10 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
                       return;
                     }
                     Navigator.of(dialogContext).pop();
-                    final hex =
-                        (selectedSeedColor.toARGB32() & 0xFFFFFF)
-                            .toRadixString(16)
-                            .padLeft(6, '0')
-                            .toUpperCase();
+                    final hex = (selectedSeedColor.toARGB32() & 0xFFFFFF)
+                        .toRadixString(16)
+                        .padLeft(6, '0')
+                        .toUpperCase();
                     _appendLog(
                       '设置已更新: 主题=${_themeModeLabel(selectedThemeMode)}, 色调=#$hex',
                     );
@@ -573,10 +598,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
   Future<int> _runNodeBridge(List<String> bridgeArgs) {
     return _runCommand(
       executable: 'node',
-      arguments: <String>[
-        'scripts/launcher-bridge.js',
-        ...bridgeArgs,
-      ],
+      arguments: <String>['scripts/launcher-bridge.js', ...bridgeArgs],
       workingDirectory: _repoRoot.path,
     );
   }
@@ -585,11 +607,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     String game, {
     required bool generateIcons,
   }) async {
-    final args = <String>[
-      'prepare-project',
-      '--game',
-      game,
-    ];
+    final args = <String>['prepare-project', '--game', game];
     if (generateIcons) {
       args.add('--generate-icons');
     }
@@ -668,7 +686,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
                           setDefault = value;
                         });
                       },
-                  ),
+                    ),
                     if (message != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
@@ -703,11 +721,15 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
                             color = color.substring(1);
                           }
 
-                          final nameOk = RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(name);
+                          final nameOk = RegExp(
+                            r'^[a-zA-Z0-9_-]+$',
+                          ).hasMatch(name);
                           final bundleOk = RegExp(
                             r'^[a-zA-Z][a-zA-Z0-9]*(\.[a-zA-Z][a-zA-Z0-9]*){2,}$',
                           ).hasMatch(bundle);
-                          final colorOk = RegExp(r'^[0-9A-Fa-f]{6}$').hasMatch(color);
+                          final colorOk = RegExp(
+                            r'^[0-9A-Fa-f]{6}$',
+                          ).hasMatch(color);
 
                           if (!nameOk || !bundleOk || !colorOk) {
                             setDialogState(() {
@@ -813,6 +835,11 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     final gameDir = _joinPath(_joinPath(_repoRoot.path, 'Game'), game);
     final runDevice = _runTarget == 'web' ? 'chrome' : _runTarget;
     final runModeArgs = _runBuildModeArgs(_runBuildMode);
+    final runDefineArgs = _buildRunDefines(
+      game: game,
+      gameDir: gameDir,
+      mode: _runBuildMode,
+    );
 
     setState(() {
       _busy = true;
@@ -824,7 +851,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
 
     try {
       if (_runMode == RunLaunchMode.systemTerminal) {
-        if (_runBuildMode != RunBuildMode.debug) {
+        if (_shouldUseReleaseAssetPipeline(_runBuildMode)) {
           _appendLog('系统终端模式暂不支持 Profile/Release 发布运行管线，请切换到内置控制台运行');
           return;
         }
@@ -843,7 +870,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
       }
 
       int runCode;
-      if (_runBuildMode == RunBuildMode.debug) {
+      if (!_shouldUseReleaseAssetPipeline(_runBuildMode)) {
         await _prepareProjectForExecution(game, generateIcons: false);
 
         final pubGetCode = await _runCommand(
@@ -865,7 +892,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
             ...runModeArgs,
             '-d',
             runDevice,
-            '--dart-define=SAKI_GAME_PATH=$gameDir',
+            ...runDefineArgs,
           ],
           workingDirectory: gameDir,
         );
@@ -875,6 +902,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
           gameDir: gameDir,
           runDevice: runDevice,
           runModeArgs: runModeArgs,
+          runDefineArgs: runDefineArgs,
         );
       }
       if (runCode != 0) {
@@ -908,6 +936,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     required String gameDir,
     required String runDevice,
     required List<String> runModeArgs,
+    required List<String> runDefineArgs,
   }) async {
     final gameDirectory = Directory(gameDir);
     final gamePubspec = File(_joinPath(gameDir, 'pubspec.yaml'));
@@ -993,7 +1022,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
           ...runModeArgs,
           '-d',
           runDevice,
-          '--dart-define=SAKI_GAME_PATH=$gameDir',
+          ...runDefineArgs,
         ],
         workingDirectory: gameDir,
       );
@@ -1059,7 +1088,9 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
         ? await engineLoader.readAsString()
         : _defaultGeneratedLoader;
 
-    _appendLog('开始构建: $game -> $platform');
+    _appendLog(
+      '开始构建: $game -> $platform (mode=${_buildModeLabel(_buildMode)})',
+    );
 
     try {
       await _prepareProjectForExecution(game, generateIcons: false);
@@ -1073,41 +1104,46 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
         throw _TaskFailure('flutter pub get 失败');
       }
 
-      final compileCode = await _runCommand(
-        executable: 'flutter',
-        arguments: <String>[
-          'pub',
-          'run',
-          '../../Engine/tool/sks_compiler.dart',
-          '--game-dir',
-          gameDir.path,
-          '--output',
-          cacheBundle.path,
-          '--game-name',
-          game,
-        ],
-        workingDirectory: gameDir.path,
-      );
-      if (compileCode != 0 || !cacheBundle.existsSync()) {
-        throw _TaskFailure('.sks 预编译失败');
-      }
+      final useReleaseAssetPipeline = _buildMode == BuildMode.release;
+      if (useReleaseAssetPipeline) {
+        final compileCode = await _runCommand(
+          executable: 'flutter',
+          arguments: <String>[
+            'pub',
+            'run',
+            '../../Engine/tool/sks_compiler.dart',
+            '--game-dir',
+            gameDir.path,
+            '--output',
+            cacheBundle.path,
+            '--game-name',
+            game,
+          ],
+          workingDirectory: gameDir.path,
+        );
+        if (compileCode != 0 || !cacheBundle.existsSync()) {
+          throw _TaskFailure('.sks 预编译失败');
+        }
 
-      await cacheBundle.copy(engineLoader.path);
-      final summary = await _prepareReleasePubspec(
-        gameDir: gameDir,
-        pubspecFile: gamePubspec,
-      );
-      _appendLog(
-        '发布资源清单已生成: ${summary.totalAssets} 项，图片/视频 ${summary.mediaAssets} 项',
-      );
+        await cacheBundle.copy(engineLoader.path);
+        final summary = await _prepareReleasePubspec(
+          gameDir: gameDir,
+          pubspecFile: gamePubspec,
+        );
+        _appendLog(
+          '发布资源清单已生成: ${summary.totalAssets} 项，图片/视频 ${summary.mediaAssets} 项',
+        );
 
-      final secondPubGet = await _runCommand(
-        executable: 'flutter',
-        arguments: const <String>['pub', 'get'],
-        workingDirectory: gameDir.path,
-      );
-      if (secondPubGet != 0) {
-        throw _TaskFailure('更新发布资源后 pub get 失败');
+        final secondPubGet = await _runCommand(
+          executable: 'flutter',
+          arguments: const <String>['pub', 'get'],
+          workingDirectory: gameDir.path,
+        );
+        if (secondPubGet != 0) {
+          throw _TaskFailure('更新发布资源后 pub get 失败');
+        }
+      } else {
+        _appendLog('演出模式构建: 跳过 .sks 预编译与发布资源裁剪，保留脚本直读能力');
       }
 
       await _prepareProjectForExecution(game, generateIcons: true);
@@ -1127,7 +1163,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
         }
       }
 
-      final buildArgs = _buildArgsFor(platform);
+      final buildArgs = _buildArgsFor(platform, _buildMode, game);
       final buildCode = await _runCommand(
         executable: 'flutter',
         arguments: buildArgs,
@@ -1138,13 +1174,28 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
         throw _TaskFailure('flutter build 失败');
       }
 
+      final outputDir = _resolveBuildOutputDirectory(gameDir, platform);
+      if (_buildMode == BuildMode.showcase &&
+          (platform == 'macos' ||
+              platform == 'windows' ||
+              platform == 'linux')) {
+        await _stageShowcaseGameDirectory(
+          gameDir: gameDir,
+          outputDir: outputDir,
+          game: game,
+        );
+      }
+
       _appendLog('构建完成: $game -> $platform');
+      await _openBuildOutputInFileManager(gameDir, platform);
     } on _TaskFailure catch (e) {
       _appendLog('构建失败: ${e.message}');
     } finally {
-      await gamePubspec.writeAsString(originalPubspec);
-      await engineLoader.writeAsString(originalEngineLoader);
-      _appendLog('已恢复临时修改文件（pubspec + 编译入口）');
+      if (_buildMode == BuildMode.release) {
+        await gamePubspec.writeAsString(originalPubspec);
+        await engineLoader.writeAsString(originalEngineLoader);
+        _appendLog('已恢复临时修改文件（pubspec + 编译入口）');
+      }
     }
   }
 
@@ -1280,28 +1331,219 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     );
   }
 
-  List<String> _buildArgsFor(String platform) {
+  List<String> _buildArgsFor(String platform, BuildMode mode, String game) {
+    final showModeDefine = mode == BuildMode.showcase
+        ? <String>[
+            '--dart-define=SAKI_SHOW_MODE=true',
+            '--dart-define=SAKI_SHOWCASE_GAME_DIR=Game/$game',
+          ]
+        : const <String>[];
     switch (platform) {
       case 'macos':
-        return const <String>['build', 'macos', '--release'];
+        return <String>['build', 'macos', '--release', ...showModeDefine];
       case 'linux':
-        return const <String>['build', 'linux', '--release'];
+        return <String>['build', 'linux', '--release', ...showModeDefine];
       case 'windows':
-        return const <String>['build', 'windows', '--release'];
+        return <String>['build', 'windows', '--release', ...showModeDefine];
       case 'android':
-        return const <String>[
+        return <String>[
           'build',
           'apk',
           '--release',
           '--target-platform',
           'android-arm64',
+          ...showModeDefine,
         ];
       case 'ios':
-        return const <String>['build', 'ios', '--release', '--no-codesign'];
+        return <String>[
+          'build',
+          'ios',
+          '--release',
+          '--no-codesign',
+          ...showModeDefine,
+        ];
       case 'web':
-        return const <String>['build', 'web', '--release'];
+        return <String>['build', 'web', '--release', ...showModeDefine];
       default:
         throw _TaskFailure('不支持的平台: $platform');
+    }
+  }
+
+  Future<void> _stageShowcaseGameDirectory({
+    required Directory gameDir,
+    required Directory outputDir,
+    required String game,
+  }) async {
+    if (!outputDir.existsSync()) {
+      throw _TaskFailure('构建产物目录不存在: ${outputDir.path}');
+    }
+
+    final sourceAssetsDir = Directory(_joinPath(gameDir.path, 'Assets'));
+    if (!sourceAssetsDir.existsSync()) {
+      throw _TaskFailure('演出模式资源目录不存在: ${sourceAssetsDir.path}');
+    }
+
+    final scriptDirs = gameDir
+        .listSync(followLinks: false)
+        .whereType<Directory>()
+        .where((dir) {
+          final name = _basename(dir.path);
+          return name == 'GameScript' || name.startsWith('GameScript_');
+        })
+        .toList();
+    if (scriptDirs.isEmpty) {
+      throw _TaskFailure('未找到 GameScript 目录，无法生成演出模式可热更新包');
+    }
+
+    final targetGameRoot = Directory(
+      _joinPath(_joinPath(outputDir.path, 'Game'), game),
+    );
+    if (targetGameRoot.existsSync()) {
+      await targetGameRoot.delete(recursive: true);
+    }
+    await targetGameRoot.create(recursive: true);
+
+    await _copyDirectoryRecursive(
+      source: sourceAssetsDir,
+      target: Directory(_joinPath(targetGameRoot.path, 'Assets')),
+    );
+    for (final dir in scriptDirs) {
+      final name = _basename(dir.path);
+      await _copyDirectoryRecursive(
+        source: dir,
+        target: Directory(_joinPath(targetGameRoot.path, name)),
+      );
+    }
+
+    for (final fileName in const <String>[
+      'game_config.txt',
+      'default_game.txt',
+      'icon.png',
+    ]) {
+      final sourceFile = File(_joinPath(gameDir.path, fileName));
+      if (!sourceFile.existsSync()) {
+        continue;
+      }
+      final targetFile = File(_joinPath(targetGameRoot.path, fileName));
+      await targetFile.parent.create(recursive: true);
+      await sourceFile.copy(targetFile.path);
+    }
+
+    _appendLog('演出模式资源已打包: ${targetGameRoot.path}');
+  }
+
+  Future<void> _copyDirectoryRecursive({
+    required Directory source,
+    required Directory target,
+  }) async {
+    if (!await source.exists()) {
+      return;
+    }
+
+    await target.create(recursive: true);
+    await for (final entity in source.list(followLinks: false)) {
+      final name = _basename(entity.path);
+      final destinationPath = _joinPath(target.path, name);
+      if (entity is Directory) {
+        await _copyDirectoryRecursive(
+          source: entity,
+          target: Directory(destinationPath),
+        );
+      } else if (entity is File) {
+        await entity.copy(destinationPath);
+      }
+    }
+  }
+
+  Directory _resolveBuildOutputDirectory(Directory gameDir, String platform) {
+    final candidates = <String>[];
+    switch (platform) {
+      case 'macos':
+        candidates.add(
+          _joinPath(gameDir.path, 'build/macos/Build/Products/Release'),
+        );
+        break;
+      case 'linux':
+        candidates.add(
+          _joinPath(gameDir.path, 'build/linux/x64/release/bundle'),
+        );
+        break;
+      case 'windows':
+        candidates.add(
+          _joinPath(gameDir.path, 'build/windows/x64/runner/Release'),
+        );
+        break;
+      case 'android':
+        candidates.add(
+          _joinPath(gameDir.path, 'build/app/outputs/flutter-apk'),
+        );
+        candidates.add(
+          _joinPath(gameDir.path, 'build/app/outputs/apk/release'),
+        );
+        break;
+      case 'ios':
+        candidates.add(_joinPath(gameDir.path, 'build/ios/iphoneos'));
+        candidates.add(_joinPath(gameDir.path, 'build/ios/archive'));
+        break;
+      case 'web':
+        candidates.add(_joinPath(gameDir.path, 'build/web'));
+        break;
+      default:
+        break;
+    }
+
+    for (final candidate in candidates) {
+      final dir = Directory(candidate);
+      if (dir.existsSync()) {
+        return dir;
+      }
+    }
+    return Directory(_joinPath(gameDir.path, 'build'));
+  }
+
+  Future<void> _openBuildOutputInFileManager(
+    Directory gameDir,
+    String platform,
+  ) async {
+    final targetDir = _resolveBuildOutputDirectory(gameDir, platform);
+    if (!targetDir.existsSync()) {
+      _appendLog('提示: 构建输出目录不存在，跳过自动打开: ${targetDir.path}');
+      return;
+    }
+
+    int code = -1;
+    if (Platform.isMacOS) {
+      code = await _runDetachedCommand(
+        executable: 'open',
+        arguments: <String>[targetDir.path],
+        workingDirectory: _repoRoot.path,
+      );
+    } else if (Platform.isWindows) {
+      code = await _runDetachedCommand(
+        executable: 'explorer',
+        arguments: <String>[_toWindowsPath(targetDir.path)],
+        workingDirectory: _repoRoot.path,
+      );
+    } else if (Platform.isLinux) {
+      if (await _isCommandAvailable('xdg-open')) {
+        code = await _runDetachedCommand(
+          executable: 'xdg-open',
+          arguments: <String>[targetDir.path],
+          workingDirectory: _repoRoot.path,
+        );
+      } else if (await _isCommandAvailable('gio')) {
+        code = await _runDetachedCommand(
+          executable: 'gio',
+          arguments: <String>['open', targetDir.path],
+          workingDirectory: _repoRoot.path,
+        );
+      }
+    }
+
+    if (code == 0) {
+      _appendLog('已自动打开构建产物目录: ${targetDir.path}');
+    } else {
+      _appendLog('提示: 自动打开目录失败，请手动查看: ${targetDir.path}');
     }
   }
 
@@ -1327,12 +1569,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
       );
       final code = await _runDetachedCommand(
         executable: 'cmd',
-        arguments: <String>[
-          '/c',
-          'start',
-          '',
-          scriptFile.path,
-        ],
+        arguments: <String>['/c', 'start', '', scriptFile.path],
         workingDirectory: _repoRoot.path,
       );
       return code == 0;
@@ -1369,8 +1606,15 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
 
     if (Platform.isLinux) {
       final candidates = <_TerminalCandidate>[
-        _TerminalCandidate('x-terminal-emulator', <String>['-e', scriptFile.path]),
-        _TerminalCandidate('gnome-terminal', <String>['--', 'bash', scriptFile.path]),
+        _TerminalCandidate('x-terminal-emulator', <String>[
+          '-e',
+          scriptFile.path,
+        ]),
+        _TerminalCandidate('gnome-terminal', <String>[
+          '--',
+          'bash',
+          scriptFile.path,
+        ]),
         _TerminalCandidate('konsole', <String>['-e', 'bash', scriptFile.path]),
         _TerminalCandidate('xterm', <String>['-e', 'bash', scriptFile.path]),
       ];
@@ -1406,7 +1650,13 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
       _joinPath(_repoRoot.path, 'scripts/launcher-bridge.js'),
     );
     final deviceEsc = _shellEscape(runDevice);
-    final defineEsc = _shellEscape('--dart-define=SAKI_GAME_PATH=$gameDir');
+    final defineArgs = <String>[
+      '--dart-define=SAKI_GAME_PATH=$gameDir',
+      if (_isShowcaseMode(runBuildMode)) '--dart-define=SAKI_SHOW_MODE=true',
+      if (_isShowcaseMode(runBuildMode))
+        '--dart-define=SAKI_SHOWCASE_GAME_DIR=Game/$game',
+    ];
+    final defineEsc = defineArgs.map(_shellEscape).join(' ');
     final modeFlag = _runBuildModeFlag(runBuildMode);
     final modePart = modeFlag.isEmpty ? '' : '${_shellEscape(modeFlag)} ';
 
@@ -1446,6 +1696,9 @@ exit \$status
     );
     final modeFlag = _runBuildModeFlag(runBuildMode);
     final modePart = modeFlag.isEmpty ? '' : '$modeFlag ';
+    final extraShowModeDefine = _isShowcaseMode(runBuildMode)
+        ? ' "--dart-define=SAKI_SHOW_MODE=true" "--dart-define=SAKI_SHOWCASE_GAME_DIR=Game/$game"'
+        : '';
 
     return '''@echo off
 setlocal
@@ -1467,7 +1720,7 @@ if errorlevel 1 goto end
 
 echo.
 echo 启动 Flutter 运行（支持 r/R/q 热更新命令）...
-flutter run ${modePart}-d $runDevice "--dart-define=SAKI_GAME_PATH=$gamePath"
+flutter run ${modePart}-d $runDevice "--dart-define=SAKI_GAME_PATH=$gamePath"$extraShowModeDefine
 
 :end
 echo.
@@ -1749,8 +2002,8 @@ endlocal
                 final leftFlex = constraints.maxWidth >= 1200
                     ? 36
                     : constraints.maxWidth >= 900
-                        ? 40
-                        : 44;
+                    ? 40
+                    : 44;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
@@ -1760,10 +2013,7 @@ endlocal
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: <Widget>[
-                          Expanded(
-                            flex: leftFlex,
-                            child: _buildControlPanel(),
-                          ),
+                          Expanded(flex: leftFlex, child: _buildControlPanel()),
                           const SizedBox(width: 12),
                           Expanded(
                             flex: 100 - leftFlex,
@@ -2072,6 +2322,32 @@ endlocal
           const SizedBox(height: 14),
           const Text('构建', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
+          DropdownButtonFormField<BuildMode>(
+            initialValue: _buildMode,
+            decoration: const InputDecoration(
+              labelText: '构建模式',
+              border: OutlineInputBorder(),
+            ),
+            items: BuildMode.values
+                .map(
+                  (mode) => DropdownMenuItem<BuildMode>(
+                    value: mode,
+                    child: Text(_buildModeLabel(mode)),
+                  ),
+                )
+                .toList(),
+            onChanged: _busy
+                ? null
+                : (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      _buildMode = value;
+                    });
+                  },
+          ),
+          const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             initialValue: _buildTarget,
             decoration: const InputDecoration(
@@ -2103,7 +2379,7 @@ endlocal
                 ? null
                 : _buildSelectedGame,
             icon: const Icon(Icons.build_circle_outlined),
-            label: const Text('发布构建'),
+            label: Text(_buildMode == BuildMode.showcase ? '演出构建' : '发布构建'),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
@@ -2114,10 +2390,7 @@ endlocal
           const SizedBox(height: 10),
           Text(
             '说明: 启动器已覆盖 run.sh/build.sh 主要流程，可直接在此完成创建、运行、构建。',
-            style: TextStyle(
-              fontSize: 12,
-              color: scheme.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -2133,9 +2406,13 @@ endlocal
       ),
       scheme.surfaceContainerLow,
     );
-    final panelBorder = scheme.outlineVariant.withValues(alpha: isDark ? 0.6 : 0.36);
+    final panelBorder = scheme.outlineVariant.withValues(
+      alpha: isDark ? 0.6 : 0.36,
+    );
     final headerTextColor = scheme.onSurface;
-    final bodyTextColor = scheme.onSurface.withValues(alpha: isDark ? 0.92 : 0.95);
+    final bodyTextColor = scheme.onSurface.withValues(
+      alpha: isDark ? 0.92 : 0.95,
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -2290,7 +2567,10 @@ class _SeedChoice {
 }
 
 String _launcherSettingsFilePath() {
-  final home = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? '.';
+  final home =
+      Platform.environment['HOME'] ??
+      Platform.environment['USERPROFILE'] ??
+      '.';
   return '$home/.sakiengine_launcher_settings.json';
 }
 

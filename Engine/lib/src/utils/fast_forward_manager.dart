@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/services.dart';
 import 'package:sakiengine/src/utils/dialogue_progression_manager.dart';
 

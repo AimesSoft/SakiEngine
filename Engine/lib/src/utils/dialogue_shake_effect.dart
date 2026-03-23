@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'dart:math' as math;
 
 /// 对话框震动效果管理器

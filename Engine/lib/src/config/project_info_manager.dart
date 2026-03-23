@@ -1,5 +1,7 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+
+import 'package:sakiengine/src/config/game_path_resolver.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/config/runtime_project_config.dart';
@@ -14,9 +16,7 @@ class ProjectInfoManager {
 
   // 检查是否应该从外部加载资源（仅桌面平台的Debug模式）
   static bool _shouldLoadFromExternal() {
-    if (!kDebugMode) return false;
-    // 只在桌面平台从外部加载
-    return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    return GamePathResolver.shouldUseFileSystemAssets;
   }
 
   /// 获取当前项目名称（文件夹名）
@@ -37,38 +37,16 @@ class ProjectInfoManager {
         return _cachedProjectName!;
       }
 
-      // 优先从环境变量获取游戏路径
-      const fromDefine =
-          String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
-      if (fromDefine.isNotEmpty) {
-        _cachedProjectName = p.basename(fromDefine);
+      final resolvedGamePath = await GamePathResolver.resolveGamePath();
+      if (resolvedGamePath != null && resolvedGamePath.isNotEmpty) {
+        _cachedProjectName = p.basename(resolvedGamePath);
         return _cachedProjectName!;
       }
 
-      final fromEnv = Platform.environment['SAKI_GAME_PATH'];
-      if (fromEnv != null && fromEnv.isNotEmpty) {
-        _cachedProjectName = p.basename(fromEnv);
+      final resolvedProjectName = await GamePathResolver.resolveProjectName();
+      if (resolvedProjectName != null && resolvedProjectName.isNotEmpty) {
+        _cachedProjectName = resolvedProjectName;
         return _cachedProjectName!;
-      }
-
-      if (_shouldLoadFromExternal()) {
-        final currentDir = Directory.current.path;
-        final gameConfigFile = File(p.join(currentDir, 'game_config.txt'));
-        if (await gameConfigFile.exists()) {
-          _cachedProjectName = p.basename(currentDir);
-          return _cachedProjectName!;
-        }
-
-        final localDefaultGameFile =
-            File(p.join(currentDir, 'default_game.txt'));
-        if (await localDefaultGameFile.exists()) {
-          final defaultGame =
-              (await localDefaultGameFile.readAsString()).trim();
-          if (defaultGame.isNotEmpty) {
-            _cachedProjectName = defaultGame;
-            return _cachedProjectName!;
-          }
-        }
       }
 
       // 从assets读取default_game.txt
@@ -111,40 +89,25 @@ class ProjectInfoManager {
         gamePath = runtimeConfig.gamePath!;
       }
 
-      // 获取游戏路径
       if (gamePath.isEmpty) {
-        const fromDefine =
-            String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
-        if (fromDefine.isNotEmpty) {
-          gamePath = fromDefine;
+        final resolvedPath = await GamePathResolver.resolveGamePath();
+        if (resolvedPath != null && resolvedPath.isNotEmpty) {
+          gamePath = resolvedPath;
         }
       }
 
       if (gamePath.isEmpty) {
-        final fromEnv = Platform.environment['SAKI_GAME_PATH'];
-        if (fromEnv != null && fromEnv.isNotEmpty) {
-          gamePath = fromEnv;
-        }
-      }
-
-      if (gamePath.isEmpty && _shouldLoadFromExternal()) {
-        final currentDir = Directory.current.path;
-        final gameConfigFile = File(p.join(currentDir, 'game_config.txt'));
-        if (await gameConfigFile.exists()) {
-          gamePath = currentDir;
-        }
-      }
-
-      if (gamePath.isEmpty) {
-        final assetContent = await _loadDefaultGameNameFromAssets();
-        final projectName = assetContent.trim();
+        final projectName = await getProjectName();
         if (projectName.isNotEmpty) {
-          gamePath = p.join(Directory.current.path, 'Game', projectName);
+          final localFallback =
+              p.join(Directory.current.path, 'Game', projectName);
+          if (await Directory(localFallback).exists()) {
+            gamePath = localFallback;
+          }
         }
       }
 
       if (gamePath.isNotEmpty && _shouldLoadFromExternal()) {
-        // 在桌面调试模式下，尝试从game_config.txt读取应用名称
         final configFile = File(p.join(gamePath, 'game_config.txt'));
         if (await configFile.exists()) {
           final lines = await configFile.readAsLines();
@@ -172,6 +135,7 @@ class ProjectInfoManager {
   void clearCache() {
     _cachedProjectName = null;
     _cachedAppName = null;
+    GamePathResolver.clearCache();
   }
 
   Future<String> _loadDefaultGameNameFromAssets() async {

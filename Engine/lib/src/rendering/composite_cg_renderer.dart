@@ -3,7 +3,7 @@ import 'dart:collection';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
@@ -118,7 +118,7 @@ class CompositeCgRenderer {
       );
       _dissolveProgram = program;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[CompositeCgRenderer] Failed to load dissolve shader: $e');
       }
     }

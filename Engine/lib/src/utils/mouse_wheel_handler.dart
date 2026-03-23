@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 
 /// 鼠标滚轮处理器
 /// 负责处理游戏中的鼠标滚轮事件:

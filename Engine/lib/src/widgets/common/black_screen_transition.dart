@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 
 /// 全局转场覆盖层管理器
 /// 使用覆盖层方式实现黑场过渡，与场景切换分离

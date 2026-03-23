@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/screens/story_flowchart_screen.dart';
 import 'package:sakiengine/src/game/story_flowchart_analyzer.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';

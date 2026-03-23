@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/services.dart' show rootBundle, AssetManifest;
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/game/game_script_localization.dart';
@@ -12,7 +12,7 @@ class AssetManager {
   factory AssetManager() => _instance;
   AssetManager._internal() {
     // Web平台不需要初始化日志
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print("AssetManager (Web): Using bundle assets only");
     }
   }

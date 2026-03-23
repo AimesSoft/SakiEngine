@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 
 /// 缩放策略枚举

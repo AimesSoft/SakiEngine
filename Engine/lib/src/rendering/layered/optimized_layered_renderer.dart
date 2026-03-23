@@ -7,7 +7,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sakiengine/src/rendering/layered/layer_types.dart';
@@ -44,7 +44,7 @@ class OptimizedLayeredRenderer {
 
   /// 激进预热 - 预加载项目中所有CG资源
   Future<void> aggressivePreload() async {
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('[OptimizedLayeredRenderer] 开始激进预热...');
     }
     
@@ -62,12 +62,12 @@ class OptimizedLayeredRenderer {
         await Future.delayed(const Duration(milliseconds: 10));
       }
       
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[OptimizedLayeredRenderer] 预热完成，加载了${cgResources.length}个资源');
       }
       
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[OptimizedLayeredRenderer] 预热失败: $e');
       }
     }

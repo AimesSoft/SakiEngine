@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:just_audio/just_audio.dart';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
 
@@ -85,7 +85,7 @@ class UISoundManager {
       final soundName = _hoverSounds[_random.nextInt(_hoverSounds.length)];
       await _playSound(soundName);
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[UISoundManager] 播放按钮悬停音效失败: $e');
       }
     }
@@ -98,7 +98,7 @@ class UISoundManager {
     try {
       await _playSound(buttonClick);
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[UISoundManager] 播放按钮点击音效失败: $e');
       }
     }

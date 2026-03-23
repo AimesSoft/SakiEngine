@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/config/game_path_resolver.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/services.dart';
 import 'dart:typed_data';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/config/asset_manager.dart';
-import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
 /// WebP动图预加载缓存
 class WebPPreloadCache {
@@ -30,7 +30,7 @@ class WebPPreloadCache {
     try {
       final assetPath = await AssetManager().findAsset(assetName);
       if (assetPath == null) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[WebPPreloadCache] 资源不存在: $assetName');
         }
         completer.complete();
@@ -40,7 +40,7 @@ class WebPPreloadCache {
 
       final bytes = await _loadWebPBytes(assetPath);
       if (bytes == null) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[WebPPreloadCache] 加载字节失败: $assetName');
         }
         completer.complete();
@@ -71,7 +71,7 @@ class WebPPreloadCache {
 
       completer.complete();
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[WebPPreloadCache] 预加载失败 $assetName: $e');
       }
       completer.completeError(e);
@@ -123,41 +123,16 @@ class WebPPreloadCache {
     }
   }
 
-  String get _debugRoot {
-    const fromDefine =
-        String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
-    if (fromDefine.isNotEmpty) return fromDefine;
-
-    final fromEnv = Platform.environment['SAKI_GAME_PATH'];
-    if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
-
-    return '';
-  }
-
   Future<String> _getGamePath() async {
-    if (_debugRoot.isNotEmpty) {
-      return _debugRoot;
-    }
-
-    try {
-      final assetContent =
-          await EngineAssetLoader.loadString('assets/default_game.txt');
-      final defaultGame = assetContent.trim();
-
-      if (defaultGame.isEmpty) {
-        throw Exception('default_game.txt is empty');
-      }
-
-      final gamePath = p.join(Directory.current.path, 'Game', defaultGame);
-      return gamePath;
-    } catch (e) {
+    if (!GamePathResolver.shouldUseFileSystemAssets) {
       return '';
     }
+    return (await GamePathResolver.resolveGamePath()) ?? '';
   }
 
   Future<Uint8List?> _loadWebPBytes(String assetPath) async {
     try {
-      if (kDebugMode) {
+      if (GamePathResolver.shouldUseFileSystemAssets) {
         final gamePath = await _getGamePath();
         if (gamePath.isNotEmpty) {
           final relativePath = assetPath.startsWith('assets/')

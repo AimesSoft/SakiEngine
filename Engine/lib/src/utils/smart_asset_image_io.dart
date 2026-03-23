@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 /// 非Web平台的SVG文件加载实现

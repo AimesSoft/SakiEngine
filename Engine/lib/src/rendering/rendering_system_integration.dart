@@ -4,7 +4,7 @@
 /// 支持渐进式迁移和性能对比
 library rendering_system_integration;
 
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/rendering/composite_cg_renderer.dart';
@@ -56,7 +56,7 @@ class RenderingSystemManager {
   RenderingSystemType _currentSystem = _initialSystem();
 
   /// 是否启用性能监控
-  bool _performanceMonitoringEnabled = kDebugMode;
+  bool _performanceMonitoringEnabled = kEngineDebugMode;
 
   /// 性能统计
   final List<double> _renderTimings = [];
@@ -75,7 +75,7 @@ class RenderingSystemManager {
     final oldSystem = _currentSystem;
     _currentSystem = system;
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('[RenderingSystemManager] Switched from $oldSystem to $system');
     }
 
@@ -124,7 +124,7 @@ class RenderingSystemManager {
 
       return widgets;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[RenderingSystemManager] Render error: $e');
       }
 
@@ -160,7 +160,7 @@ class RenderingSystemManager {
           gameManager,
         );
       } catch (e) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print(
             '[RenderingSystemManager] Layered renderer failed, falling back: $e',
           );
@@ -279,7 +279,7 @@ class RenderingSystemManager {
 
     if (estimatedFps < _performanceThreshold) {
       // 性能不足，考虑切换系统
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print(
           '[RenderingSystemManager] Performance warning: ${estimatedFps.toStringAsFixed(1)} FPS, considering system switch',
         );
@@ -356,7 +356,7 @@ class RenderingSystemManager {
         break;
     }
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print(
         '[RenderingSystemManager] Maintenance completed for $_currentSystem system',
       );
@@ -370,7 +370,7 @@ class RenderingSystemManager {
     _renderTimings.clear();
     _memoryUsage.clear();
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('[RenderingSystemManager] All caches cleared');
     }
   }
@@ -383,7 +383,7 @@ class RenderingSystemManager {
       _memoryUsage.clear();
     }
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print(
         '[RenderingSystemManager] Performance monitoring: ${enabled ? "enabled" : "disabled"}',
       );

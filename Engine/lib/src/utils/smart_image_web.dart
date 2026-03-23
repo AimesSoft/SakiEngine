@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter_avif/flutter_avif.dart';
 
 /// Web平台的图像文件加载实现 - 总是使用asset方式

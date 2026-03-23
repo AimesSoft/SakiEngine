@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 
 /// 截图缩略图组件
 /// 用于显示存档截图，带有加载状态和错误处理

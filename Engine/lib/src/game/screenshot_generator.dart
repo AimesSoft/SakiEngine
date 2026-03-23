@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/rendering/game_renderer.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/config/config_models.dart';

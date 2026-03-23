@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 
 /// 颜色背景渲染器
 /// 专门处理十六进制颜色背景的绘制逻辑

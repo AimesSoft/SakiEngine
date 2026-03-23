@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/config/config_models.dart';
@@ -186,12 +186,12 @@ class GameManager {
         await _flowchartManager.unlockNode(nodeId,
             autoSaveId: actualAutoSaveId);
 
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[AutoSave] 创建自动存档: $displayName (原因: $reason)');
         }
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[AutoSave] 创建自动存档失败: $e');
       }
     }
@@ -239,7 +239,7 @@ class GameManager {
       sceneName = currentNode.movieFile;
     }
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[AutoSave] 检查scene是否为章节末尾: $sceneName (index: $sceneIndex)');
     }
 
@@ -254,7 +254,7 @@ class GameManager {
     }
 
     if (currentChapter == null) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[AutoSave] ❌ $sceneName 无法确定所在章节');
       }
       return;
@@ -267,14 +267,14 @@ class GameManager {
       // 情况1: 遇到return节点 (回主菜单)
       if (node is ReturnNode) {
         final lastSceneIndex = _findLastSceneWithDialogueBeforeChapterEnd(i);
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[AutoSave] 找到return节点 (index: $i), return前最后一个有对话的scene是: $lastSceneIndex, 当前scene: $sceneIndex');
         }
 
         if (lastSceneIndex == sceneIndex) {
           await _createChapterEndAutoSave(sceneIndex, sceneName, i);
         } else {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             //print('[AutoSave] ❌ $sceneName 不是章节末尾: 不是return前最后一个有对话的scene');
           }
         }
@@ -286,14 +286,14 @@ class GameManager {
           _containsChapter(node.background) &&
           i != sceneIndex) {
         final lastSceneIndex = _findLastSceneWithDialogueBeforeChapterEnd(i);
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[AutoSave] 找到下一章节背景 ${node.background} (index: $i), 前面最后一个有对话的scene是: $lastSceneIndex, 当前scene: $sceneIndex');
         }
 
         if (lastSceneIndex == sceneIndex) {
           await _createChapterEndAutoSave(sceneIndex, sceneName, i);
         } else {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             //print('[AutoSave] ❌ $sceneName 不是章节末尾: 不是下一章前最后一个有对话的scene');
           }
         }
@@ -313,20 +313,20 @@ class GameManager {
           if (targetChapter != currentChapter) {
             final lastSceneIndex =
                 _findLastSceneWithDialogueBeforeChapterEnd(i);
-            if (kDebugMode) {
+            if (kEngineDebugMode) {
               //print('[AutoSave] 找到跨章节jump: cp$currentChapter -> cp$targetChapter (index: $i), 前面最后一个有对话的scene是: $lastSceneIndex, 当前scene: $sceneIndex');
             }
 
             if (lastSceneIndex == sceneIndex) {
               await _createChapterEndAutoSave(sceneIndex, sceneName, i);
             } else {
-              if (kDebugMode) {
+              if (kEngineDebugMode) {
                 //print('[AutoSave] ❌ $sceneName 不是章节末尾: 不是跨章节jump前最后一个有对话的scene');
               }
             }
             return;
           } else {
-            if (kDebugMode) {
+            if (kEngineDebugMode) {
               //print('[AutoSave] 跳过同章节jump: $targetLabel (当前章节: cp$currentChapter)');
             }
           }
@@ -334,7 +334,7 @@ class GameManager {
       }
     }
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[AutoSave] ❌ $sceneName 不是章节末尾: 未找到章节结束点');
     }
   }
@@ -360,7 +360,7 @@ class GameManager {
     final nodeId = 'chapter_end_$chapterIdSuffix';
     final displayName = '${chapterDisplayName}末尾';
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[AutoSave] ✅ $sceneName 是章节末尾! 创建自动存档: $displayName (节点ID: $nodeId)');
     }
 
@@ -382,7 +382,7 @@ class GameManager {
     // 解锁节点
     await _flowchartManager.unlockNode(nodeId, autoSaveId: actualAutoSaveId);
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[AutoSave] 章节末尾自动存档创建完成: $displayName (scene: $sceneIndex, end: $endIndex, autoSaveId: $actualAutoSaveId)');
     }
   }
@@ -576,7 +576,7 @@ class GameManager {
 
   /// 智能分析并预热局部CG组合
   void _analyzeCgCombinationsAndPreWarm({bool isLoadGame = false}) {
-    if (kDebugMode) {}
+    if (kEngineDebugMode) {}
 
     // 获取当前标签
     String? currentLabel;
@@ -586,7 +586,7 @@ class GameManager {
         final node = _script.children[i];
         if (node is LabelNode) {
           currentLabel = node.name;
-          if (kDebugMode) {}
+          if (kEngineDebugMode) {}
           break;
         }
       }
@@ -597,7 +597,7 @@ class GameManager {
           final node = _script.children[i];
           if (node is LabelNode) {
             currentLabel = node.name;
-            if (kDebugMode) {}
+            if (kEngineDebugMode) {}
             break;
           }
         }
@@ -610,14 +610,14 @@ class GameManager {
         final node = _script.children[i];
         if (node is LabelNode) {
           currentLabel = node.name;
-          if (kDebugMode) {}
+          if (kEngineDebugMode) {}
           break;
         }
       }
     }
 
     if (currentLabel == null) {
-      if (kDebugMode) {}
+      if (kEngineDebugMode) {}
     }
 
     // 使用智能预热
@@ -630,7 +630,7 @@ class GameManager {
 
   /// 轻量级初始预热 - 只预热游戏开始附近的少量CG
   void _performLightweightInitialPreWarm() {
-    if (kDebugMode) {}
+    if (kEngineDebugMode) {}
 
     // 只搜索前200行的CG组合
     final lightRange = 200;
@@ -655,7 +655,7 @@ class GameManager {
     }
 
     if (combinations.isNotEmpty) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         combinations.forEach((key, expressions) {
           print('  轻量级CG: $key -> ${expressions.take(2).toList()}'); // 只显示前2个表情
         });
@@ -666,7 +666,7 @@ class GameManager {
         _preWarmLightweightCombinations(combinations);
       });
     } else {
-      if (kDebugMode) {}
+      if (kEngineDebugMode) {}
     }
   }
 
@@ -705,7 +705,7 @@ class GameManager {
       }
     }
 
-    if (kDebugMode) {}
+    if (kEngineDebugMode) {}
   }
 
   /// 分析脚本并预加载anime资源
@@ -732,7 +732,7 @@ class GameManager {
     try {
       await Future.wait(futures);
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         ////print('[GameManager] anime资源预加载出现错误: $e');
       }
       rethrow;
@@ -944,7 +944,7 @@ class GameManager {
       try {
         await hotReload(scriptName);
       } catch (e, stack) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print(
               '[GameManager] Failed to reload scripts after language change: $e');
           print(stack);
@@ -1007,7 +1007,7 @@ class GameManager {
       if (node is PlayMusicNode) {
         final normalizedMusicFile = _normalizeMusicFileName(node.musicFile);
         if (normalizedMusicFile.isEmpty) {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print(
                 '[MusicRegion] 忽略空音乐名: raw="${node.musicFile}" at index $i');
           }
@@ -1023,7 +1023,7 @@ class GameManager {
           musicFile: normalizedMusicFile,
           startScriptIndex: i,
         );
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print(
               '[MusicRegion] 开始新音乐区间: raw="${node.musicFile}" normalized="$normalizedMusicFile" at index $i');
         }
@@ -1031,7 +1031,7 @@ class GameManager {
         // 结束当前区间
         if (currentRegion != null) {
           _musicRegions.add(currentRegion.copyWithEndIndex(i));
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             //print('[MusicRegion] 结束音乐区间: ${currentRegion.musicFile} at index $i');
           }
           currentRegion = null;
@@ -1042,12 +1042,12 @@ class GameManager {
     // 如果脚本结束时还有未结束的音乐区间，添加它
     if (currentRegion != null) {
       _musicRegions.add(currentRegion);
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[MusicRegion] 脚本结束，添加未结束的音乐区间: ${currentRegion.musicFile}');
       }
     }
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[MusicRegion] 总共构建了 ${_musicRegions.length} 个音乐区间');
       for (final region in _musicRegions) {
         //print('[MusicRegion] $region');
@@ -1073,7 +1073,7 @@ class GameManager {
         _scriptIndex >= 0 &&
         _scriptIndex < _script.children.length &&
         _script.children[_scriptIndex] is PlayMusicNode) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print(
             '[MusicRegion] 跳过区间触发播放：当前位置($_scriptIndex)是 PlayMusicNode，由节点执行阶段处理');
       }
@@ -1083,7 +1083,7 @@ class GameManager {
     final currentRegion = _getMusicRegionForIndex(_scriptIndex);
     final stateRegion = _currentState.currentMusicRegion;
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[MusicRegion] 检查位置($_scriptIndex): currentRegion=${currentRegion?.toString() ?? 'null'}, stateRegion=${stateRegion?.toString() ?? 'null'}');
     }
 
@@ -1091,7 +1091,7 @@ class GameManager {
     if (forceCheck || currentRegion != stateRegion) {
       if (currentRegion == null) {
         // 当前位置不在任何音乐区间内，应该停止音乐
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[MusicRegion] 当前位置($_scriptIndex)不在音乐区间内，停止音乐');
         }
         await MusicManager().forceStopBackgroundMusic(
@@ -1103,7 +1103,7 @@ class GameManager {
         // 当前位置在音乐区间内
         final fullMusicPath = _buildMusicAssetPath(currentRegion.musicFile);
         if (fullMusicPath.isEmpty) {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print(
                 '[MusicRegion] 当前位置($_scriptIndex)音乐名为空，跳过播放: region=$currentRegion');
           }
@@ -1116,7 +1116,7 @@ class GameManager {
             stateRegion.musicFile != currentRegion.musicFile ||
             !MusicManager().isPlayingMusic(fullMusicPath) ||
             forceCheck) {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print(
                 '[MusicRegion] 当前位置($_scriptIndex)需要播放音乐: regionMusic="${currentRegion.musicFile}", resolvedPath="$fullMusicPath", forceCheck=$forceCheck');
           }
@@ -1139,7 +1139,7 @@ class GameManager {
       final node = _script.children[i];
       if (node is LabelNode) {
         _labelIndexMap[node.name] = i;
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //////print('[GameManager] 标签映射: ${node.name} -> $i');
         }
       }
@@ -1153,7 +1153,7 @@ class GameManager {
       _currentState = _currentState.copyWith(
           forceNullCurrentNode: true,
           everShownCharacters: _everShownCharacters);
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //////print('[GameManager] 跳转到标签: $label, 索引: $_scriptIndex');
       }
 
@@ -1161,7 +1161,7 @@ class GameManager {
       await _checkMusicRegionAtCurrentIndex(forceCheck: true);
       await _executeScript();
     } else {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //////print('[GameManager] 错误: 标签 $label 未找到');
       }
     }
@@ -1271,7 +1271,7 @@ class GameManager {
 
       // 跳过注释节点（文件边界标记）
       if (node is CommentNode) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //////print('[GameManager] 跳过注释: ${node.comment}');
         }
         _scriptIndex++;
@@ -1624,7 +1624,7 @@ class GameManager {
       }
 
       if (node is CgNode) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[GameManager] 处理CgNode: character=${node.character}, pose=${node.pose}, expression=${node.expression}, position=${node.position}, animation=${node.animation}');
         }
 
@@ -1636,13 +1636,13 @@ class GameManager {
             _globalCgCharacterKey; // 统一使用全局key以复用渲染组件
 
         if (characterConfig != null) {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             //print('[GameManager] 使用角色配置: ${characterConfig.id}');
           }
           resourceId = characterConfig.resourceId;
           positionId = characterConfig.defaultPoseId ?? 'pose';
         } else {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             //print('[GameManager] 直接使用资源ID: ${node.character}');
           }
           resourceId = node.character;
@@ -1653,7 +1653,7 @@ class GameManager {
         final newPose = node.pose ?? 'pose1';
         final newExpression = node.expression ?? 'happy';
 
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[GameManager] CG参数: resourceId=$resourceId, pose=$newPose, expression=$newExpression, finalKey=$finalCharacterKey');
         }
         if (!kIsWeb) {
@@ -1743,7 +1743,7 @@ class GameManager {
           );
         }
 
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[GameManager] CG更新前: cgCharacters数量=${_currentState.cgCharacters.length}');
         }
 
@@ -1755,7 +1755,7 @@ class GameManager {
             everShownCharacters: _everShownCharacters);
         _gameStateController.add(_currentState);
 
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[GameManager] CG状态已更新，当前CG角色数量: ${_currentState.cgCharacters.length}');
           //print('[GameManager] CG角色列表: ${_currentState.cgCharacters.keys.toList()}');
         }
@@ -1949,7 +1949,7 @@ class GameManager {
               flowchartManager: _flowchartManager,
             );
           } catch (e, stackTrace) {
-            if (kDebugMode) {
+            if (kEngineDebugMode) {
               print('[GameManager] ❌ 章节自动存档检查失败: $e');
               print('堆栈: $stackTrace');
             }
@@ -2197,7 +2197,7 @@ class GameManager {
               flowchartManager: _flowchartManager,
             );
           } catch (e, stackTrace) {
-            if (kDebugMode) {
+            if (kEngineDebugMode) {
               print('[GameManager] ❌ 章节自动存档检查失败: $e');
               print('堆栈: $stackTrace');
             }
@@ -2241,7 +2241,7 @@ class GameManager {
               flowchartManager: _flowchartManager,
             );
           } catch (e, stackTrace) {
-            if (kDebugMode) {
+            if (kEngineDebugMode) {
               print('[GameManager] ❌ 章节自动存档检查失败: $e');
               print('堆栈: $stackTrace');
             }
@@ -2410,14 +2410,14 @@ class GameManager {
         if (musicRegion != null) {
           final fullMusicPath = _buildMusicAssetPath(node.musicFile);
           if (fullMusicPath.isEmpty) {
-            if (kDebugMode) {
+            if (kEngineDebugMode) {
               print(
                   '[MusicRegion] PlayMusicNode音乐名为空，跳过播放: raw="${node.musicFile}" at index $_scriptIndex');
             }
             _scriptIndex++;
             continue;
           }
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print(
                 '[MusicRegion] PlayMusicNode触发播放: index=$_scriptIndex, raw="${node.musicFile}", regionMusic="${musicRegion.musicFile}", resolvedPath="$fullMusicPath"');
           }
@@ -2429,7 +2429,7 @@ class GameManager {
           _currentState =
               _currentState.copyWith(currentMusicRegion: musicRegion);
 
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             //print('[MusicRegion] 开始播放音乐区间: ${musicRegion.musicFile} at index $_scriptIndex');
           }
         }
@@ -2445,7 +2445,7 @@ class GameManager {
         );
         _currentState = _currentState.copyWith(currentMusicRegion: null);
 
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[MusicRegion] 停止音乐 at index $_scriptIndex');
         }
         _scriptIndex++;
@@ -2542,7 +2542,7 @@ class GameManager {
   }
 
   GameStateSnapshot saveStateSnapshot() {
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[GameManager] 保存存档：cgCharacters数量 = ${_currentState.cgCharacters.length}');
       //print('[GameManager] 保存存档：cgCharacters内容 = ${_currentState.cgCharacters.keys.toList()}');
     }
@@ -2989,7 +2989,7 @@ class GameManager {
 
         if (assetPath != null && _context != null) {
           // 预加载图片到缓存
-          if (kDebugMode && !assetPath.startsWith('assets/')) {
+          if (kEngineDebugMode && !assetPath.startsWith('assets/')) {
             // Debug模式下，如果是绝对路径，使用FileImage
             await precacheImage(FileImage(File(assetPath)), _context!);
           } else {

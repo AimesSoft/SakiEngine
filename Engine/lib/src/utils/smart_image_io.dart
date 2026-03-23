@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter_avif/flutter_avif.dart';
 
 /// 非Web平台的图像文件加载实现

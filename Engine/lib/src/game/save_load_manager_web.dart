@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/game/screenshot_generator.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
@@ -101,7 +101,7 @@ class SaveLoadManager {
 
       return '...';
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[SaveLoadManager] 实时查询对话预览失败: $e');
       }
       return '...';
@@ -129,7 +129,7 @@ class SaveLoadManager {
 
       return projectName;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('Error getting project name: $e');
       }
       return 'DefaultProject';

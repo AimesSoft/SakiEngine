@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/config/config_models.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
@@ -366,7 +366,7 @@ class GameUILayerState extends State<GameUILayer> {
           ),
 
         // 开发者面板 (仅Debug模式)
-        if (kDebugMode && widget.showDeveloperPanel)
+        if (kEngineDebugMode && widget.showDeveloperPanel)
           HideableUI(
             child: DeveloperPanel(
               onClose: widget.onToggleDeveloperPanel,
@@ -385,7 +385,7 @@ class GameUILayerState extends State<GameUILayer> {
           ),
 
         // 表情选择器 (仅Debug模式)
-        if (kDebugMode && widget.showExpressionSelector)
+        if (kEngineDebugMode && widget.showExpressionSelector)
           HideableUI(
             child: Builder(
               builder: (context) {

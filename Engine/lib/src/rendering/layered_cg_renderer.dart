@@ -4,7 +4,7 @@
 /// 实现Ren'Py式的实时渲染而非预合成方式
 library layered_cg_renderer;
 
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/rendering/layered/layered_image_widget.dart';
@@ -68,7 +68,7 @@ class LayeredCgRenderer {
 
     stopwatch.stop();
 
-    if (kDebugMode && stopwatch.elapsedMicroseconds > 1000) {
+    if (kEngineDebugMode && stopwatch.elapsedMicroseconds > 1000) {
       print(
         '[LayeredCgRenderer] Build took ${stopwatch.elapsedMicroseconds}μs for ${widgets.length} characters',
       );
@@ -143,13 +143,13 @@ class LayeredCgRenderer {
           expression: expression,
         );
 
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print(
             '[LayeredCgRenderer] Preloaded: ${resourceId}_${pose}_$expression',
           );
         }
       } catch (e) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[LayeredCgRenderer] Preload failed: $e');
         }
       }
@@ -166,7 +166,7 @@ class LayeredCgRenderer {
       _renderStates.remove(key);
     }
 
-    if (keysToRemove.isNotEmpty && kDebugMode) {
+    if (keysToRemove.isNotEmpty && kEngineDebugMode) {
       print(
         '[LayeredCgRenderer] Cleaned up ${keysToRemove.length} unused render states',
       );
@@ -177,7 +177,7 @@ class LayeredCgRenderer {
   static void _clearRenderStates() {
     if (_renderStates.isNotEmpty) {
       _renderStates.clear();
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[LayeredCgRenderer] Cleared all render states');
       }
     }
@@ -188,7 +188,7 @@ class LayeredCgRenderer {
     _lastStats = stats;
 
     // 在开发模式下输出性能警告
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       if (stats.framesPerSecond < 30) {
         print(
           '[LayeredCgRenderer] Performance warning: FPS dropped to ${stats.framesPerSecond.toStringAsFixed(1)}',
@@ -235,7 +235,7 @@ class LayeredCgRenderer {
     _renderer.clearAll();
     _lastStats = null;
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('[LayeredCgRenderer] All cache cleared');
     }
   }
@@ -243,7 +243,7 @@ class LayeredCgRenderer {
   /// 启用/禁用预测性加载
   static void setPredictiveLoading(bool enabled) {
     _renderer.setPredictiveLoading(enabled);
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print(
         '[LayeredCgRenderer] Predictive loading: ${enabled ? "enabled" : "disabled"}',
       );
@@ -266,7 +266,7 @@ class LayeredCgRenderer {
     // 触发渲染器缓存清理
     _renderer.cleanupUnusedImages(const Duration(minutes: 10));
 
-    if (kDebugMode && expiredKeys.isNotEmpty) {
+    if (kEngineDebugMode && expiredKeys.isNotEmpty) {
       print(
         '[LayeredCgRenderer] Maintenance: cleaned ${expiredKeys.length} expired states',
       );
@@ -293,7 +293,7 @@ class LayeredCgRenderer {
           expression: expression,
         );
       } catch (e) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[LayeredCgRenderer] Preload failed for $resourceId: $e');
         }
       }
@@ -301,7 +301,7 @@ class LayeredCgRenderer {
 
     await Future.wait(preloadTasks, eagerError: false);
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print(
         '[LayeredCgRenderer] Preloaded ${combinations.length} common combinations',
       );

@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/utils/cg_image_compositor.dart';
 import 'package:sakiengine/src/utils/gpu_image_compositor.dart';
 
@@ -111,7 +111,7 @@ class CgPreWarmManager {
       _isWorkerRunning = true;
       _runPreWarmWorker();
       
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[CgPreWarmManager] 🔥 预热管理器已启动');
       }
     }
@@ -122,7 +122,7 @@ class CgPreWarmManager {
     _isWorkerRunning = false;
     _clearAllTasks();
     
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[CgPreWarmManager] 🔥 预热管理器已停止');
     }
   }
@@ -138,7 +138,7 @@ class CgPreWarmManager {
     
     // 检查是否已经预热完成
     if (_warmStatus[cacheKey] == PreWarmStatus.warmed) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[CgPreWarmManager] ✅ 已预热: $cacheKey');
       }
       return true;
@@ -146,7 +146,7 @@ class CgPreWarmManager {
     
     // 检查是否已在队列中或正在处理
     if (_warmStatus[cacheKey] == PreWarmStatus.warming || _processingTasks.contains(cacheKey)) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[CgPreWarmManager] ⏳ 预热中: $cacheKey');
       }
       return await _waitForCompletion(cacheKey);
@@ -165,7 +165,7 @@ class CgPreWarmManager {
     _taskQueue.add(task);
     _warmStatus[cacheKey] = PreWarmStatus.warming;
     
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[CgPreWarmManager] 🔥 添加预热任务: $cacheKey (优先级: ${priority.name})');
     }
     
@@ -249,7 +249,7 @@ class CgPreWarmManager {
         _processPreWarmTask(task);
         
       } catch (e) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[CgPreWarmManager] ⚠️ 预热工作器错误: $e');
         }
         await Future.delayed(const Duration(milliseconds: 500));
@@ -262,7 +262,7 @@ class CgPreWarmManager {
     _processingTasks.add(task.cacheKey);
     
     try {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[CgPreWarmManager] 🔥 开始预热: ${task.cacheKey} (优先级: ${task.priority.name})');
       }
       
@@ -301,7 +301,7 @@ class CgPreWarmManager {
       _warmStatus[task.cacheKey] = PreWarmStatus.warmed;
       task.complete(true);
       
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[CgPreWarmManager] ✅ 预热完成: ${task.cacheKey}');
       }
       
@@ -309,7 +309,7 @@ class CgPreWarmManager {
       _warmStatus[task.cacheKey] = PreWarmStatus.failed;
       task.completeWithError(e);
       
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[CgPreWarmManager] ❌ 预热失败: ${task.cacheKey}, 错误: $e');
       }
     } finally {
@@ -389,7 +389,7 @@ class CgPreWarmManager {
   /// 设置GPU加速开关
   void setGpuAcceleration(bool enabled) {
     _useGpuAcceleration = enabled;
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('[CgPreWarmManager] GPU加速已${enabled ? "启用" : "禁用"}');
     }
   }
