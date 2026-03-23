@@ -53,17 +53,64 @@ class CompiledSksRegistry {
       return false;
     }
 
-    final expectedProject = RuntimeProjectConfigStore().config.projectName;
-    final expected = expectedProject?.trim();
-    if (expected == null || expected.isEmpty) {
+    final expectedProjectKeys = _expectedProjectKeys();
+    if (expectedProjectKeys.isEmpty) {
       return true;
     }
 
-    final bundledProject = bundle.gameName?.trim();
-    if (bundledProject == null || bundledProject.isEmpty) {
+    final bundledProjectKey = _normalizeProjectKey(bundle.gameName);
+    if (bundledProjectKey == null) {
       return true;
     }
 
-    return expected.toLowerCase() == bundledProject.toLowerCase();
+    return expectedProjectKeys.contains(bundledProjectKey);
+  }
+
+  Set<String> _expectedProjectKeys() {
+    final runtimeConfig = RuntimeProjectConfigStore().config;
+    final keys = <String>{};
+
+    void addCandidate(String? candidate) {
+      final key = _normalizeProjectKey(candidate);
+      if (key != null) {
+        keys.add(key);
+      }
+    }
+
+    addCandidate(runtimeConfig.projectName);
+    addCandidate(runtimeConfig.appName);
+    addCandidate(runtimeConfig.gamePath);
+
+    return keys;
+  }
+
+  String? _normalizeProjectKey(String? value) {
+    if (value == null) {
+      return null;
+    }
+
+    var normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return null;
+    }
+
+    final pathParts = normalized.split(RegExp(r'[\\/]+'));
+    if (pathParts.isNotEmpty) {
+      normalized = pathParts.last;
+    }
+
+    normalized = normalized.replaceFirst(RegExp(r'\.exe$'), '');
+
+    var key = normalized.replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    if (key.isEmpty) {
+      return null;
+    }
+
+    final withoutEngineSuffix = key.replaceFirst(RegExp(r'sakiengine$'), '');
+    if (withoutEngineSuffix.isNotEmpty) {
+      key = withoutEngineSuffix;
+    }
+
+    return key;
   }
 }
