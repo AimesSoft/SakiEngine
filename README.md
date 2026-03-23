@@ -100,6 +100,31 @@ saki.bat SakiEngine
 saki.bat <项目名>
 ```
 
+首次运行时，脚本会自动执行工具链引导：
+
+- 若系统已安装 Flutter/Node.js：直接使用系统工具链
+- 若系统缺失：自动下载到本仓库 `.saki_toolchain/` 并继续启动
+- 后续运行会复用已下载内容
+
+默认缓存目录：
+
+- `tool/toolchain_cache/flutter/`
+- `tool/toolchain_cache/node/`
+
+当前脚本架构：
+
+- `saki.sh / saki.bat / run.sh / build.sh` 仅做入口转发
+- 核心运行/构建逻辑统一在 JS（`tool/saki_cli.js`、`scripts/build.js`、`run.js` 等）
+- 后续新增功能优先只改 JS 一套逻辑
+
+也可以直接使用统一 CLI：
+
+```bash
+node tool/saki_cli.js saki [项目名]
+node tool/saki_cli.js run
+node tool/saki_cli.js build [项目名|平台] [平台]
+```
+
 启动器（`Launcher/`）当前已覆盖：
 
 - 检测您的操作系统（macOS/Linux/Windows）
@@ -168,6 +193,18 @@ Windows 推荐直接使用：
 saki.bat
 ```
 
+为避免新电脑首次构建时 `media_kit` 下载失败（`mpv-dev*.7z` 校验问题），建议先执行：
+
+```bat
+tool\cache_media_kit_windows_deps.bat
+```
+
+该命令会把 Windows 依赖缓存到：
+
+`third_party\media_kit_libs_windows_video_hotfix\prebuilt\`
+
+然后再运行 `saki.bat <项目名>` 即可优先使用本地缓存，不依赖构建阶段在线下载。
+
 如果需要继续使用 shell 脚本，可使用以下方式之一：
 
 1. **Git Bash**（推荐）
@@ -181,6 +218,25 @@ saki.bat
 3. **PowerShell + bash**
 
    - 如果安装了 Git Bash，可在 PowerShell 中运行：`bash ./run.sh`
+
+#### 分发打包（含工具链与 media_kit 依赖）
+
+可执行：
+
+```bash
+./tool/package_distribution.sh
+```
+
+该脚本会生成：
+
+- 分发目录：`dist/SakiEngine-distribution-时间戳/SakiEngine/`
+- 分发压缩包：`dist/SakiEngine-distribution-时间戳/SakiEngine-distribution-时间戳.zip`
+
+并自动拉取并打包：
+
+- Flutter stable（Windows / Linux / macOS）
+- Node.js LTS（Windows-x64 / Linux-x64 / macOS-x64 / macOS-arm64）
+- media_kit Windows 预置依赖（`mpv-dev*.7z` + `ANGLE.7z`）
 
 #### 项目结构
 

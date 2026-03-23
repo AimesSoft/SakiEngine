@@ -3,6 +3,8 @@
 /Game/*
 !/Game/SakiEngine/
 !/Game/SakiEngine/**
+/.saki_toolchain/
+/tool/toolchain_cache/
 
 # C# / .NET
 

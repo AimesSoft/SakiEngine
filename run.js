@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const path = require('path');
+const fs = require('fs');
 const { execSync } = require('child_process');
 const readline = require('readline');
 
@@ -20,6 +21,38 @@ const colorLog = (message, color = 'reset') => {
 };
 
 const PROJECT_ROOT = __dirname;
+
+const prependPath = (dir) => {
+  if (!dir) return;
+  const delimiter = process.platform === 'win32' ? ';' : ':';
+  const current = process.env.PATH || '';
+  const entries = current.split(delimiter).filter(Boolean);
+  if (entries.includes(dir)) return;
+  process.env.PATH = `${dir}${delimiter}${current}`;
+};
+
+const useLocalToolchainIfAvailable = () => {
+  const flutterMarker = path.join(PROJECT_ROOT, '.saki_toolchain', 'flutter', '.current_path');
+  if (fs.existsSync(flutterMarker)) {
+    const flutterHome = fs.readFileSync(flutterMarker, 'utf8').trim();
+    const flutterBin = path.join(flutterHome, 'bin');
+    if (fs.existsSync(path.join(flutterBin, process.platform === 'win32' ? 'flutter.bat' : 'flutter'))) {
+      prependPath(flutterBin);
+    }
+  }
+
+  const nodeMarker = path.join(PROJECT_ROOT, '.saki_toolchain', 'node', '.current_path');
+  if (fs.existsSync(nodeMarker)) {
+    const nodeHome = fs.readFileSync(nodeMarker, 'utf8').trim();
+    if (fs.existsSync(path.join(nodeHome, process.platform === 'win32' ? 'node.exe' : 'bin/node'))) {
+      prependPath(nodeHome);
+      prependPath(path.join(nodeHome, 'bin'));
+    }
+  }
+};
+
+useLocalToolchainIfAvailable();
+
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
@@ -83,7 +116,7 @@ async function main() {
     }
 
     const pubspecPath = path.join(gameDir, 'pubspec.yaml');
-    if (!require('fs').existsSync(pubspecPath)) {
+    if (!fs.existsSync(pubspecPath)) {
       colorLog(`错误: ${gameDir} 不是 Flutter 项目（缺少 pubspec.yaml）`, 'red');
       process.exit(1);
     }
