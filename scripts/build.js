@@ -25,6 +25,26 @@ const defaultGameFile = path.join(projectRoot, 'default_game.txt');
 
 const supportedPlatforms = new Set(['macos', 'linux', 'windows', 'android', 'ios', 'web']);
 
+function isWindowsBatchExecutable(executable) {
+  return process.platform === 'win32' && /\.(bat|cmd)$/i.test(String(executable || ''));
+}
+
+function quoteCmdArg(value) {
+  const text = String(value ?? '');
+  if (text.length === 0) return '""';
+  if (/[\s"&|<>^()]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+function spawnCompat(executable, args, options) {
+  const safeArgs = Array.isArray(args) ? args : [];
+  if (isWindowsBatchExecutable(executable)) {
+    const commandLine = [quoteCmdArg(executable), ...safeArgs.map(quoteCmdArg)].join(' ');
+    return spawnSync('cmd.exe', ['/d', '/s', '/c', commandLine], options);
+  }
+  return spawnSync(executable, safeArgs, options);
+}
+
 function detectHostPlatform() {
   switch (os.platform()) {
     case 'darwin':
@@ -58,7 +78,7 @@ function platformDisplayName(platform) {
 }
 
 function runCommand(executable, args, cwd) {
-  const result = spawnSync(executable, args, {
+  const result = spawnCompat(executable, args, {
     cwd,
     env: process.env,
     stdio: 'inherit',

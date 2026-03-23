@@ -35,11 +35,43 @@ function commandPath(command) {
   if (result.status !== 0) {
     return null;
   }
-  const line = (result.stdout || '')
+  const lines = (result.stdout || '')
     .split(/\r?\n/)
     .map((v) => v.trim())
-    .find(Boolean);
-  return line || null;
+    .filter(Boolean);
+  if (lines.length === 0) {
+    return null;
+  }
+
+  // On Windows, "where flutter" often returns both:
+  //   ...\flutter\bin\flutter
+  //   ...\flutter\bin\flutter.bat
+  // The extensionless script cannot be spawned directly by Node on Windows.
+  if (process.platform === 'win32') {
+    const existing = lines.filter((p) => fs.existsSync(p));
+    if (existing.length === 0) {
+      return null;
+    }
+    const candidates = existing;
+    const preferredExts = ['.bat', '.cmd', '.exe'];
+
+    for (const ext of preferredExts) {
+      const matched = candidates.find((p) => p.toLowerCase().endsWith(ext));
+      if (matched) return matched;
+    }
+
+    for (const candidate of candidates) {
+      if (path.extname(candidate)) continue;
+      for (const ext of preferredExts) {
+        const withExt = `${candidate}${ext}`;
+        if (fs.existsSync(withExt)) return withExt;
+      }
+    }
+
+    return candidates[0] || null;
+  }
+
+  return lines.find((p) => fs.existsSync(p)) || null;
 }
 
 function ensureDir(dir) {
