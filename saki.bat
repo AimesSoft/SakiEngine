@@ -1,5 +1,8 @@
 @echo off
-setlocal
+setlocal EnableExtensions
+
+rem Force UTF-8 console session to avoid garbled Chinese logs/windows.
+chcp 65001 >nul
 
 cd /d "%~dp0Launcher"
 for %%I in ("%~dp0.") do set "REPO_ROOT=%%~fI"
