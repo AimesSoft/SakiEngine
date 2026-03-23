@@ -15,10 +15,16 @@
 
 ```bash
 ./saki.sh
+
+# 直启指定项目（跳过 Launcher UI）
+./saki.sh SakiEngine
+./saki.sh <项目名>
 ```
 
 Windows:
 
 ```bat
 saki.bat
+saki.bat SakiEngine
+saki.bat <项目名>
 ```

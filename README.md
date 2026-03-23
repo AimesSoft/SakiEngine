@@ -90,6 +90,14 @@ SakiEngine 是一个基于 Flutter 的现代化视觉小说游戏引擎，专为
 
 # Windows 启动器
 saki.bat
+
+# 跳过启动器，直接启动指定游戏（示例项目）
+./saki.sh SakiEngine
+saki.bat SakiEngine
+
+# 其他项目（项目名=Game 目录名）
+./saki.sh <项目名>
+saki.bat <项目名>
 ```
 
 启动器（`Launcher/`）当前已覆盖：
