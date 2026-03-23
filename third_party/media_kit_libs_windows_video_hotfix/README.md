@@ -1,13 +1,23 @@
-# [package:media_kit_libs_windows_video](https://github.com/media-kit/media-kit)
+# media_kit_libs_windows_video hotfix
 
-[![](https://img.shields.io/discord/1079685977523617792?color=33cd57&label=Discord&logo=discord&logoColor=discord)](https://discord.gg/h7qf2R9n57) [![Github Actions](https://github.com/media-kit/media-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/media-kit/media-kit/actions/workflows/ci.yml)
+Local override for Windows CMake stability in SakiEngine.
 
-Windows package providing video (& audio) native libraries for [`package:media_kit`](https://github.com/media-kit/media-kit).
+Changes from upstream `1.0.11`:
 
-Visit [media-kit/libmpv-win32-video-cmake@`master`](https://github.com/media-kit/libmpv-win32-video-cmake) & [media-kit/libmpv-win32-video-build@`master`](https://github.com/media-kit/libmpv-win32-video-build) for descriptive details.
-
-## License
-
-Copyright © 2021 & onwards, Hitesh Kumar Saini <<saini123hitesh@gmail.com>>
-
-This project & the work under this repository is governed by MIT license that can be found in the [LICENSE](./LICENSE) file.
+- Bundle `windows/ANGLE.7z` in-repo and prefer it by default for offline builds.
+- Add download timeout & inactivity timeout.
+- Add retry for unstable network downloads.
+- Fail fast on download error instead of hanging forever.
+- Remove partial archive on failure to avoid poisoned cache.
+- Support URL override via environment variables:
+  - `MEDIA_KIT_LIBS_WINDOWS_VIDEO_LIBMPV_URL`
+  - `MEDIA_KIT_LIBS_WINDOWS_VIDEO_ANGLE_URL`
+- Support local archive override via environment variables:
+  - `MEDIA_KIT_LIBS_WINDOWS_VIDEO_LIBMPV_ARCHIVE`
+  - `MEDIA_KIT_LIBS_WINDOWS_VIDEO_ANGLE_ARCHIVE`
+- Support timeout override via environment variables:
+  - `MEDIA_KIT_LIBS_WINDOWS_VIDEO_DOWNLOAD_TIMEOUT_SECONDS`
+  - `MEDIA_KIT_LIBS_WINDOWS_VIDEO_DOWNLOAD_INACTIVITY_TIMEOUT_SECONDS`
+- Support retry count override:
+  - `MEDIA_KIT_LIBS_WINDOWS_VIDEO_DOWNLOAD_RETRY_COUNT`
+- Add explicit `POST_BUILD` in `add_custom_command` to silence CMP0175 warning.

@@ -9,8 +9,29 @@ const { ensureToolchain } = require('./toolchain.js');
 const repoRoot = path.dirname(__dirname);
 const nodeBin = process.execPath;
 
+function isWindowsBatchExecutable(executable) {
+  return process.platform === 'win32' && /\.(bat|cmd)$/i.test(String(executable || ''));
+}
+
+function quoteCmdArg(value) {
+  const text = String(value ?? '');
+  if (text.length === 0) return '""';
+  // Double quotes are escaped by doubling them for cmd.exe.
+  if (/[\s"&|<>^()]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+function spawnCompat(executable, args, options) {
+  const safeArgs = Array.isArray(args) ? args : [];
+  if (isWindowsBatchExecutable(executable)) {
+    const commandLine = [quoteCmdArg(executable), ...safeArgs.map(quoteCmdArg)].join(' ');
+    return spawnSync('cmd.exe', ['/d', '/s', '/c', commandLine], options);
+  }
+  return spawnSync(executable, safeArgs, options);
+}
+
 function runCommand(executable, args, cwd, allowFailure = false) {
-  const result = spawnSync(executable, args, {
+  const result = spawnCompat(executable, args, {
     cwd,
     env: process.env,
     stdio: 'inherit',
@@ -43,7 +64,7 @@ function getPreferredDeviceId() {
 }
 
 function getAvailableDevices(flutterBin) {
-  const result = spawnSync(flutterBin, ['devices', '--machine'], {
+  const result = spawnCompat(flutterBin, ['devices', '--machine'], {
     cwd: repoRoot,
     env: process.env,
     encoding: 'utf8',

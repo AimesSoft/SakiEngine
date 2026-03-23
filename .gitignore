@@ -74,3 +74,6 @@ Engine/.flutter-plugins-dependencies
 /Game/*/.saki_cache/
 
 /.saki_launcher
+/Launcher/.dart_tool
+/Launcher/build
+/Launcher/windows/flutter/ephemeral
