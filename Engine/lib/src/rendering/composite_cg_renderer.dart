@@ -113,6 +113,69 @@ class CompositeCgRenderer {
 
   // 着色器支持
   static ui.FragmentProgram? _dissolveProgram;
+  static const bool _fallbackDiagnosticsEnabled = bool.fromEnvironment(
+    'SAKI_CG_FALLBACK_DIAG',
+    defaultValue: true,
+  );
+  static const bool _transitionDiagnosticsEnabled = bool.fromEnvironment(
+    'SAKI_CG_TRANSITION_DIAG',
+    defaultValue: true,
+  );
+  static final Set<String> _fallbackDiagSignatures = <String>{};
+  static final Set<String> _transitionDiagSignatures = <String>{};
+
+  static void _logCgFallback({
+    required String reason,
+    required String targetContentId,
+    required String? currentContentId,
+    required bool hasCurrentImage,
+    required bool hasPreviousImage,
+    required bool shaderAvailable,
+    required bool isFadingOut,
+    required bool skipAnimation,
+    required bool useGpuAcceleration,
+    double? progress,
+  }) {
+    if (!_fallbackDiagnosticsEnabled) {
+      return;
+    }
+    final progressText = progress == null ? 'n/a' : progress.toStringAsFixed(3);
+    final mode = kEngineDebugMode ? 'debug' : 'release';
+    final signature =
+        '$reason|$targetContentId|$currentContentId|$hasCurrentImage|'
+        '$hasPreviousImage|$shaderAvailable|$isFadingOut|$skipAnimation|'
+        '$useGpuAcceleration|$progressText|$mode';
+    if (!_fallbackDiagSignatures.add(signature)) {
+      return;
+    }
+    if (_fallbackDiagSignatures.length > 256) {
+      _fallbackDiagSignatures.clear();
+      _fallbackDiagSignatures.add(signature);
+    }
+    print(
+      '[CompositeCgRenderer] CG fallback triggered: '
+      'reason=$reason, mode=$mode, target=$targetContentId, '
+      'current=$currentContentId, hasCurrent=$hasCurrentImage, '
+      'hasPrevious=$hasPreviousImage, shaderAvailable=$shaderAvailable, '
+      'isFadingOut=$isFadingOut, skipAnimation=$skipAnimation, '
+      'useGpuAcceleration=$useGpuAcceleration, progress=$progressText',
+    );
+  }
+
+  static void _logCgTransition(String message) {
+    if (!_transitionDiagnosticsEnabled) {
+      return;
+    }
+    if (!_transitionDiagSignatures.add(message)) {
+      return;
+    }
+    if (_transitionDiagSignatures.length > 512) {
+      _transitionDiagSignatures.clear();
+      _transitionDiagSignatures.add(message);
+    }
+    print('[CompositeCgRenderer] CG transition: $message');
+  }
+
   static Future<void> _ensureDissolveProgram() async {
     if (_dissolveProgram != null) return;
     try {
@@ -121,9 +184,7 @@ class CompositeCgRenderer {
       );
       _dissolveProgram = program;
     } catch (e) {
-      if (kEngineDebugMode) {
-        print('[CompositeCgRenderer] Failed to load dissolve shader: $e');
-      }
+      print('[CompositeCgRenderer] Failed to load dissolve shader: $e');
     }
   }
 
@@ -2255,6 +2316,11 @@ class _CgSlotWidgetState extends State<CgSlotWidget>
 
   // 是否是第一次显示CG（用于从背景渐变到CG）
   bool _isFirstCg = true;
+  int _loadRequestToken = 0;
+
+  String _targetContentId() {
+    return '${widget.resourceId}_${widget.pose}_${widget.expression}';
+  }
 
   @override
   void initState() {
@@ -2277,23 +2343,41 @@ class _CgSlotWidgetState extends State<CgSlotWidget>
     });
 
     // 初始加载
-    _loadCgImage();
+    _loadCgImage(
+      resourceId: widget.resourceId,
+      pose: widget.pose,
+      expression: widget.expression,
+      contentId: _targetContentId(),
+      trigger: 'init',
+    );
   }
 
   @override
   void didUpdateWidget(CgSlotWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final newContentId =
-        '${widget.resourceId}_${widget.pose}_${widget.expression}';
+    final newContentId = _targetContentId();
+    final oldRequestedContentId =
+        '${oldWidget.resourceId}_${oldWidget.pose}_${oldWidget.expression}';
 
     // 检测内容是否改变（差分、pose或完全不同的CG）
-    if (_currentContentId != newContentId) {
+    if (oldRequestedContentId != newContentId) {
       // 保存当前图像作为过渡源
       _previousImage = _currentImage;
+      CompositeCgRenderer._logCgTransition(
+        'content_changed old=$oldRequestedContentId -> new=$newContentId, '
+        'hasCurrent=${_currentImage != null}, hasPrevious=${_previousImage != null}, '
+        'skipAnimation=${widget.skipAnimation}, isFadingOut=${widget.isFadingOut}',
+      );
 
       // 加载新图像
-      _loadCgImage();
+      _loadCgImage(
+        resourceId: widget.resourceId,
+        pose: widget.pose,
+        expression: widget.expression,
+        contentId: newContentId,
+        trigger: 'update',
+      );
     }
 
     // 处理淡出状态变化
@@ -2310,38 +2394,84 @@ class _CgSlotWidgetState extends State<CgSlotWidget>
     super.dispose();
   }
 
-  Future<void> _loadCgImage() async {
-    final contentId =
-        '${widget.resourceId}_${widget.pose}_${widget.expression}';
+  Future<void> _loadCgImage({
+    required String resourceId,
+    required String pose,
+    required String expression,
+    required String contentId,
+    required String trigger,
+  }) async {
+    final requestToken = ++_loadRequestToken;
 
     try {
       // 尝试从预合成缓存获取
       final image = await _getCompositeImage(
-        widget.resourceId,
-        widget.pose,
-        widget.expression,
+        resourceId,
+        pose,
+        expression,
       );
 
       if (!mounted) return;
+      if (requestToken != _loadRequestToken) {
+        CompositeCgRenderer._logCgTransition(
+          'drop_stale_load trigger=$trigger, content=$contentId, token=$requestToken, currentToken=$_loadRequestToken',
+        );
+        return;
+      }
 
       setState(() {
         _currentImage = image;
         _currentContentId = contentId;
       });
 
+      if (image == null) {
+        CompositeCgRenderer._logCgFallback(
+          reason: 'composite_image_null',
+          targetContentId: contentId,
+          currentContentId: _currentContentId,
+          hasCurrentImage: _currentImage != null,
+          hasPreviousImage: _previousImage != null,
+          shaderAvailable: CompositeCgRenderer._dissolveProgram != null,
+          isFadingOut: widget.isFadingOut,
+          skipAnimation: widget.skipAnimation,
+          useGpuAcceleration: widget.useGpuAcceleration,
+          progress: _transitionController.value,
+        );
+      }
+
       // 启动渐变动画
       if (!widget.skipAnimation && !widget.isFadingOut) {
-        if (_previousImage != null || _isFirstCg) {
-          // 有前一张图像，或是第一次显示（从透明渐变）
-          _transitionController.forward(from: 0.0);
-          _isFirstCg = false;
-        }
+        // 对每次成功内容加载都强制触发过渡：
+        // - 有_previousImage时走dissolve
+        // - 无_previousImage时走透明淡入（防止异步竞态导致“无动画切换”）
+        CompositeCgRenderer._logCgTransition(
+          'start_transition trigger=$trigger, content=$contentId, hasPrevious=${_previousImage != null}, '
+          'isFirstCg=$_isFirstCg, controller=${_transitionController.value.toStringAsFixed(3)}',
+        );
+        _transitionController.forward(from: 0.0);
+        _isFirstCg = false;
       } else {
+        CompositeCgRenderer._logCgTransition(
+          'skip_transition trigger=$trigger, content=$contentId, '
+          'skipAnimation=${widget.skipAnimation}, isFadingOut=${widget.isFadingOut}',
+        );
         _transitionController.value = 1.0;
         _isFirstCg = false;
       }
     } catch (e) {
       print('[CgSlotWidget] Failed to load CG: $e');
+      CompositeCgRenderer._logCgFallback(
+        reason: 'load_exception:$e',
+        targetContentId: contentId,
+        currentContentId: _currentContentId,
+        hasCurrentImage: _currentImage != null,
+        hasPreviousImage: _previousImage != null,
+        shaderAvailable: CompositeCgRenderer._dissolveProgram != null,
+        isFadingOut: widget.isFadingOut,
+        skipAnimation: widget.skipAnimation,
+        useGpuAcceleration: widget.useGpuAcceleration,
+        progress: _transitionController.value,
+      );
     }
   }
 
@@ -2377,61 +2507,70 @@ class _CgSlotWidgetState extends State<CgSlotWidget>
         final dissolveProgram = CompositeCgRenderer._dissolveProgram;
         final shaderAvailable = dissolveProgram != null;
 
-        // 始终使用shader绘制（如果可用），保持坐标一致性
-        if (shaderAvailable && _currentImage != null) {
-          // 如果是第一次显示且没有previous，使用淡入效果
-          if (_previousImage == null && progress < 1.0) {
-            // 第一次显示：从透明渐变到当前图像
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                return Opacity(
-                  opacity: progress,
-                  child: CustomPaint(
-                    size: Size(constraints.maxWidth, constraints.maxHeight),
-                    painter: _DissolveShaderPainter(
-                      program: dissolveProgram!,
-                      progress: 1.0, // shader内部progress=1.0，只显示toImage
-                      fromImage: _currentImage!,
-                      toImage: _currentImage!,
-                      opacity: 1.0,
-                    ),
-                  ),
-                );
-              },
-            );
+        if (!shaderAvailable || _currentImage == null) {
+          final reasons = <String>[];
+          if (!shaderAvailable) {
+            reasons.add('shader_unavailable');
           }
+          if (_currentImage == null) {
+            reasons.add('current_image_null');
+          }
+          CompositeCgRenderer._logCgFallback(
+            reason: reasons.join('+'),
+            targetContentId: _targetContentId(),
+            currentContentId: _currentContentId,
+            hasCurrentImage: _currentImage != null,
+            hasPreviousImage: _previousImage != null,
+            shaderAvailable: shaderAvailable,
+            isFadingOut: widget.isFadingOut,
+            skipAnimation: widget.skipAnimation,
+            useGpuAcceleration: widget.useGpuAcceleration,
+            progress: progress,
+          );
+          // 移除 alpha fallback：shader不可用时不再执行不透明度混合过渡
+          return const SizedBox.expand();
+        }
 
-          // 正常过渡或稳定显示
-          final fromImage = _previousImage ?? _currentImage!;
-          final toImage = _currentImage!;
-          final dissolveProgress = _previousImage != null ? progress : 1.0;
-
+        // 始终使用shader绘制，保持坐标一致性
+        // 如果是第一次显示且没有previous，使用淡入效果
+        if (_previousImage == null && progress < 1.0) {
           return LayoutBuilder(
             builder: (context, constraints) {
-              return CustomPaint(
-                size: Size(constraints.maxWidth, constraints.maxHeight),
-                painter: _DissolveShaderPainter(
-                  program: dissolveProgram!,
-                  progress: dissolveProgress,
-                  fromImage: fromImage,
-                  toImage: toImage,
-                  opacity: widget.isFadingOut ? (1.0 - progress) : 1.0,
+              return Opacity(
+                opacity: progress,
+                child: CustomPaint(
+                  size: Size(constraints.maxWidth, constraints.maxHeight),
+                  painter: _DissolveShaderPainter(
+                    program: dissolveProgram!,
+                    progress: 1.0, // shader内部progress=1.0，只显示toImage
+                    fromImage: _currentImage!,
+                    toImage: _currentImage!,
+                    opacity: 1.0,
+                  ),
                 ),
               );
             },
           );
         }
 
-        // Fallback: 使用自定义绘制器（shader不可用时）
-        return CustomPaint(
-          painter: _CgSlotPainter(
-            currentImage: _currentImage,
-            previousImage: _previousImage,
-            progress: progress,
-            isFadingOut: widget.isFadingOut,
-            preferSpeed: widget.skipAnimation,
-          ),
-          child: const SizedBox.expand(),
+        // 正常过渡或稳定显示
+        final fromImage = _previousImage ?? _currentImage!;
+        final toImage = _currentImage!;
+        final dissolveProgress = _previousImage != null ? progress : 1.0;
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            return CustomPaint(
+              size: Size(constraints.maxWidth, constraints.maxHeight),
+              painter: _DissolveShaderPainter(
+                program: dissolveProgram!,
+                progress: dissolveProgress,
+                fromImage: fromImage,
+                toImage: toImage,
+                opacity: widget.isFadingOut ? (1.0 - progress) : 1.0,
+              ),
+            );
+          },
         );
       },
     );
@@ -2455,97 +2594,5 @@ class _CgSlotWidgetState extends State<CgSlotWidget>
     }
 
     return cgWidget;
-  }
-}
-
-/// CG槽位绘制器
-class _CgSlotPainter extends CustomPainter {
-  final ui.Image? currentImage;
-  final ui.Image? previousImage;
-  final double progress;
-  final bool isFadingOut;
-  final bool preferSpeed;
-
-  _CgSlotPainter({
-    required this.currentImage,
-    required this.previousImage,
-    required this.progress,
-    required this.isFadingOut,
-    this.preferSpeed = false,
-  });
-
-  @override
-  void paint(ui.Canvas canvas, ui.Size size) {
-    if (size.isEmpty) return;
-
-    final clampedProgress = progress.clamp(0.0, 1.0);
-
-    // 如果有前一张图像，使用saveLayer确保不露出背景
-    if (previousImage != null &&
-        currentImage != null &&
-        clampedProgress < 1.0) {
-      canvas.saveLayer(null, ui.Paint());
-      _drawImage(canvas, size, previousImage!, 1.0 - clampedProgress);
-      _drawImage(canvas, size, currentImage!, clampedProgress);
-      canvas.restore();
-      return;
-    }
-
-    // 只有当前图像
-    if (currentImage != null) {
-      final opacity = isFadingOut ? (1.0 - clampedProgress) : 1.0;
-      _drawImage(canvas, size, currentImage!, opacity);
-    } else if (previousImage != null) {
-      // 只有前一张图像
-      _drawImage(canvas, size, previousImage!, 1.0);
-    }
-  }
-
-  void _drawImage(
-    ui.Canvas canvas,
-    ui.Size size,
-    ui.Image image,
-    double opacity,
-  ) {
-    if (opacity <= 0) return;
-
-    // BoxFit.cover 计算
-    final imageSize = Size(image.width.toDouble(), image.height.toDouble());
-    final scaleX = size.width / imageSize.width;
-    final scaleY = size.height / imageSize.height;
-    final scale = math.max(scaleX, scaleY);
-
-    final targetWidth = imageSize.width * scale;
-    final targetHeight = imageSize.height * scale;
-    final offsetX = (size.width - targetWidth) / 2;
-    final offsetY = (size.height - targetHeight) / 2;
-
-    final targetRect = ui.Rect.fromLTWH(
-      offsetX,
-      offsetY,
-      targetWidth,
-      targetHeight,
-    );
-
-    final paint = ui.Paint()
-      ..color = ui.Color.fromRGBO(255, 255, 255, opacity.clamp(0.0, 1.0))
-      ..isAntiAlias = true
-      ..filterQuality = _resolveFilterQuality(preferSpeed);
-
-    canvas.drawImageRect(
-      image,
-      ui.Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-      targetRect,
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_CgSlotPainter oldDelegate) {
-    return currentImage != oldDelegate.currentImage ||
-        previousImage != oldDelegate.previousImage ||
-        progress != oldDelegate.progress ||
-        isFadingOut != oldDelegate.isFadingOut ||
-        preferSpeed != oldDelegate.preferSpeed;
   }
 }

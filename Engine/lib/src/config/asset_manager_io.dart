@@ -11,7 +11,7 @@ import 'package:sakiengine/src/sks_compiler/compiled_sks_registry.dart';
 
 class AssetManager {
   static const bool _forceAssetDiagnostics =
-      bool.fromEnvironment('SAKI_ASSET_DIAG', defaultValue: true);
+      bool.fromEnvironment('SAKI_ASSET_DIAG', defaultValue: false);
 
   static final AssetManager _instance = AssetManager._internal();
   factory AssetManager() => _instance;
