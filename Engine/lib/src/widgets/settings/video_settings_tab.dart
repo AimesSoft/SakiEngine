@@ -31,6 +31,7 @@ class _VideoSettingsTabState extends State<VideoSettingsTab> {
   bool _speakerAnimation = SettingsManager.defaultSpeakerAnimation;
   bool _autoHideQuickMenu = SettingsManager.defaultAutoHideQuickMenu;
   bool _mouseParallaxEnabled = SettingsManager.defaultMouseParallaxEnabled;
+  bool _showFpsOverlay = SettingsManager.defaultShowFpsOverlay;
   String _menuDisplayMode = SettingsManager.defaultMenuDisplayMode;
   String _dialogueFontFamily = SettingsManager.defaultDialogueFontFamily;
 
@@ -81,6 +82,7 @@ class _VideoSettingsTabState extends State<VideoSettingsTab> {
       final speakerAnimation = await _settingsManager.getSpeakerAnimation();
       final autoHideQuickMenu = await _settingsManager.getAutoHideQuickMenu();
       final mouseParallax = await _settingsManager.getMouseParallaxEnabled();
+      final showFpsOverlay = await _settingsManager.getShowFpsOverlay();
       final menuDisplayMode = await _settingsManager.getMenuDisplayMode();
       final dialogueFont = await _settingsManager.getDialogueFontFamily();
 
@@ -100,6 +102,7 @@ class _VideoSettingsTabState extends State<VideoSettingsTab> {
         _speakerAnimation = speakerAnimation;
         _autoHideQuickMenu = autoHideQuickMenu;
         _mouseParallaxEnabled = mouseParallax;
+        _showFpsOverlay = showFpsOverlay;
         _menuDisplayMode = menuDisplayMode;
         _dialogueFontFamily = dialogueFont;
         _selectedLanguage = selectedLanguage;
@@ -162,6 +165,11 @@ class _VideoSettingsTabState extends State<VideoSettingsTab> {
     await _settingsManager.setMouseParallaxEnabled(value);
   }
 
+  Future<void> _updateShowFpsOverlay(bool value) async {
+    setState(() => _showFpsOverlay = value);
+    await _settingsManager.setShowFpsOverlay(value);
+  }
+
   Future<void> _updateMenuDisplayMode(String value) async {
     setState(() => _menuDisplayMode = value);
     await _settingsManager.setMenuDisplayMode(value);
@@ -184,6 +192,32 @@ class _VideoSettingsTabState extends State<VideoSettingsTab> {
       _selectedLanguage = language;
       _previewText = TypewriterPreview.getRandomPreviewText();
     });
+  }
+
+  String _fpsOverlayTitle(SupportedLanguage language) {
+    switch (language) {
+      case SupportedLanguage.zhHant:
+        return 'FPS 顯示';
+      case SupportedLanguage.en:
+        return 'FPS Overlay';
+      case SupportedLanguage.ja:
+        return 'FPS 表示';
+      case SupportedLanguage.zhHans:
+        return 'FPS 显示';
+    }
+  }
+
+  String _fpsOverlayDescription(SupportedLanguage language) {
+    switch (language) {
+      case SupportedLanguage.zhHant:
+        return '在畫面右上角顯示即時幀率資訊';
+      case SupportedLanguage.en:
+        return 'Show real-time frame rate in the top-right corner';
+      case SupportedLanguage.ja:
+        return '画面右上にリアルタイム FPS を表示します';
+      case SupportedLanguage.zhHans:
+        return '在画面右上角显示实时帧率信息';
+    }
   }
 
   @override
@@ -247,6 +281,8 @@ class _VideoSettingsTabState extends State<VideoSettingsTab> {
             _buildAutoHideQuickMenuSetting(config, scale),
             SizedBox(height: 40 * scale),
             _buildMouseParallaxToggle(config, scale),
+            SizedBox(height: 40 * scale),
+            _buildFpsOverlayToggle(config, scale),
             SizedBox(height: 40 * scale),
             _buildTypewriterSpeedSlider(config, scale),
             SizedBox(height: 40 * scale), // 底部间距
@@ -319,6 +355,8 @@ class _VideoSettingsTabState extends State<VideoSettingsTab> {
                       _buildAutoHideQuickMenuSetting(config, scale),
                       SizedBox(height: 40 * scale),
                       _buildMouseParallaxToggle(config, scale),
+                      SizedBox(height: 40 * scale),
+                      _buildFpsOverlayToggle(config, scale),
                       SizedBox(height: 40 * scale),
                       // 可以在这里添加更多右列设置项
                     ],
@@ -703,6 +741,63 @@ class _VideoSettingsTabState extends State<VideoSettingsTab> {
           GameStyleSwitch(
             value: _mouseParallaxEnabled,
             onChanged: _updateMouseParallax,
+            scale: scale,
+            config: config,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFpsOverlayToggle(SakiEngineConfig config, double scale) {
+    final textScale = context.scaleFor(ComponentType.text);
+    final title = _fpsOverlayTitle(_selectedLanguage);
+    final description = _fpsOverlayDescription(_selectedLanguage);
+
+    return Container(
+      padding: EdgeInsets.all(16 * scale),
+      decoration: BoxDecoration(
+        color: config.themeColors.surface.withOpacity(0.5),
+        border: Border.all(
+          color: config.themeColors.primary.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _showFpsOverlay ? Icons.speed : Icons.speed_outlined,
+            color: config.themeColors.primary,
+            size: 24 * scale,
+          ),
+          SizedBox(width: 16 * scale),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: config.reviewTitleTextStyle.copyWith(
+                    fontSize: config.reviewTitleTextStyle.fontSize! * textScale * 0.7,
+                    color: config.themeColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: 4 * scale),
+                Text(
+                  description,
+                  style: config.dialogueTextStyle.copyWith(
+                    fontSize: config.dialogueTextStyle.fontSize! * textScale * 0.6,
+                    color: config.themeColors.primary.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: 16 * scale),
+          GameStyleSwitch(
+            value: _showFpsOverlay,
+            onChanged: _updateShowFpsOverlay,
             scale: scale,
             config: config,
           ),

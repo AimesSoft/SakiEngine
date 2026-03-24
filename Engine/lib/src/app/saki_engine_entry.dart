@@ -26,6 +26,7 @@ import 'package:sakiengine/src/utils/transition_prewarming.dart';
 import 'package:sakiengine/src/utils/ui_sound_manager.dart';
 import 'package:sakiengine/src/widgets/common/black_screen_transition.dart';
 import 'package:sakiengine/src/widgets/common/exit_confirmation_dialog.dart';
+import 'package:sakiengine/src/widgets/common/fps_overlay.dart';
 import 'package:sakiengine/src/widgets/settings_screen.dart';
 import 'package:sakiengine/src/rendering/image_sampling.dart';
 
@@ -700,6 +701,15 @@ class _StartupMaskWrapperState extends State<StartupMaskWrapper>
       children: [
         GameContainer(
           onMenuWarmupFinished: _onMenuWarmupFinished,
+        ),
+        AnimatedBuilder(
+          animation: SettingsManager(),
+          builder: (context, child) {
+            if (!SettingsManager().currentShowFpsOverlay) {
+              return const SizedBox.shrink();
+            }
+            return const FpsOverlay();
+          },
         ),
         AnimatedBuilder(
           animation: _fadeAnimation,
