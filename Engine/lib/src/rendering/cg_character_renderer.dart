@@ -8,6 +8,7 @@ import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/utils/character_layer_parser.dart';
 import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 import 'package:sakiengine/src/utils/image_loader.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 /// CG角色渲染器，负责处理CG模式下的角色显示
 class CgCharacterRenderer {
@@ -260,7 +261,9 @@ class CgDissolvePainter extends CustomPainter {
         final paint = ui.Paint()
           ..color = Colors.white.withOpacity(progress)
           ..isAntiAlias = true
-          ..filterQuality = FilterQuality.high;
+          ..filterQuality = ImageSamplingManager().resolveCanvasFilterQuality(
+            defaultQuality: ui.FilterQuality.high,
+          );
 
         final imageRect = _calculateCoverRect(imageTo, size);
 
@@ -286,7 +289,9 @@ class CgDissolvePainter extends CustomPainter {
       final fromPaint = ui.Paint()
         ..color = Colors.white.withOpacity(1.0 - progress)
         ..isAntiAlias = true
-        ..filterQuality = FilterQuality.high;
+        ..filterQuality = ImageSamplingManager().resolveCanvasFilterQuality(
+          defaultQuality: ui.FilterQuality.high,
+        );
 
       canvas.drawImageRect(
         imageFrom,
@@ -300,7 +305,9 @@ class CgDissolvePainter extends CustomPainter {
       final toPaint = ui.Paint()
         ..color = Colors.white.withOpacity(progress)
         ..isAntiAlias = true
-        ..filterQuality = FilterQuality.high;
+        ..filterQuality = ImageSamplingManager().resolveCanvasFilterQuality(
+          defaultQuality: ui.FilterQuality.high,
+        );
 
       canvas.drawImageRect(
         imageTo,

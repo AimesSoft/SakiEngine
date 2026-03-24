@@ -55,6 +55,7 @@ import 'package:sakiengine/src/utils/read_text_skip_manager.dart';
 import 'package:sakiengine/src/utils/settings_manager.dart';
 import 'package:sakiengine/src/widgets/movie_player.dart'; // 新增：视频播放器导入
 import 'package:sakiengine/src/utils/dialogue_shake_effect.dart'; // 新增：震动效果导入
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 part 'game_play_screen_interactions.dart';
 
@@ -657,6 +658,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
+            filterQuality: ImageSamplingManager().resolveWidgetFilterQuality(
+              defaultQuality: FilterQuality.high,
+            ),
             // 关键：不使用frameBuilder，让图像立即显示
             errorBuilder: (context, error, stackTrace) {
               //print('[_buildBackground] ❌ 直接文件加载失败: $background, 错误: $error');

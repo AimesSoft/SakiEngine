@@ -8,6 +8,7 @@ import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/utils/cg_cache_storage.dart';
 import 'package:sakiengine/src/utils/character_layer_parser.dart';
 import 'package:sakiengine/src/utils/image_loader.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 /// CG图像合成器 - 负责将多层图像合成为单张图像并将结果保存到磁盘缓存
 class CgImageCompositor {
@@ -238,7 +239,9 @@ class CgImageCompositor {
       for (final image in layerImages) {
         final paint = ui.Paint()
           ..isAntiAlias = true
-          ..filterQuality = ui.FilterQuality.high;
+          ..filterQuality = ImageSamplingManager().resolveCanvasFilterQuality(
+            defaultQuality: ui.FilterQuality.high,
+          );
         final srcRect = ui.Rect.fromLTWH(
           0,
           0,

@@ -2,40 +2,50 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter_avif/flutter_avif.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 /// 非Web平台的图像文件加载实现
 
-Widget buildImageFile(String assetPath, {
+Widget buildImageFile(
+  String assetPath, {
   BoxFit? fit,
   double? width,
   double? height,
   Widget? errorWidget,
 }) {
+  final filterQuality = ImageSamplingManager().resolveWidgetFilterQuality(
+    defaultQuality: FilterQuality.high,
+  );
   return Image.file(
     File(assetPath),
     fit: fit ?? BoxFit.contain,
     width: width,
     height: height,
-    errorBuilder: errorWidget != null 
-      ? (context, error, stackTrace) => errorWidget!
-      : null,
+    filterQuality: filterQuality,
+    errorBuilder: errorWidget != null
+        ? (context, error, stackTrace) => errorWidget!
+        : null,
   );
 }
 
-Widget buildAvifFile(String assetPath, {
+Widget buildAvifFile(
+  String assetPath, {
   BoxFit? fit,
   double? width,
   double? height,
   Widget? errorWidget,
 }) {
+  final filterQuality = ImageSamplingManager().resolveWidgetFilterQuality(
+    defaultQuality: FilterQuality.high,
+  );
   return AvifImage.file(
     File(assetPath),
     fit: fit ?? BoxFit.contain,
     isAntiAlias: true,
-    filterQuality: FilterQuality.high,
-    errorBuilder: errorWidget != null 
-      ? (context, error, stackTrace) => errorWidget!
-      : null,
+    filterQuality: filterQuality,
+    errorBuilder: errorWidget != null
+        ? (context, error, stackTrace) => errorWidget!
+        : null,
   );
 }
 

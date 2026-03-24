@@ -12,9 +12,12 @@ import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 import 'package:sakiengine/src/utils/gpu_image_compositor.dart';
 import 'package:sakiengine/src/utils/character_composite_cache.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 ui.FilterQuality _resolveFilterQuality(bool preferSpeed) {
-  return preferSpeed ? ui.FilterQuality.low : ui.FilterQuality.high;
+  return ImageSamplingManager().resolveCanvasFilterQualityBySpeed(
+    preferSpeed: preferSpeed,
+  );
 }
 
 /// 基于预合成图像的CG角色渲染器
@@ -494,7 +497,9 @@ class CompositeCgRenderer {
       final targetRect = ui.Rect.fromLTWH(0, 0, width, height);
       final paint = ui.Paint()
         ..isAntiAlias = false
-        ..filterQuality = ui.FilterQuality.none;
+        ..filterQuality = ImageSamplingManager().resolveCanvasFilterQuality(
+          defaultQuality: ui.FilterQuality.none,
+        );
 
       for (var layerIndex = 0;
           layerIndex < result.layers.length;
