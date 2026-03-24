@@ -27,6 +27,7 @@ import 'package:sakiengine/src/utils/ui_sound_manager.dart';
 import 'package:sakiengine/src/widgets/common/black_screen_transition.dart';
 import 'package:sakiengine/src/widgets/common/exit_confirmation_dialog.dart';
 import 'package:sakiengine/src/widgets/settings_screen.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 import '../utils/platform_window_manager_io.dart'
     if (dart.library.html) '../utils/platform_window_manager_web.dart';
@@ -426,6 +427,7 @@ Future<void> runSakiEngine({
   String? gamePath,
   int steamAppId = 3536120,
   bool enableSteamworks = true,
+  bool useNearestNeighborSampling = false,
 }) async {
   setupDebugLogger();
   final mpvVerboseLogging = _isMpvVerboseLoggingEnabled();
@@ -499,6 +501,9 @@ Future<void> runSakiEngine({
       print('=== 全局变量状态结束 ===');
 
       SakiEngineConfig().updateThemeForDarkMode();
+      ImageSamplingManager().configure(
+        useNearestNeighbor: useNearestNeighborSampling,
+      );
 
       runApp(const SakiEngineApp());
     },

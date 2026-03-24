@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/utils/webp_preload_cache.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 // 平台特定导入
 import 'animated_webp_image_io.dart'
@@ -267,6 +268,10 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
 
   @override
   Widget build(BuildContext context) {
+    final filterQuality = ImageSamplingManager().resolveWidgetFilterQuality(
+      defaultQuality: FilterQuality.high,
+    );
+
     if (_isLoading) {
       return SizedBox(
         width: widget.width,
@@ -315,6 +320,7 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
           fit: widget.fit ?? BoxFit.contain,
           width: widget.width,
           height: widget.height,
+          filterQuality: filterQuality,
         ),
       );
     }
@@ -345,6 +351,7 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
                     fit: widget.fit ?? BoxFit.contain,
                     width: widget.width,
                     height: widget.height,
+                    filterQuality: filterQuality,
                   );
                 } catch (e) {
                   // 如果动画渲染出错，显示第一帧
@@ -353,6 +360,7 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
                     fit: widget.fit ?? BoxFit.contain,
                     width: widget.width,
                     height: widget.height,
+                    filterQuality: filterQuality,
                   );
                 }
               },
@@ -362,6 +370,7 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
               fit: widget.fit ?? BoxFit.contain,
               width: widget.width,
               height: widget.height,
+              filterQuality: filterQuality,
             ),
     );
   }

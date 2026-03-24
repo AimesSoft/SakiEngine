@@ -10,6 +10,7 @@ import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/rendering/layered/layer_types.dart';
 import 'package:sakiengine/src/rendering/layered/layered_image_renderer.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 /// 高性能层叠图像显示组件
 ///
@@ -466,9 +467,10 @@ class _LayerPainter extends CustomPainter {
       // 高质量绘制
       final paint = ui.Paint()
         ..isAntiAlias = true
-        ..filterQuality = preferSpeed
-            ? ui.FilterQuality.low
-            : ui.FilterQuality.high;
+        ..filterQuality =
+            ImageSamplingManager().resolveCanvasFilterQualityBySpeed(
+          preferSpeed: preferSpeed,
+        );
 
       canvas.drawImageRect(texture, sourceRect, destinationRect, paint);
     } catch (e) {
