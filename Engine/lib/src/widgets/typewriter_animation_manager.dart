@@ -37,6 +37,10 @@ class TypewriterAnimationManager extends ChangeNotifier {
   static final List<TypewriterAnimationManager> _instances = [];
   static const int _frameGapLogThresholdMs = 800;
   static const int _waitSegmentLogThresholdMs = 1000;
+  static const bool _verboseLogs = bool.fromEnvironment(
+    'SAKI_TYPEWRITER_VERBOSE_LOG',
+    defaultValue: false,
+  );
   
   // Getters
   String get displayedText => _displayedText;
@@ -85,10 +89,9 @@ class TypewriterAnimationManager extends ChangeNotifier {
   }
 
   void _debugLog(String message) {
-    if (!kEngineDebugMode) {
+    if (!kEngineDebugMode || !_verboseLogs) {
       return;
     }
-    // 允许在debug/profile中看到日志，便于追踪现场卡顿
     debugPrint('[TypewriterAnimationManager] $message');
   }
 

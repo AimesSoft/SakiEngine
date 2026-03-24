@@ -42,11 +42,32 @@ class AudioTrackConfig {
   );
 }
 
+class _MusicPlayRequest {
+  final String assetPath;
+  final bool fadeTransition;
+  final Duration fadeDuration;
+  final bool loop;
+
+  const _MusicPlayRequest({
+    required this.assetPath,
+    required this.fadeTransition,
+    required this.fadeDuration,
+    required this.loop,
+  });
+}
+
 class MusicManager extends ChangeNotifier {
   static final MusicManager _instance = MusicManager._internal();
   factory MusicManager() => _instance;
   MusicManager._internal();
-  static const bool _musicSourceDiagnostics = true;
+  static const bool _musicSourceDiagnostics = bool.fromEnvironment(
+    'SAKI_MUSIC_SOURCE_DIAG',
+    defaultValue: false,
+  );
+  static const bool _verboseAudioLogs = bool.fromEnvironment(
+    'SAKI_AUDIO_VERBOSE_LOG',
+    defaultValue: false,
+  );
 
   // 统一的音频轨道管理
   final Map<AudioTrackType, AudioPlayer> _trackPlayers = {
@@ -62,6 +83,9 @@ class MusicManager extends ChangeNotifier {
   String? _projectName;
   String? _currentBackgroundMusic;
   String? _currentSound;
+  _MusicPlayRequest? _queuedMusicRequest;
+  Future<void>? _musicTransitionDrain;
+  bool _isMusicTransitioning = false;
 
   // 淡入淡出相关
   final Map<AudioTrackType, Timer?> _fadeTimers = {};
@@ -77,8 +101,14 @@ class MusicManager extends ChangeNotifier {
   String? get currentSound => _currentSound;
 
   void _musicSourceLog(String message) {
-    if (_musicSourceDiagnostics) {
+    if (_musicSourceDiagnostics && kEngineDebugMode) {
       print('[MusicSourceDiag] $message');
+    }
+  }
+
+  void _audioVerboseLog(String message) {
+    if (_verboseAudioLogs && kEngineDebugMode) {
+      print('[MusicManager] $message');
     }
   }
 
@@ -371,15 +401,14 @@ class MusicManager extends ChangeNotifier {
     bool loop = false, // 允许覆盖默认循环设置
   }) async {
     try {
-      if (kEngineDebugMode) {
-        print(
-            '[MusicManager] playAudio request: track=${config.trackName}, assetPath=$assetPath, fade=$fadeTransition, fadeMs=${fadeDuration.inMilliseconds}, loop=$loop');
-      }
+      _audioVerboseLog(
+        'playAudio request: track=${config.trackName}, assetPath=$assetPath, '
+        'fade=$fadeTransition, fadeMs=${fadeDuration.inMilliseconds}, loop=$loop',
+      );
       // 根据轨道类型选择处理逻辑
       if (config.type == AudioTrackType.music) {
         await _playMusic(
           assetPath,
-          config,
           fadeTransition: fadeTransition,
           fadeDuration: fadeDuration,
           loop: loop || config.defaultLoop,
@@ -419,98 +448,141 @@ class MusicManager extends ChangeNotifier {
   /// 播放音乐的具体实现
   Future<void> _playMusic(
     String assetPath,
-    AudioTrackConfig config, {
+    {
     required bool fadeTransition,
     required Duration fadeDuration,
     required bool loop,
   }) async {
+    _queuedMusicRequest = _MusicPlayRequest(
+      assetPath: assetPath,
+      fadeTransition: fadeTransition,
+      fadeDuration: fadeDuration,
+      loop: loop,
+    );
+
+    final activeDrain = _musicTransitionDrain;
+    if (activeDrain != null) {
+      await activeDrain;
+      return;
+    }
+
+    final drainFuture = _drainQueuedMusicRequests();
+    _musicTransitionDrain = drainFuture;
+    try {
+      await drainFuture;
+    } finally {
+      if (identical(_musicTransitionDrain, drainFuture)) {
+        _musicTransitionDrain = null;
+      }
+    }
+  }
+
+  Future<void> _drainQueuedMusicRequests() async {
+    while (true) {
+      final request = _queuedMusicRequest;
+      _queuedMusicRequest = null;
+      if (request == null) {
+        return;
+      }
+      await _playMusicRequest(request);
+    }
+  }
+
+  Future<void> _playMusicRequest(_MusicPlayRequest request) async {
     final musicPlayer = _trackPlayers[AudioTrackType.music]!;
+    final assetPath = request.assetPath;
+    final fadeTransition = request.fadeTransition;
+    final fadeDuration = request.fadeDuration;
+    final loop = request.loop;
+
     _musicSourceLog(
       'playMusic request: assetPath="$assetPath", old="$_currentBackgroundMusic", fade=$fadeTransition, loop=$loop',
     );
-    if (kEngineDebugMode) {
-      print(
-          '[MusicManager] _playMusic begin: new=$assetPath, current=$_currentBackgroundMusic, playerPlaying=${musicPlayer.playing}, fade=$fadeTransition');
-    }
-    if (_currentBackgroundMusic == assetPath && musicPlayer.playing) {
-      if (kEngineDebugMode) {
-        print('[MusicManager] _playMusic skip: already playing same track');
-      }
+    _audioVerboseLog(
+      '_playMusic begin: new=$assetPath, current=$_currentBackgroundMusic, '
+      'playerPlaying=${musicPlayer.playing}, transitioning=$_isMusicTransitioning, '
+      'fade=$fadeTransition',
+    );
+
+    if (_currentBackgroundMusic == assetPath &&
+        (musicPlayer.playing || _isMusicTransitioning)) {
+      _audioVerboseLog(
+        '_playMusic skip: already playing/transitioning same track',
+      );
       return;
     }
 
     if (!_dataManager.isMusicEnabled) {
       _currentBackgroundMusic = assetPath;
-      if (kEngineDebugMode) {
-        print(
-            '[MusicManager] _playMusic abort: music disabled, only cached path');
-      }
+      _audioVerboseLog('_playMusic abort: music disabled, only cached path');
       return;
     }
 
     final oldMusicPath = _currentBackgroundMusic;
     _currentBackgroundMusic = assetPath;
-
-    Future<void> startNewMusic() async {
-      try {
-        _musicSourceLog('startNewMusic: stop current player then set source');
-        await musicPlayer.stop();
-        await musicPlayer.setLoopMode(loop ? LoopMode.one : LoopMode.off);
-        await _setPlayerSource(
-          musicPlayer,
-          assetPath,
-          sourceLabel: 'music',
-        );
-        final playFuture = musicPlayer.play();
-        unawaited(playFuture.catchError((Object e, StackTrace stackTrace) {
+    _isMusicTransitioning = true;
+    try {
+      Future<void> startNewMusic() async {
+        try {
+          _musicSourceLog('startNewMusic: stop current player then set source');
+          await musicPlayer.stop();
+          await musicPlayer.setLoopMode(loop ? LoopMode.one : LoopMode.off);
+          await _setPlayerSource(
+            musicPlayer,
+            assetPath,
+            sourceLabel: 'music',
+          );
+          final playFuture = musicPlayer.play();
+          unawaited(playFuture.catchError((Object e, StackTrace stackTrace) {
+            if (kEngineDebugMode) {
+              print(
+                  '[MusicManager] music.play async failed: $assetPath, error=$e');
+              print(stackTrace);
+            }
+          }));
+          _audioVerboseLog(
+            '_playMusic started (non-blocking): $assetPath, '
+            'playing=${musicPlayer.playing}, state=${musicPlayer.processingState}',
+          );
+        } catch (e, stackTrace) {
           if (kEngineDebugMode) {
             print(
-                '[MusicManager] music.play async failed: $assetPath, error=$e');
+                '[MusicManager] _playMusic startNewMusic failed: $assetPath, error=$e');
             print(stackTrace);
           }
-        }));
-        if (kEngineDebugMode) {
-          print(
-              '[MusicManager] _playMusic started (non-blocking): $assetPath, playing=${musicPlayer.playing}, state=${musicPlayer.processingState}');
+          rethrow;
         }
-      } catch (e, stackTrace) {
-        if (kEngineDebugMode) {
-          print(
-              '[MusicManager] _playMusic startNewMusic failed: $assetPath, error=$e');
-          print(stackTrace);
-        }
-        rethrow;
       }
-    }
 
-    if (kEngineDebugMode) {
-      print(
-          '[MusicManager] _playMusic transition: old=$oldMusicPath -> new=$assetPath');
-    }
-    if (oldMusicPath != null && fadeTransition) {
-      // 先淡出旧音乐
-      await _fadeOut(
-        AudioTrackType.music,
-        duration: Duration(milliseconds: fadeDuration.inMilliseconds ~/ 2),
-        onComplete: () async {
-          await startNewMusic();
-          await _fadeIn(
-            AudioTrackType.music,
-            duration: Duration(milliseconds: fadeDuration.inMilliseconds ~/ 2),
-          );
-        },
-      );
-    } else {
-      // 没有旧音乐或不需要过渡，直接播放
-      await startNewMusic();
-
-      if (fadeTransition) {
-        // 淡入新音乐
-        await _fadeIn(AudioTrackType.music, duration: fadeDuration);
+      _audioVerboseLog('_playMusic transition: old=$oldMusicPath -> new=$assetPath');
+      if (oldMusicPath != null && fadeTransition) {
+        // 先淡出旧音乐
+        await _fadeOut(
+          AudioTrackType.music,
+          duration: Duration(milliseconds: fadeDuration.inMilliseconds ~/ 2),
+          onComplete: () async {
+            await startNewMusic();
+            await _fadeIn(
+              AudioTrackType.music,
+              duration:
+                  Duration(milliseconds: fadeDuration.inMilliseconds ~/ 2),
+            );
+          },
+        );
       } else {
-        // 直接设置音量
-        await _updateTrackVolume(AudioTrackType.music);
+        // 没有旧音乐或不需要过渡，直接播放
+        await startNewMusic();
+
+        if (fadeTransition) {
+          // 淡入新音乐
+          await _fadeIn(AudioTrackType.music, duration: fadeDuration);
+        } else {
+          // 直接设置音量
+          await _updateTrackVolume(AudioTrackType.music);
+        }
       }
+    } finally {
+      _isMusicTransitioning = false;
     }
   }
 
@@ -573,10 +645,7 @@ class MusicManager extends ChangeNotifier {
         'setPlayerSource input: assetPath="$assetPath", trimmed="$trimmed"',
       );
     }
-    if (kEngineDebugMode) {
-      print(
-          '[MusicManager] _setPlayerSource input=$assetPath trimmed=$trimmed');
-    }
+    _audioVerboseLog('_setPlayerSource input=$assetPath trimmed=$trimmed');
     if (trimmed.isEmpty) {
       if (traceMusic) {
         _musicSourceLog('setPlayerSource failed: empty assetPath');
@@ -653,9 +722,7 @@ class MusicManager extends ChangeNotifier {
           }
         }
       }
-      if (kEngineDebugMode) {
-        print('[MusicManager] _setPlayerSource resolvedAsset=$resolved');
-      }
+      _audioVerboseLog('_setPlayerSource resolvedAsset=$resolved');
       final fallbackFilePath = await _resolveGameAssetFallbackPath(resolved);
       if (traceMusic) {
         _musicSourceLog(
@@ -666,10 +733,9 @@ class MusicManager extends ChangeNotifier {
         if (traceMusic) {
           _musicSourceLog('try setFilePath(primary fallback): "$fallbackFilePath"');
         }
-        if (kEngineDebugMode) {
-          print(
-              '[MusicManager] try setFilePath first via SAKI_GAME_PATH: $fallbackFilePath');
-        }
+        _audioVerboseLog(
+          'try setFilePath first via SAKI_GAME_PATH: $fallbackFilePath',
+        );
         try {
           await player.setFilePath(fallbackFilePath);
           if (traceMusic) {

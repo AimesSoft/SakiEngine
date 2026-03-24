@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Directory, Platform, Process, ProcessStartMode;
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:sakiengine/src/config/game_path_resolver.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
@@ -63,6 +64,24 @@ bool _isNoisyMpvLogLine(String line) {
   }
   return line.contains('property not found _setProperty(osc') ||
       line.contains('lavf: Failed to create file cache');
+}
+
+bool _isKnownNoisyFrameworkError(Object error) {
+  final message = error.toString();
+  return message.contains(
+        'Attempted to send a key down event when no keys are in keysPressed',
+      ) ||
+      message.contains('PlatformException(abort, Loading interrupted');
+}
+
+bool _isNoisyFrameworkLogLine(String line) {
+  final trimmed = line.trim();
+  return trimmed == 'Unable to parse JSON message:' ||
+      trimmed == 'The document is empty.' ||
+      line.contains(
+        'Another exception was thrown: Attempted to send a key down event when no keys are in keysPressed.',
+      ) ||
+      line.contains('PlatformException(abort, Loading interrupted');
 }
 
 bool _showcaseResourceDirectoryOpened = false;
@@ -437,6 +456,26 @@ Future<void> runSakiEngine({
     () async {
       WidgetsFlutterBinding.ensureInitialized();
 
+      final previousFlutterErrorHandler = FlutterError.onError;
+      FlutterError.onError = (FlutterErrorDetails details) {
+        if (_isKnownNoisyFrameworkError(details.exception)) {
+          return;
+        }
+        final handler = previousFlutterErrorHandler;
+        if (handler != null) {
+          handler(details);
+        } else {
+          FlutterError.presentError(details);
+        }
+      };
+
+      PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+        if (_isKnownNoisyFrameworkError(error)) {
+          return true;
+        }
+        return false;
+      };
+
       configureRuntimeProject(
         projectName: projectName,
         appName: appName,
@@ -511,6 +550,9 @@ Future<void> runSakiEngine({
     zoneSpecification: ZoneSpecification(
       print: (Zone self, ZoneDelegate parent, Zone zone, String line) {
         if (!mpvVerboseLogging && _isNoisyMpvLogLine(line)) {
+          return;
+        }
+        if (_isNoisyFrameworkLogLine(line)) {
           return;
         }
         DebugLogger().addLog(line);

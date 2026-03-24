@@ -88,6 +88,11 @@ class MusicRegion {
 }
 
 class GameManager {
+  static const bool _musicRegionVerboseLogs = bool.fromEnvironment(
+    'SAKI_MUSIC_REGION_LOG',
+    defaultValue: false,
+  );
+
   final _gameStateController = StreamController<GameState>.broadcast();
   Stream<GameState> get gameStateStream => _gameStateController.stream;
 
@@ -1007,7 +1012,7 @@ class GameManager {
       if (node is PlayMusicNode) {
         final normalizedMusicFile = _normalizeMusicFileName(node.musicFile);
         if (normalizedMusicFile.isEmpty) {
-          if (kEngineDebugMode) {
+          if (kEngineDebugMode && _musicRegionVerboseLogs) {
             print(
                 '[MusicRegion] 忽略空音乐名: raw="${node.musicFile}" at index $i');
           }
@@ -1023,7 +1028,7 @@ class GameManager {
           musicFile: normalizedMusicFile,
           startScriptIndex: i,
         );
-        if (kEngineDebugMode) {
+        if (kEngineDebugMode && _musicRegionVerboseLogs) {
           print(
               '[MusicRegion] 开始新音乐区间: raw="${node.musicFile}" normalized="$normalizedMusicFile" at index $i');
         }
@@ -1073,7 +1078,7 @@ class GameManager {
         _scriptIndex >= 0 &&
         _scriptIndex < _script.children.length &&
         _script.children[_scriptIndex] is PlayMusicNode) {
-      if (kEngineDebugMode) {
+      if (kEngineDebugMode && _musicRegionVerboseLogs) {
         print(
             '[MusicRegion] 跳过区间触发播放：当前位置($_scriptIndex)是 PlayMusicNode，由节点执行阶段处理');
       }
@@ -1116,7 +1121,7 @@ class GameManager {
             stateRegion.musicFile != currentRegion.musicFile ||
             !MusicManager().isPlayingMusic(fullMusicPath) ||
             forceCheck) {
-          if (kEngineDebugMode) {
+          if (kEngineDebugMode && _musicRegionVerboseLogs) {
             print(
                 '[MusicRegion] 当前位置($_scriptIndex)需要播放音乐: regionMusic="${currentRegion.musicFile}", resolvedPath="$fullMusicPath", forceCheck=$forceCheck');
           }
@@ -1168,6 +1173,10 @@ class GameManager {
   }
 
   void next() async {
+    if (_isProcessing || _isWaitingForTimer) {
+      return;
+    }
+
     // 检查是否需要清除anime覆盖层（在用户交互时）
     if (_currentState.animeOverlay != null && !_currentState.animeKeep) {
       ////print('[GameManager] 用户点击继续，清除anime覆盖层: ${_currentState.animeOverlay}');
@@ -2409,8 +2418,10 @@ class GameManager {
         final musicRegion = _getMusicRegionForIndex(_scriptIndex);
         if (musicRegion != null) {
           final fullMusicPath = _buildMusicAssetPath(node.musicFile);
-          print(
-              '[MusicSourceDiag] PlayMusicNode: index=$_scriptIndex, raw="${node.musicFile}", resolved="$fullMusicPath"');
+          if (kEngineDebugMode && _musicRegionVerboseLogs) {
+            print(
+                '[MusicSourceDiag] PlayMusicNode: index=$_scriptIndex, raw="${node.musicFile}", resolved="$fullMusicPath"');
+          }
           if (fullMusicPath.isEmpty) {
             if (kEngineDebugMode) {
               print(
@@ -2419,7 +2430,7 @@ class GameManager {
             _scriptIndex++;
             continue;
           }
-          if (kEngineDebugMode) {
+          if (kEngineDebugMode && _musicRegionVerboseLogs) {
             print(
                 '[MusicRegion] PlayMusicNode触发播放: index=$_scriptIndex, raw="${node.musicFile}", regionMusic="${musicRegion.musicFile}", resolvedPath="$fullMusicPath"');
           }
