@@ -162,6 +162,7 @@ class _GameContainerState extends State<GameContainer> with WindowListener {
   AppState _currentState = AppState.mainMenu;
   SaveSlot? _saveSlotToLoad;
   bool _isReturningFromGame = false;
+  bool _isClosingWindow = false;
   bool _menuWarmupRunning = false;
   bool _menuWarmupComplete = false;
   bool _menuWarmupNotified = false;
@@ -183,13 +184,21 @@ class _GameContainerState extends State<GameContainer> with WindowListener {
 
   @override
   Future<void> onWindowClose() async {
+    if (_isClosingWindow) {
+      return;
+    }
+
     final shouldClose = await _showExitConfirmation();
-    if (shouldClose) {
-      try {
-        await PlatformWindowManager.destroy();
-      } catch (_) {
-        SystemNavigator.pop();
-      }
+    if (!shouldClose) {
+      return;
+    }
+
+    _isClosingWindow = true;
+    try {
+      await PlatformWindowManager.setPreventClose(false);
+      await PlatformWindowManager.close();
+    } catch (_) {
+      SystemNavigator.pop();
     }
   }
 
