@@ -615,6 +615,14 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
   late AnimationController _animationController;
   late Animation<double> _borderAnimation;
   final _uiSoundManager = UISoundManager();
+  Future<String>? _dialoguePreviewFuture;
+
+  Future<String>? _createDialoguePreviewFuture(SaveSlot? saveSlot) {
+    if (saveSlot == null) {
+      return null;
+    }
+    return SaveLoadManager.getDialoguePreview(saveSlot.snapshot);
+  }
 
   @override
   void initState() {
@@ -630,6 +638,7 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
       parent: _animationController,
       curve: Curves.easeInOut,
     ));
+    _dialoguePreviewFuture = _createDialoguePreviewFuture(widget.saveSlot);
   }
 
   @override
@@ -641,8 +650,15 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
   @override
   void didUpdateWidget(covariant _SaveSlotCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 由于使用了 ValueKey，Flutter 会自动优化重绘
-    // 只有当 saveSlot 的关键数据发生变化时才需要重绘
+    final oldSlot = oldWidget.saveSlot;
+    final newSlot = widget.saveSlot;
+    final shouldRefreshDialogueFuture = oldSlot?.id != newSlot?.id ||
+        oldSlot?.saveTime != newSlot?.saveTime ||
+        oldSlot?.snapshot.scriptIndex != newSlot?.snapshot.scriptIndex;
+
+    if (shouldRefreshDialogueFuture) {
+      _dialoguePreviewFuture = _createDialoguePreviewFuture(newSlot);
+    }
   }
 
   Widget _buildScreenshot() {
@@ -866,7 +882,7 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
               Expanded(
                 flex: 13,
                 child: FutureBuilder<String>(
-                  future: SaveLoadManager.getDialoguePreview(widget.saveSlot!.snapshot),
+                  future: _dialoguePreviewFuture,
                   builder: (context, snapshot) {
                     final dialogueText = snapshot.data ?? widget.saveSlot!.dialoguePreview;
                     return Text(

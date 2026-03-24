@@ -82,7 +82,7 @@ class UISoundManager {
       final String soundName = _hoverSounds[_random.nextInt(_hoverSounds.length)];
       await _playSound(soundName);
     } catch (e) {
-      if (kEngineDebugMode) {
+      if (kEngineDebugMode && !_isExpectedInterruptionError(e)) {
         print('[UISoundManager] playButtonHover failed: $e');
       }
     }
@@ -94,7 +94,7 @@ class UISoundManager {
     try {
       await _playSound(buttonClick);
     } catch (e) {
-      if (kEngineDebugMode) {
+      if (kEngineDebugMode && !_isExpectedInterruptionError(e)) {
         print('[UISoundManager] playButtonClick failed: $e');
       }
     }
@@ -167,7 +167,7 @@ class UISoundManager {
         await player.setFilePath(bundlePath);
         return;
       } catch (e) {
-        if (kEngineDebugMode) {
+        if (kEngineDebugMode && !_isExpectedInterruptionError(e)) {
           print('[UISoundManager] setFilePath(bundle) failed: $bundlePath, error=$e');
         }
       }
@@ -179,7 +179,7 @@ class UISoundManager {
         await player.setFilePath(gamePath);
         return;
       } catch (e) {
-        if (kEngineDebugMode) {
+        if (kEngineDebugMode && !_isExpectedInterruptionError(e)) {
           print('[UISoundManager] setFilePath(game) failed: $gamePath, error=$e');
         }
       }
@@ -216,5 +216,11 @@ class UISoundManager {
         path.startsWith('https://') ||
         path.startsWith('rtsp://') ||
         path.startsWith('rtmp://');
+  }
+
+  bool _isExpectedInterruptionError(Object error) {
+    final String message = error.toString().toLowerCase();
+    return message.contains('loading interrupted') ||
+        message.contains('player interrupted');
   }
 }

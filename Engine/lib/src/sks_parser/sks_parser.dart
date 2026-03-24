@@ -1,7 +1,8 @@
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 
 class SksParser {
-  static const bool _musicParseDiagnostics = true;
+  static const bool _musicParseDiagnostics =
+      bool.fromEnvironment('SAKI_MUSIC_PARSE_DIAGNOSTICS', defaultValue: false);
 
   static void _logMusicParse(String message) {
     if (_musicParseDiagnostics) {
