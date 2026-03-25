@@ -26,6 +26,9 @@ class SaveLoadScreen extends StatefulWidget {
   final VoidCallback onClose;
   final VoidCallback? onLoadSuccess;
   final Function(SaveSlot)? onLoadSlot;
+  final bool useOverlayScaffold;
+  final bool showHeader;
+  final bool showFooter;
 
   const SaveLoadScreen({
     super.key,
@@ -34,6 +37,9 @@ class SaveLoadScreen extends StatefulWidget {
     required this.onClose,
     this.onLoadSuccess,
     this.onLoadSlot,
+    this.useOverlayScaffold = true,
+    this.showHeader = true,
+    this.showFooter = true,
   });
 
   @override
@@ -70,7 +76,8 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
       _loadMoreSlots();
     }
   }
@@ -79,7 +86,7 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
     try {
       // 获取所有存在的存档ID
       _existingSlotIds = await _saveLoadManager.getExistingSaveSlotIds();
-      
+
       // 计算初始页数（至少1页，如果有存档则基于最大ID计算）
       int initialPages = 1;
       if (_existingSlotIds != null && _existingSlotIds!.isNotEmpty) {
@@ -87,7 +94,7 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
         initialPages = (maxSlotId / _slotsPerPage).ceil();
       }
       _totalPages.value = initialPages;
-      
+
       // 加载所有包含存档的页面，确保现有存档都被加载
       if (_existingSlotIds != null && _existingSlotIds!.isNotEmpty) {
         final Set<int> pagesToLoad = {};
@@ -95,12 +102,12 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
           final page = ((slotId - 1) / _slotsPerPage).floor() + 1;
           pagesToLoad.add(page);
         }
-        
+
         // 加载所有相关页面
         for (final page in pagesToLoad) {
           await _loadSlotsForPage(page);
         }
-        
+
         // 如果第一页没有被加载，也要加载它以显示空档位
         if (!pagesToLoad.contains(1)) {
           await _loadSlotsForPage(1);
@@ -111,7 +118,8 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
       }
     } catch (e) {
       _notificationOverlayKey.currentState?.show(
-        _localization.t('saveLoad.notification.initFailed', params: {'error': e.toString()}),
+        _localization.t('saveLoad.notification.initFailed',
+            params: {'error': e.toString()}),
       );
     }
   }
@@ -119,16 +127,17 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
   Future<void> _loadSlotsForPage(int page) async {
     final startSlotId = (page - 1) * _slotsPerPage + 1;
     final endSlotId = page * _slotsPerPage;
-    
+
     try {
-      final slots = await _saveLoadManager.listSaveSlotsInRange(startSlotId, endSlotId);
-      
+      final slots =
+          await _saveLoadManager.listSaveSlotsInRange(startSlotId, endSlotId);
+
       // 更新缓存
       for (int i = 0; i < slots.length; i++) {
         final slotId = startSlotId + i;
         _cachedSlots[slotId] = slots[i];
       }
-      
+
       setState(() {}); // 触发重绘显示新加载的数据
     } catch (e) {
       print('加载第$page页存档失败: $e');
@@ -137,13 +146,13 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
 
   Future<void> _loadMoreSlots() async {
     if (_isLoadingMore) return;
-    
+
     _isLoadingMore = true;
     final nextPage = _totalPages.value + 1;
-    
+
     await _loadSlotsForPage(nextPage);
     _totalPages.value = nextPage;
-    
+
     _isLoadingMore = false;
   }
 
@@ -153,10 +162,10 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
 
   Future<void> _updateSingleSlot(int slotId, SaveSlot? newSlotData) async {
     if (!mounted) return;
-    
+
     // 直接更新缓存
     _cachedSlots[slotId] = newSlotData;
-    
+
     // 如果是新存档，更新存在的存档ID列表
     if (newSlotData != null && _existingSlotIds != null) {
       if (!_existingSlotIds!.contains(slotId)) {
@@ -166,16 +175,16 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
     } else if (newSlotData == null && _existingSlotIds != null) {
       _existingSlotIds!.remove(slotId);
     }
-    
+
     setState(() {});
   }
 
   Future<void> _swapSlots(int slotId1, int slotId2) async {
     if (!mounted) return;
-    
+
     final slot1 = _cachedSlots[slotId1];
     final slot2 = _cachedSlots[slotId2];
-    
+
     if (slot1 != null && slot2 != null) {
       _cachedSlots[slotId1] = slot2.copyWith(id: slotId1);
       _cachedSlots[slotId2] = slot1.copyWith(id: slotId2);
@@ -186,7 +195,7 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
       _cachedSlots[slotId1] = slot2.copyWith(id: slotId1);
       _cachedSlots[slotId2] = null;
     }
-    
+
     setState(() {});
   }
 
@@ -195,23 +204,35 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
 
     try {
       final snapshot = widget.gameManager!.saveStateSnapshot();
-      await _saveLoadManager.saveGame(slotId, widget.gameManager!.currentScriptFile, snapshot, widget.gameManager!.poseConfigs);
-      
+      await _saveLoadManager.saveGame(
+          slotId,
+          widget.gameManager!.currentScriptFile,
+          snapshot,
+          widget.gameManager!.poseConfigs);
+
       // 只更新单个存档位，避免全局重绘
       final updatedSlots = await _saveLoadManager.listSaveSlots();
-      final newSlot = updatedSlots.firstWhere((slot) => slot.id == slotId, 
-        orElse: () => SaveSlot(id: -1, saveTime: DateTime.now(), currentScript: '', dialoguePreview: '', snapshot: GameStateSnapshot(scriptIndex: 0, currentState: GameState.initial())));
-      
+      final newSlot = updatedSlots.firstWhere((slot) => slot.id == slotId,
+          orElse: () => SaveSlot(
+              id: -1,
+              saveTime: DateTime.now(),
+              currentScript: '',
+              dialoguePreview: '',
+              snapshot: GameStateSnapshot(
+                  scriptIndex: 0, currentState: GameState.initial())));
+
       if (newSlot.id != -1) {
         await _updateSingleSlot(slotId, newSlot);
       }
     } catch (e) {
       final message = e.toString();
       if (message.contains('存档已锁定，无法覆盖')) {
-        _notificationOverlayKey.currentState?.show(_localization.t('saveLoad.notification.locked'));
+        _notificationOverlayKey.currentState
+            ?.show(_localization.t('saveLoad.notification.locked'));
       } else {
         _notificationOverlayKey.currentState?.show(
-          _localization.t('saveLoad.notification.saveFailed', params: {'error': e.toString()}),
+          _localization.t('saveLoad.notification.saveFailed',
+              params: {'error': e.toString()}),
         );
       }
     }
@@ -241,7 +262,8 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
       context: context,
       builder: (context) => ConfirmDialog(
         title: _localization.t('saveLoad.delete.title'),
-        content: _localization.t('saveLoad.delete.content', params: {'id': slotId.toString().padLeft(2, '0')}),
+        content: _localization.t('saveLoad.delete.content',
+            params: {'id': slotId.toString().padLeft(2, '0')}),
         onConfirm: () {},
         onCancel: () {},
         confirmResult: true,
@@ -257,7 +279,8 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
       await _updateSingleSlot(slotId, null);
     } catch (e) {
       _notificationOverlayKey.currentState?.show(
-        _localization.t('saveLoad.notification.deleteFailed', params: {'error': e.toString()}),
+        _localization.t('saveLoad.notification.deleteFailed',
+            params: {'error': e.toString()}),
       );
     }
   }
@@ -269,14 +292,17 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
         final currentSlot = _cachedSlots[slotId];
         if (currentSlot != null) {
           final isNowLocked = !currentSlot.isLocked;
-          await _updateSingleSlot(slotId, currentSlot.copyWith(isLocked: isNowLocked));
+          await _updateSingleSlot(
+              slotId, currentSlot.copyWith(isLocked: isNowLocked));
         }
       } else {
-        _notificationOverlayKey.currentState?.show(_localization.t('saveLoad.notification.operationFailed'));
+        _notificationOverlayKey.currentState
+            ?.show(_localization.t('saveLoad.notification.operationFailed'));
       }
     } catch (e) {
       _notificationOverlayKey.currentState?.show(
-        _localization.t('saveLoad.notification.operationFailedWithError', params: {'error': e.toString()}),
+        _localization.t('saveLoad.notification.operationFailedWithError',
+            params: {'error': e.toString()}),
       );
     }
   }
@@ -291,7 +317,8 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
     }
 
     // 桌面端和Web根据窗口比例判断
-    final screenRatio = MediaQuery.of(context).size.height / MediaQuery.of(context).size.width;
+    final screenRatio =
+        MediaQuery.of(context).size.height / MediaQuery.of(context).size.width;
     if (screenRatio > 1.5) {
       return 2;
     } else if (screenRatio > 1.0) {
@@ -310,7 +337,8 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
     }
 
     // 桌面端和Web根据窗口比例判断
-    final screenRatio = MediaQuery.of(context).size.height / MediaQuery.of(context).size.width;
+    final screenRatio =
+        MediaQuery.of(context).size.height / MediaQuery.of(context).size.width;
     if (screenRatio > 1.5) {
       return 2.4;
     } else if (screenRatio > 1.0) {
@@ -333,7 +361,8 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
     if (chapterMatch != null) {
       final chapterNum = int.parse(chapterMatch.group(1)!);
       final chapterName = _getChapterName(chapterNum);
-      return _localization.t('saveLoad.script.chapter', params: {'name': chapterName});
+      return _localization
+          .t('saveLoad.script.chapter', params: {'name': chapterName});
     }
 
     // 处理其他特殊脚本
@@ -372,7 +401,8 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
       case 0: // 上
         final toRow = fromRow - 1;
         if (toRow < 0) {
-          _notificationOverlayKey.currentState?.show(_localization.t('saveLoad.notification.cannotMoveUp'));
+          _notificationOverlayKey.currentState
+              ?.show(_localization.t('saveLoad.notification.cannotMoveUp'));
           return;
         }
         toSlotId = toRow * columnCount + fromCol + 1;
@@ -383,14 +413,16 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
         break;
       case 2: // 左
         if (fromCol == 0) {
-          _notificationOverlayKey.currentState?.show(_localization.t('saveLoad.notification.cannotMoveLeft'));
+          _notificationOverlayKey.currentState
+              ?.show(_localization.t('saveLoad.notification.cannotMoveLeft'));
           return;
         }
         toSlotId = fromSlotId - 1;
         break;
       case 3: // 右
         if (fromCol == columnCount - 1) {
-          _notificationOverlayKey.currentState?.show(_localization.t('saveLoad.notification.cannotMoveRight'));
+          _notificationOverlayKey.currentState
+              ?.show(_localization.t('saveLoad.notification.cannotMoveRight'));
           return;
         }
         toSlotId = fromSlotId + 1;
@@ -401,7 +433,8 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
 
     if (toSlotId < 1) {
       _notificationOverlayKey.currentState?.show(
-        _localization.t('saveLoad.notification.cannotMoveToSlot', params: {'id': toSlotId.toString().padLeft(2, '0')}),
+        _localization.t('saveLoad.notification.cannotMoveToSlot',
+            params: {'id': toSlotId.toString().padLeft(2, '0')}),
       );
       return;
     }
@@ -413,12 +446,14 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
       if (targetSlot == null) {
         success = await _saveLoadManager.moveSave(fromSlotId, toSlotId);
         if (!success) {
-          _notificationOverlayKey.currentState?.show(_localization.t('saveLoad.notification.cannotMoveLocked'));
+          _notificationOverlayKey.currentState
+              ?.show(_localization.t('saveLoad.notification.cannotMoveLocked'));
         }
       } else {
         success = await _saveLoadManager.swapSaves(fromSlotId, toSlotId);
         if (!success) {
-          _notificationOverlayKey.currentState?.show(_localization.t('saveLoad.notification.cannotMoveLocked'));
+          _notificationOverlayKey.currentState
+              ?.show(_localization.t('saveLoad.notification.cannotMoveLocked'));
         }
       }
 
@@ -427,7 +462,8 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
           final sourceSlot = _cachedSlots[fromSlotId];
           if (sourceSlot != null) {
             await _updateSingleSlot(fromSlotId, null);
-            await _updateSingleSlot(toSlotId, sourceSlot.copyWith(id: toSlotId));
+            await _updateSingleSlot(
+                toSlotId, sourceSlot.copyWith(id: toSlotId));
           }
         } else {
           await _swapSlots(fromSlotId, toSlotId);
@@ -435,15 +471,16 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
       }
     } catch (e) {
       _notificationOverlayKey.currentState?.show(
-        _localization.t('saveLoad.notification.moveFailed', params: {'error': e.toString()}),
+        _localization.t('saveLoad.notification.moveFailed',
+            params: {'error': e.toString()}),
       );
     }
   }
 
   String _getTitleText() {
     return widget.mode == SaveLoadMode.save
-      ? _localization.t('saveLoad.title.save')
-      : _localization.t('saveLoad.title.load');
+        ? _localization.t('saveLoad.title.save')
+        : _localization.t('saveLoad.title.load');
   }
 
   @override
@@ -451,15 +488,22 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
     final uiScale = context.scaleFor(ComponentType.ui);
     final textScale = context.scaleFor(ComponentType.text);
     final config = SakiEngineConfig();
+    final content = _buildGridContent(uiScale, textScale, config);
 
     return Stack(
       children: [
-        OverlayScaffold(
-          title: _getTitleText(),
-          onClose: (_) => widget.onClose(),
-          content: _buildGridContent(uiScale, textScale, config),
-          footer: _buildFooter(uiScale, textScale, config),
-        ),
+        if (widget.useOverlayScaffold)
+          OverlayScaffold(
+            title: _getTitleText(),
+            showHeader: widget.showHeader,
+            onClose: (_) => widget.onClose(),
+            content: content,
+            footer: widget.showFooter
+                ? _buildFooter(uiScale, textScale, config)
+                : null,
+          )
+        else
+          content,
         NotificationOverlay(
           key: _notificationOverlayKey,
           scale: uiScale,
@@ -468,12 +512,13 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
     );
   }
 
-  Widget _buildGridContent(double uiScale, double textScale, SakiEngineConfig config) {
+  Widget _buildGridContent(
+      double uiScale, double textScale, SakiEngineConfig config) {
     return ValueListenableBuilder<int>(
       valueListenable: _totalPages,
       builder: (context, totalPages, child) {
         final totalSlotCount = _getTotalSlotCount();
-        
+
         return ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
           child: GridView.builder(
@@ -485,7 +530,8 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
               crossAxisSpacing: 20 * uiScale,
               mainAxisSpacing: 20 * uiScale,
             ),
-            itemCount: totalSlotCount + (_isLoadingMore ? 1 : 0), // 加载更多时显示加载指示器
+            itemCount:
+                totalSlotCount + (_isLoadingMore ? 1 : 0), // 加载更多时显示加载指示器
             itemBuilder: (context, index) {
               // 如果是最后一个项目且正在加载，显示加载指示器
               if (index >= totalSlotCount) {
@@ -499,16 +545,18 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
                   ),
                 );
               }
-              
+
               final slotId = index + 1;
               final saveSlot = _cachedSlots[slotId];
               final isSlotEmpty = saveSlot == null;
-              
+
               return _SaveSlotCard(
                 key: ValueKey('slot_$slotId'),
                 slotId: slotId,
                 saveSlot: saveSlot,
-                formattedScriptName: saveSlot != null ? _formatScriptName(saveSlot.currentScript) : '',
+                formattedScriptName: saveSlot != null
+                    ? _formatScriptName(saveSlot.currentScript)
+                    : '',
                 config: config,
                 uiScale: uiScale,
                 textScale: textScale,
@@ -520,18 +568,25 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
                     _handleLoad(saveSlot);
                   }
                 },
-                onDelete: isSlotEmpty ? null : () async {
-                  final shouldDelete = await _showDeleteConfirmDialog(slotId);
-                  if (shouldDelete == true) {
-                    await _handleDelete(slotId);
-                  }
-                },
-                onToggleLock: isSlotEmpty ? null : () async {
-                  await _handleToggleLock(slotId);
-                },
-                onMove: isSlotEmpty ? null : (direction) async {
-                  await _handleMove(slotId, direction);
-                },
+                onDelete: isSlotEmpty
+                    ? null
+                    : () async {
+                        final shouldDelete =
+                            await _showDeleteConfirmDialog(slotId);
+                        if (shouldDelete == true) {
+                          await _handleDelete(slotId);
+                        }
+                      },
+                onToggleLock: isSlotEmpty
+                    ? null
+                    : () async {
+                        await _handleToggleLock(slotId);
+                      },
+                onMove: isSlotEmpty
+                    ? null
+                    : (direction) async {
+                        await _handleMove(slotId, direction);
+                      },
               );
             },
           ),
@@ -540,7 +595,8 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
     );
   }
 
-  Widget _buildFooter(double uiScale, double textScale, SakiEngineConfig config) {
+  Widget _buildFooter(
+      double uiScale, double textScale, SakiEngineConfig config) {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(vertical: 12 * uiScale),
@@ -558,14 +614,23 @@ class _SaveLoadScreenState extends State<SaveLoadScreen> {
         builder: (context, totalPages, child) {
           final totalSlots = _getTotalSlotCount();
           final existingCount = _existingSlotIds?.length ?? 0;
-          
+
           return Center(
             child: Text(
               widget.mode == SaveLoadMode.save
-                ? '${_localization.t('saveLoad.footer.selectSave')} • ${_localization.t('saveLoad.footer.displayed', params: {'count': totalSlots.toString()})} • ${_localization.t('saveLoad.footer.used', params: {'count': existingCount.toString()})}'
-                : '${_localization.t('saveLoad.footer.selectLoad')} • ${_localization.t('saveLoad.footer.displayed', params: {'count': totalSlots.toString()})} • ${_localization.t('saveLoad.footer.used', params: {'count': existingCount.toString()})}',
+                  ? '${_localization.t('saveLoad.footer.selectSave')} • ${_localization.t('saveLoad.footer.displayed', params: {
+                          'count': totalSlots.toString()
+                        })} • ${_localization.t('saveLoad.footer.used', params: {
+                          'count': existingCount.toString()
+                        })}'
+                  : '${_localization.t('saveLoad.footer.selectLoad')} • ${_localization.t('saveLoad.footer.displayed', params: {
+                          'count': totalSlots.toString()
+                        })} • ${_localization.t('saveLoad.footer.used', params: {
+                          'count': existingCount.toString()
+                        })}',
               style: config.reviewTitleTextStyle.copyWith(
-                fontSize: config.reviewTitleTextStyle.fontSize! * textScale * 0.4,
+                fontSize:
+                    config.reviewTitleTextStyle.fontSize! * textScale * 0.4,
                 color: config.themeColors.primary.withValues(alpha: 0.7),
                 fontStyle: FontStyle.italic,
                 fontWeight: FontWeight.normal,
@@ -610,7 +675,8 @@ class _SaveSlotCard extends StatefulWidget {
   State<_SaveSlotCard> createState() => _SaveSlotCardState();
 }
 
-class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderStateMixin {
+class _SaveSlotCardState extends State<_SaveSlotCard>
+    with SingleTickerProviderStateMixin {
   bool _isHovered = false;
   late AnimationController _animationController;
   late Animation<double> _borderAnimation;
@@ -707,7 +773,8 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
                   ? config.themeColors.primary.withOpacity(0.05)
                   : Colors.transparent,
               border: Border.all(
-                color: config.themeColors.primary.withOpacity(_borderAnimation.value),
+                color: config.themeColors.primary
+                    .withOpacity(_borderAnimation.value),
                 width: 1,
               ),
               borderRadius: BorderRadius.circular(0 * uiScale),
@@ -723,12 +790,16 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
                       Expanded(
                         child: widget.saveSlot != null
                             ? _buildDataCard(uiScale, widget.textScale, config)
-                            : _buildEmptyCard(uiScale, widget.textScale, config),
+                            : _buildEmptyCard(
+                                uiScale, widget.textScale, config),
                       ),
                     ],
                   ),
                 ),
-                if ((widget.onMove != null || widget.onDelete != null || widget.onToggleLock != null) && widget.saveSlot != null)
+                if ((widget.onMove != null ||
+                        widget.onDelete != null ||
+                        widget.onToggleLock != null) &&
+                    widget.saveSlot != null)
                   Positioned(
                     bottom: 8 * uiScale,
                     right: 8 * uiScale,
@@ -748,7 +819,7 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
     final buttonSize = isMobile ? 45 * uiScale : 26 * uiScale;
     final buttonSpacing = isMobile ? 6 * uiScale : 3 * uiScale;
     final isLocked = widget.saveSlot?.isLocked ?? false;
-    
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -757,25 +828,25 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
             icon: Icons.keyboard_arrow_up,
             size: buttonSize,
             onTap: () => widget.onMove!(0),
-            ),
+          ),
           SizedBox(width: buttonSpacing),
           SquareIconButton(
             icon: Icons.keyboard_arrow_down,
             size: buttonSize,
             onTap: () => widget.onMove!(1),
-            ),
+          ),
           SizedBox(width: buttonSpacing),
           SquareIconButton(
             icon: Icons.keyboard_arrow_left,
             size: buttonSize,
             onTap: () => widget.onMove!(2),
-            ),
+          ),
           SizedBox(width: buttonSpacing),
           SquareIconButton(
             icon: Icons.keyboard_arrow_right,
             size: buttonSize,
             onTap: () => widget.onMove!(3),
-            ),
+          ),
           SizedBox(width: buttonSpacing),
         ],
         if (widget.onToggleLock != null)
@@ -791,21 +862,22 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
             icon: Icons.close,
             size: buttonSize,
             onTap: () => widget.onDelete!(),
-              hoverBackgroundColor: config.themeColors.primary.withOpacity(0.1),
+            hoverBackgroundColor: config.themeColors.primary.withOpacity(0.1),
           ),
         ],
       ],
     );
   }
 
-  Widget _buildDataCard(double uiScale, double textScale, SakiEngineConfig config) {
+  Widget _buildDataCard(
+      double uiScale, double textScale, SakiEngineConfig config) {
     final isLocked = widget.saveSlot?.isLocked ?? false;
     final opacity = isLocked ? 0.6 : 1.0;
 
     // 移动端对话文字增大2/3
     final isMobile = !kIsWeb && (Platform.isIOS || Platform.isAndroid);
     final dialogueFontSize = isMobile ? 0.5 : 0.36;
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -814,9 +886,11 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              widget.localization.t('saveLoad.slot', params: {'id': widget.slotId.toString().padLeft(2, '0')}),
+              widget.localization.t('saveLoad.slot',
+                  params: {'id': widget.slotId.toString().padLeft(2, '0')}),
               style: config.reviewTitleTextStyle.copyWith(
-                fontSize: config.reviewTitleTextStyle.fontSize! * textScale * 0.45,
+                fontSize:
+                    config.reviewTitleTextStyle.fontSize! * textScale * 0.45,
                 color: config.themeColors.primary.withOpacity(opacity),
                 fontWeight: FontWeight.bold,
               ),
@@ -832,8 +906,11 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
                         child: Text(
                           widget.formattedScriptName,
                           style: config.reviewTitleTextStyle.copyWith(
-                            fontSize: config.reviewTitleTextStyle.fontSize! * textScale * 0.32,
-                            color: config.themeColors.primary.withOpacity(0.6 * opacity),
+                            fontSize: config.reviewTitleTextStyle.fontSize! *
+                                textScale *
+                                0.32,
+                            color: config.themeColors.primary
+                                .withOpacity(0.6 * opacity),
                             fontWeight: FontWeight.w500,
                             letterSpacing: 0.5,
                           ),
@@ -844,10 +921,14 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
                       SizedBox(width: 8 * uiScale),
                     // 时间显示在右侧
                     Text(
-                      DateFormat('MM-dd HH:mm').format(widget.saveSlot!.saveTime),
+                      DateFormat('MM-dd HH:mm')
+                          .format(widget.saveSlot!.saveTime),
                       style: config.reviewTitleTextStyle.copyWith(
-                        fontSize: config.reviewTitleTextStyle.fontSize! * textScale * 0.32,
-                        color: config.themeColors.primary.withOpacity(0.6 * opacity),
+                        fontSize: config.reviewTitleTextStyle.fontSize! *
+                            textScale *
+                            0.32,
+                        color: config.themeColors.primary
+                            .withOpacity(0.6 * opacity),
                         fontWeight: FontWeight.normal,
                       ),
                     ),
@@ -884,14 +965,18 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
                 child: FutureBuilder<String>(
                   future: _dialoguePreviewFuture,
                   builder: (context, snapshot) {
-                    final dialogueText = snapshot.data ?? widget.saveSlot!.dialoguePreview;
+                    final dialogueText =
+                        snapshot.data ?? widget.saveSlot!.dialoguePreview;
                     return Text(
                       RichTextParser.cleanText(dialogueText),
                       maxLines: 3, // 减少行数从4到3
                       overflow: TextOverflow.ellipsis,
                       style: config.reviewTitleTextStyle.copyWith(
-                        fontSize: config.reviewTitleTextStyle.fontSize! * textScale * dialogueFontSize,
-                        color: config.themeColors.onSurface.withOpacity(0.8 * opacity),
+                        fontSize: config.reviewTitleTextStyle.fontSize! *
+                            textScale *
+                            dialogueFontSize,
+                        color: config.themeColors.onSurface
+                            .withOpacity(0.8 * opacity),
                         fontWeight: FontWeight.normal,
                         height: 1.2, // 减少行高从1.4到1.2
                       ),
@@ -906,12 +991,14 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
     );
   }
 
-  Widget _buildEmptyCard(double uiScale, double textScale, SakiEngineConfig config) {
+  Widget _buildEmptyCard(
+      double uiScale, double textScale, SakiEngineConfig config) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          widget.localization.t('saveLoad.slot', params: {'id': widget.slotId.toString().padLeft(2, '0')}),
+          widget.localization.t('saveLoad.slot',
+              params: {'id': widget.slotId.toString().padLeft(2, '0')}),
           style: config.reviewTitleTextStyle.copyWith(
             fontSize: config.reviewTitleTextStyle.fontSize! * textScale * 0.45,
             color: config.themeColors.primary.withOpacity(0.5),
@@ -934,7 +1021,9 @@ class _SaveSlotCardState extends State<_SaveSlotCard> with SingleTickerProviderS
                 Text(
                   widget.localization.t('saveLoad.empty'),
                   style: config.reviewTitleTextStyle.copyWith(
-                    fontSize: config.reviewTitleTextStyle.fontSize! * textScale * 0.36,
+                    fontSize: config.reviewTitleTextStyle.fontSize! *
+                        textScale *
+                        0.36,
                     color: config.themeColors.primary.withOpacity(0.3),
                     fontWeight: FontWeight.normal,
                   ),

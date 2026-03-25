@@ -11,10 +11,10 @@ import 'package:sakiengine/src/utils/dialogue_progression_manager.dart';
 import 'package:sakiengine/src/widgets/common/configurable_menu_button.dart';
 import 'package:sakiengine/src/widgets/common/default_menu_buttons.dart';
 import 'package:sakiengine/src/widgets/dialogue_box.dart';
+import 'package:sakiengine/src/widgets/settings_screen.dart';
 
 /// 游戏模块接口 - 定义项目可以覆盖的所有组件
 abstract class GameModule {
-  
   /// 主菜单屏幕工厂
   Widget createMainMenuScreen({
     required VoidCallback onNewGame,
@@ -37,6 +37,14 @@ abstract class GameModule {
     required SaveLoadMode mode,
     GameManager? gameManager,
     VoidCallback? onClose,
+    Function(SaveSlot)? onLoadSlot,
+  });
+
+  /// 设置界面屏幕工厂
+  Widget createSettingsScreen({
+    required VoidCallback onClose,
+    GameManager? gameManager,
+    Function(SaveSlot)? onLoadSlot,
   });
 
   /// 对话框组件工厂
@@ -142,11 +150,24 @@ class DefaultGameModule implements GameModule {
     required SaveLoadMode mode,
     GameManager? gameManager,
     VoidCallback? onClose,
+    Function(SaveSlot)? onLoadSlot,
   }) {
     return SaveLoadScreen(
       mode: mode,
       gameManager: gameManager,
       onClose: onClose ?? () {},
+      onLoadSlot: onLoadSlot,
+    );
+  }
+
+  @override
+  Widget createSettingsScreen({
+    required VoidCallback onClose,
+    GameManager? gameManager,
+    Function(SaveSlot)? onLoadSlot,
+  }) {
+    return SettingsScreen(
+      onClose: onClose,
     );
   }
 

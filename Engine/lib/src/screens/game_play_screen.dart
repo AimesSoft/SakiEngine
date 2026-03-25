@@ -378,6 +378,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                           key: _gameUILayerKey,
                           gameState: gameState,
                           gameManager: _gameManager,
+                          gameModule: widget.gameModule ?? DefaultGameModule(),
                           dialogueProgressionManager:
                               _dialogueProgressionManager,
                           currentScript: _currentScript,

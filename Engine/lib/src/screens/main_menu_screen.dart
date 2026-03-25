@@ -9,7 +9,6 @@ import 'package:sakiengine/src/core/game_module.dart';
 import 'package:sakiengine/src/core/project_module_loader.dart';
 import 'package:sakiengine/src/widgets/debug_panel_dialog.dart';
 import 'package:sakiengine/src/widgets/common/exit_confirmation_dialog.dart';
-import 'package:sakiengine/src/widgets/settings_screen.dart';
 import 'package:sakiengine/src/widgets/common/configurable_menu_button.dart';
 import 'package:sakiengine/src/utils/smart_asset_image.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
@@ -49,11 +48,16 @@ class _HoverButtonState extends State<_HoverButton> {
             vertical: 16 * widget.scale,
           ),
           decoration: BoxDecoration(
-            color: _isHovered 
-              ? HSLColor.fromColor(widget.config.themeColors.background)
-                  .withLightness((HSLColor.fromColor(widget.config.themeColors.background).lightness - 0.1).clamp(0.0, 1.0))
-                  .toColor().withOpacity(0.9)
-              : widget.config.themeColors.background.withOpacity(0.9),
+            color: _isHovered
+                ? HSLColor.fromColor(widget.config.themeColors.background)
+                    .withLightness((HSLColor.fromColor(
+                                    widget.config.themeColors.background)
+                                .lightness -
+                            0.1)
+                        .clamp(0.0, 1.0))
+                    .toColor()
+                    .withOpacity(0.9)
+                : widget.config.themeColors.background.withOpacity(0.9),
             border: Border.all(
               color: widget.config.themeColors.primary.withOpacity(0.5),
               width: 1,
@@ -197,12 +201,19 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
             assetName: 'backgrounds/${config.mainMenuBackground}',
             fit: BoxFit.cover,
           ),
-          
           Positioned(
-            top: config.hasBottom ? null : screenSize.height * config.mainMenuTitleTop,
-            bottom: config.hasBottom ? screenSize.height * config.mainMenuTitleBottom : null,
-            left: config.hasLeft ? screenSize.width * config.mainMenuTitleLeft : null,
-            right: config.hasLeft ? null : screenSize.width * config.mainMenuTitleRight,
+            top: config.hasBottom
+                ? null
+                : screenSize.height * config.mainMenuTitleTop,
+            bottom: config.hasBottom
+                ? screenSize.height * config.mainMenuTitleBottom
+                : null,
+            left: config.hasLeft
+                ? screenSize.width * config.mainMenuTitleLeft
+                : null,
+            right: config.hasLeft
+                ? null
+                : screenSize.width * config.mainMenuTitleRight,
             child: config.mainMenuTitle.isNotEmpty
                 ? SmartAssetImage(
                     assetName: config.mainMenuTitle,
@@ -241,7 +252,6 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                     ),
                   ),
           ),
-          
           if (_showBottomBar())
             Positioned(
               bottom: screenSize.height * 0.04,
@@ -252,22 +262,17 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 color: config.themeColors.primary,
               ),
             ),
-          
-          
           _buildMenuButtons(context, menuScale, config),
-
           if (_showLoadOverlay)
-            SaveLoadScreen(
+            _gameModule.createSaveLoadScreen(
               mode: SaveLoadMode.load,
               onClose: () => setState(() => _showLoadOverlay = false),
               onLoadSlot: widget.onLoadGameWithSave,
             ),
-
           if (_showSettings)
-            SettingsScreen(
+            _gameModule.createSettingsScreen(
               onClose: () => setState(() => _showSettings = false),
             ),
-
           if (_showDebugPanel)
             DebugPanelDialog(
               onClose: () => setState(() => _showDebugPanel = false),
@@ -299,7 +304,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     final screenSize = MediaQuery.of(context).size;
 
     Widget buttonsWidget;
-    
+
     if (layoutConfig.isVertical) {
       buttonsWidget = Column(
         crossAxisAlignment: layoutConfig.crossAxisAlignment,
@@ -339,18 +344,26 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     }
 
     return Positioned(
-      top: layoutConfig.top != null ? screenSize.height * layoutConfig.top! : null,
-      bottom: layoutConfig.bottom != null ? screenSize.height * layoutConfig.bottom! : null,
-      left: layoutConfig.left != null ? screenSize.width * layoutConfig.left! : null,
-      right: layoutConfig.right != null ? screenSize.width * layoutConfig.right! : null,
+      top: layoutConfig.top != null
+          ? screenSize.height * layoutConfig.top!
+          : null,
+      bottom: layoutConfig.bottom != null
+          ? screenSize.height * layoutConfig.bottom!
+          : null,
+      left: layoutConfig.left != null
+          ? screenSize.width * layoutConfig.left!
+          : null,
+      right: layoutConfig.right != null
+          ? screenSize.width * layoutConfig.right!
+          : null,
       child: buttonsWidget,
     );
   }
 
   Widget _buildMenuButton(
-    BuildContext context, 
-    String text, 
-    VoidCallback onPressed, 
+    BuildContext context,
+    String text,
+    VoidCallback onPressed,
     double scale,
     SakiEngineConfig config,
   ) {
@@ -361,5 +374,4 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
       config: config,
     );
   }
-
 }

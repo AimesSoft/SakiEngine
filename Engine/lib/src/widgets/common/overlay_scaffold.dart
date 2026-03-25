@@ -14,6 +14,7 @@ class OverlayScaffold extends StatefulWidget {
   final String title;
   final Widget content;
   final Widget? footer;
+  final bool showHeader;
   final void Function(bool triggeredByOverscroll) onClose;
 
   const OverlayScaffold({
@@ -21,6 +22,7 @@ class OverlayScaffold extends StatefulWidget {
     required this.title,
     required this.content,
     this.footer,
+    this.showHeader = true,
     required this.onClose,
   });
 
@@ -35,28 +37,28 @@ class OverlayScaffoldState extends State<OverlayScaffold>
   late Animation<double> _fadeAnimation;
   late Animation<double> _backdropAnimation;
   bool _isClosing = false;
-  
+
   String _menuDisplayMode = SettingsManager.defaultMenuDisplayMode;
-  
+
   // ESC热键
   late HotKey _escHotKey;
 
   @override
   void initState() {
     super.initState();
-    
+
     // 加载菜单显示模式设置
     _loadMenuDisplayMode();
-    
+
     // 监听设置变化
     SettingsManager().addListener(_onSettingsChanged);
-    
+
     // 当覆盖层打开时，自动隐藏快捷菜单
     // 使用 addPostFrameCallback 避免在build阶段调用setState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       QuickMenu.hideOnOverlayOpen();
     });
-    
+
     // 注册ESC热键
     _escHotKey = HotKey(
       key: PhysicalKeyboardKey.escape,
@@ -65,7 +67,7 @@ class OverlayScaffoldState extends State<OverlayScaffold>
     HotKeyManager.instance.register(_escHotKey, keyDownHandler: (_) {
       close();
     });
-    
+
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 400),
       vsync: this,
@@ -153,7 +155,8 @@ class OverlayScaffoldState extends State<OverlayScaffold>
             width: double.infinity,
             height: double.infinity,
             decoration: BoxDecoration(
-              color: config.themeColors.primaryDark.withOpacity(0.5 * _backdropAnimation.value),
+              color: config.themeColors.primaryDark
+                  .withOpacity(0.5 * _backdropAnimation.value),
             ),
             child: GestureDetector(
               onTap: () {},
@@ -164,26 +167,28 @@ class OverlayScaffoldState extends State<OverlayScaffold>
                   child: FadeTransition(
                     opacity: _fadeAnimation,
                     child: Container(
-                      width: _menuDisplayMode == 'fullscreen' 
-                          ? screenSize.width 
+                      width: _menuDisplayMode == 'fullscreen'
+                          ? screenSize.width
                           : screenSize.width * 0.85,
-                      height: _menuDisplayMode == 'fullscreen' 
-                          ? screenSize.height 
+                      height: _menuDisplayMode == 'fullscreen'
+                          ? screenSize.height
                           : screenSize.height * 0.8,
-                      decoration: _menuDisplayMode == 'fullscreen' 
-                          ? null 
+                      decoration: _menuDisplayMode == 'fullscreen'
+                          ? null
                           : BoxDecoration(
-                              borderRadius: BorderRadius.circular(config.baseWindowBorder),
+                              borderRadius: BorderRadius.circular(
+                                  config.baseWindowBorder),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.3 * _fadeAnimation.value),
+                                  color: Colors.black
+                                      .withOpacity(0.3 * _fadeAnimation.value),
                                   blurRadius: 20 * uiScale,
                                   offset: Offset(0, 8 * uiScale),
                                 ),
                               ],
                             ),
                       child: ClipRRect(
-                        borderRadius: _menuDisplayMode == 'fullscreen' 
+                        borderRadius: _menuDisplayMode == 'fullscreen'
                             ? BorderRadius.zero
                             : BorderRadius.circular(config.baseWindowBorder),
                         child: Stack(
@@ -195,12 +200,14 @@ class OverlayScaffoldState extends State<OverlayScaffold>
                               color: config.themeColors.background,
                             ),
                             // 中层：背景图片
-                            if (config.baseWindowBackground != null && config.baseWindowBackground!.isNotEmpty)
+                            if (config.baseWindowBackground != null &&
+                                config.baseWindowBackground!.isNotEmpty)
                               Positioned.fill(
                                 child: Opacity(
                                   opacity: config.baseWindowBackgroundAlpha,
                                   child: ColorFiltered(
-                                    colorFilter: SvgColorFilterUtils.getSvgColorTemperatureFilter(config),
+                                    colorFilter: SvgColorFilterUtils
+                                        .getSvgColorTemperatureFilter(config),
                                     child: Align(
                                       alignment: Alignment(
                                         (config.baseWindowXAlign - 0.5) * 2,
@@ -209,7 +216,8 @@ class OverlayScaffoldState extends State<OverlayScaffold>
                                       child: Transform.scale(
                                         scale: config.baseWindowBackgroundScale,
                                         child: SmartAssetImage(
-                                          assetName: config.baseWindowBackground!,
+                                          assetName:
+                                              config.baseWindowBackground!,
                                           fit: BoxFit.contain,
                                         ),
                                       ),
@@ -219,10 +227,12 @@ class OverlayScaffoldState extends State<OverlayScaffold>
                               ),
                             // 上层：半透明控件
                             Container(
-                              color: config.themeColors.background.withOpacity(config.baseWindowAlpha),
+                              color: config.themeColors.background
+                                  .withOpacity(config.baseWindowAlpha),
                               child: Column(
                                 children: [
-                                  _buildHeader(uiScale, textScale, config),
+                                  if (widget.showHeader)
+                                    _buildHeader(uiScale, textScale, config),
                                   Expanded(child: widget.content),
                                   if (widget.footer != null) widget.footer!,
                                 ],
@@ -242,7 +252,8 @@ class OverlayScaffoldState extends State<OverlayScaffold>
     );
   }
 
-  Widget _buildHeader(double uiScale, double textScale, SakiEngineConfig config) {
+  Widget _buildHeader(
+      double uiScale, double textScale, SakiEngineConfig config) {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(

@@ -28,7 +28,6 @@ import 'package:sakiengine/src/utils/ui_sound_manager.dart';
 import 'package:sakiengine/src/widgets/common/black_screen_transition.dart';
 import 'package:sakiengine/src/widgets/common/exit_confirmation_dialog.dart';
 import 'package:sakiengine/src/widgets/common/fps_overlay.dart';
-import 'package:sakiengine/src/widgets/settings_screen.dart';
 import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 import '../utils/platform_window_manager_io.dart'
@@ -255,7 +254,7 @@ class _GameContainerState extends State<GameContainer> with WindowListener {
         mode: SaveLoadMode.load,
         onClose: () {},
       ),
-      SettingsScreen(
+      gameModule.createSettingsScreen(
         onClose: () {},
       ),
     ];

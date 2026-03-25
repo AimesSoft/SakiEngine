@@ -15,10 +15,16 @@ import 'package:sakiengine/src/widgets/settings/control_settings_tab.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onClose;
+  final bool useOverlayScaffold;
+  final bool showHeader;
+  final bool showFooter;
 
   const SettingsScreen({
     super.key,
     required this.onClose,
+    this.useOverlayScaffold = true,
+    this.showHeader = true,
+    this.showFooter = true,
   });
 
   @override
@@ -69,7 +75,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _settingsManager.init();
 
       final fastForwardMode = await _settingsManager.getFastForwardMode();
-      final mouseRollbackBehavior = await _settingsManager.getMouseRollbackBehavior();
+      final mouseRollbackBehavior =
+          await _settingsManager.getMouseRollbackBehavior();
 
       final musicEnabled = _musicManager.isMusicEnabled;
       final musicVolume = _musicManager.musicVolume;
@@ -148,12 +155,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // 当设置变化时，重新更新主题配置
         SakiEngineConfig().updateThemeForDarkMode();
         final localization = LocalizationManager();
+        final content =
+            _isLoading ? _buildLoadingContent() : _buildSettingsContent();
 
-        return OverlayScaffold(
-          title: localization.t('settings.title'),
-          content: _isLoading ? _buildLoadingContent() : _buildSettingsContent(),
-          footer: _isLoading ? null : _buildFooter(),
-          onClose: (_) => widget.onClose(),
+        if (widget.useOverlayScaffold) {
+          return OverlayScaffold(
+            title: localization.t('settings.title'),
+            showHeader: widget.showHeader,
+            content: content,
+            footer: (!_isLoading && widget.showFooter) ? _buildFooter() : null,
+            onClose: (_) => widget.onClose(),
+          );
+        }
+
+        if (_isLoading || !widget.showFooter) {
+          return content;
+        }
+
+        return Column(
+          children: [
+            Expanded(child: content),
+            _buildFooter(),
+          ],
         );
       },
     );
@@ -184,7 +207,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tabTitles = _tabTitleKeys.map(localization.t).toList();
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16 * scale, vertical: 8 * scale),
+      padding:
+          EdgeInsets.symmetric(horizontal: 16 * scale, vertical: 8 * scale),
       decoration: BoxDecoration(
         color: config.themeColors.surface.withOpacity(0.3),
         border: Border(
@@ -331,12 +355,12 @@ class _SettingsButtonState extends State<_SettingsButton> {
           ),
           decoration: BoxDecoration(
             color: _isHovered
-              ? (isPrimary
-                  ? widget.config.themeColors.primary.withOpacity(0.9)
-                  : widget.config.themeColors.primary.withOpacity(0.15))
-              : (isPrimary
-                  ? widget.config.themeColors.primary.withOpacity(0.8)
-                  : widget.config.themeColors.primary.withOpacity(0.1)),
+                ? (isPrimary
+                    ? widget.config.themeColors.primary.withOpacity(0.9)
+                    : widget.config.themeColors.primary.withOpacity(0.15))
+                : (isPrimary
+                    ? widget.config.themeColors.primary.withOpacity(0.8)
+                    : widget.config.themeColors.primary.withOpacity(0.1)),
             border: Border.all(
               color: widget.config.themeColors.primary.withOpacity(0.5),
               width: 1,
@@ -348,18 +372,20 @@ class _SettingsButtonState extends State<_SettingsButton> {
               Icon(
                 widget.icon,
                 color: isPrimary
-                  ? Colors.white
-                  : widget.config.themeColors.primary,
+                    ? Colors.white
+                    : widget.config.themeColors.primary,
                 size: 18 * widget.scale,
               ),
               SizedBox(width: 8 * widget.scale),
               Text(
                 widget.text,
                 style: widget.config.reviewTitleTextStyle.copyWith(
-                  fontSize: widget.config.reviewTitleTextStyle.fontSize! * textScale * 0.5,
+                  fontSize: widget.config.reviewTitleTextStyle.fontSize! *
+                      textScale *
+                      0.5,
                   color: isPrimary
-                    ? Colors.white
-                    : widget.config.themeColors.primary,
+                      ? Colors.white
+                      : widget.config.themeColors.primary,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 1,
                 ),
@@ -391,7 +417,8 @@ class _SettingsTab extends StatefulWidget {
   State<_SettingsTab> createState() => _SettingsTabState();
 }
 
-class _SettingsTabState extends State<_SettingsTab> with SingleTickerProviderStateMixin {
+class _SettingsTabState extends State<_SettingsTab>
+    with SingleTickerProviderStateMixin {
   bool _isHovered = false;
   late AnimationController _animationController;
   late Animation<double> _glowAnimation;
@@ -463,38 +490,45 @@ class _SettingsTabState extends State<_SettingsTab> with SingleTickerProviderSta
               ),
               decoration: BoxDecoration(
                 color: widget.isSelected
-                  ? widget.config.themeColors.primary.withOpacity(0.15)
-                  : (_isHovered
-                      ? widget.config.themeColors.primary.withOpacity(0.08)
-                      : Colors.transparent),
+                    ? widget.config.themeColors.primary.withOpacity(0.15)
+                    : (_isHovered
+                        ? widget.config.themeColors.primary.withOpacity(0.08)
+                        : Colors.transparent),
                 border: Border.all(
                   color: widget.isSelected
-                    ? widget.config.themeColors.primary.withOpacity(0.6)
-                    : (_isHovered
-                        ? widget.config.themeColors.primary.withOpacity(0.3)
-                        : Colors.transparent),
+                      ? widget.config.themeColors.primary.withOpacity(0.6)
+                      : (_isHovered
+                          ? widget.config.themeColors.primary.withOpacity(0.3)
+                          : Colors.transparent),
                   width: widget.isSelected ? 2 : 1,
                 ),
-                borderRadius: BorderRadius.circular(widget.config.baseWindowBorder > 0
-                    ? widget.config.baseWindowBorder * widget.scale
-                    : 0 * widget.scale),
-                boxShadow: widget.isSelected ? [
-                  BoxShadow(
-                    color: widget.config.themeColors.primary.withOpacity(0.2 * _glowAnimation.value),
-                    blurRadius: 8 * widget.scale * _glowAnimation.value,
-                    offset: Offset(0, 2 * widget.scale),
-                  ),
-                ] : null,
+                borderRadius: BorderRadius.circular(
+                    widget.config.baseWindowBorder > 0
+                        ? widget.config.baseWindowBorder * widget.scale
+                        : 0 * widget.scale),
+                boxShadow: widget.isSelected
+                    ? [
+                        BoxShadow(
+                          color: widget.config.themeColors.primary
+                              .withOpacity(0.2 * _glowAnimation.value),
+                          blurRadius: 8 * widget.scale * _glowAnimation.value,
+                          offset: Offset(0, 2 * widget.scale),
+                        ),
+                      ]
+                    : null,
               ),
               child: Center(
                 child: Text(
                   widget.title,
                   style: widget.config.reviewTitleTextStyle.copyWith(
-                    fontSize: widget.config.reviewTitleTextStyle.fontSize! * textScale * 0.65,
+                    fontSize: widget.config.reviewTitleTextStyle.fontSize! *
+                        textScale *
+                        0.65,
                     color: widget.isSelected
-                      ? widget.config.themeColors.primary
-                      : widget.config.themeColors.primary.withOpacity(0.7),
-                    fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.w500,
+                        ? widget.config.themeColors.primary
+                        : widget.config.themeColors.primary.withOpacity(0.7),
+                    fontWeight:
+                        widget.isSelected ? FontWeight.bold : FontWeight.w500,
                     letterSpacing: 0.5,
                   ),
                 ),
