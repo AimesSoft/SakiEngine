@@ -10,6 +10,7 @@ class DefaultMenuButtons {
     VoidCallback? onContinueGame, // 新增：继续游戏回调（可选）
     required VoidCallback onLoadGame,
     required VoidCallback onSettings,
+    required VoidCallback onAbout,
     required VoidCallback onExit,
     required SakiEngineConfig config,
     required double scale,
@@ -27,8 +28,12 @@ class DefaultMenuButtons {
           backgroundColor: config.themeColors.background.withValues(alpha: 0.9),
           textColor: config.themeColors.primary,
           hoverColor: HSLColor.fromColor(config.themeColors.background)
-              .withLightness((HSLColor.fromColor(config.themeColors.background).lightness - 0.1).clamp(0.0, 1.0))
-              .toColor().withValues(alpha: 0.9),
+              .withLightness(
+                  (HSLColor.fromColor(config.themeColors.background).lightness -
+                          0.1)
+                      .clamp(0.0, 1.0))
+              .toColor()
+              .withValues(alpha: 0.9),
           border: Border.all(
             color: config.themeColors.primary.withValues(alpha: 0.5),
             width: 1,
@@ -50,8 +55,12 @@ class DefaultMenuButtons {
         backgroundColor: config.themeColors.background.withValues(alpha: 0.9),
         textColor: config.themeColors.primary,
         hoverColor: HSLColor.fromColor(config.themeColors.background)
-            .withLightness((HSLColor.fromColor(config.themeColors.background).lightness - 0.1).clamp(0.0, 1.0))
-            .toColor().withValues(alpha: 0.9),
+            .withLightness(
+                (HSLColor.fromColor(config.themeColors.background).lightness -
+                        0.1)
+                    .clamp(0.0, 1.0))
+            .toColor()
+            .withValues(alpha: 0.9),
         border: Border.all(
           color: config.themeColors.primary.withValues(alpha: 0.5),
           width: 1,
@@ -72,8 +81,12 @@ class DefaultMenuButtons {
         backgroundColor: config.themeColors.background.withValues(alpha: 0.9),
         textColor: config.themeColors.primary,
         hoverColor: HSLColor.fromColor(config.themeColors.background)
-            .withLightness((HSLColor.fromColor(config.themeColors.background).lightness - 0.1).clamp(0.0, 1.0))
-            .toColor().withValues(alpha: 0.9),
+            .withLightness(
+                (HSLColor.fromColor(config.themeColors.background).lightness -
+                        0.1)
+                    .clamp(0.0, 1.0))
+            .toColor()
+            .withValues(alpha: 0.9),
         border: Border.all(
           color: config.themeColors.primary.withValues(alpha: 0.5),
           width: 1,
@@ -94,8 +107,38 @@ class DefaultMenuButtons {
         backgroundColor: config.themeColors.background.withValues(alpha: 0.9),
         textColor: config.themeColors.primary,
         hoverColor: HSLColor.fromColor(config.themeColors.background)
-            .withLightness((HSLColor.fromColor(config.themeColors.background).lightness - 0.1).clamp(0.0, 1.0))
-            .toColor().withValues(alpha: 0.9),
+            .withLightness(
+                (HSLColor.fromColor(config.themeColors.background).lightness -
+                        0.1)
+                    .clamp(0.0, 1.0))
+            .toColor()
+            .withValues(alpha: 0.9),
+        border: Border.all(
+          color: config.themeColors.primary.withValues(alpha: 0.5),
+          width: 1,
+        ),
+        textStyle: TextStyle(
+          fontFamily: 'SourceHanSansCN',
+          fontSize: 28 * scale,
+          color: config.themeColors.primary,
+          letterSpacing: 2,
+        ),
+      ),
+    );
+
+    buttons.add(
+      MenuButtonConfig(
+        text: localization.t('menu.about'),
+        onPressed: onAbout,
+        backgroundColor: config.themeColors.background.withValues(alpha: 0.9),
+        textColor: config.themeColors.primary,
+        hoverColor: HSLColor.fromColor(config.themeColors.background)
+            .withLightness(
+                (HSLColor.fromColor(config.themeColors.background).lightness -
+                        0.1)
+                    .clamp(0.0, 1.0))
+            .toColor()
+            .withValues(alpha: 0.9),
         border: Border.all(
           color: config.themeColors.primary.withValues(alpha: 0.5),
           width: 1,
@@ -117,8 +160,12 @@ class DefaultMenuButtons {
           backgroundColor: config.themeColors.background.withValues(alpha: 0.9),
           textColor: config.themeColors.primary,
           hoverColor: HSLColor.fromColor(config.themeColors.background)
-              .withLightness((HSLColor.fromColor(config.themeColors.background).lightness - 0.1).clamp(0.0, 1.0))
-              .toColor().withValues(alpha: 0.9),
+              .withLightness(
+                  (HSLColor.fromColor(config.themeColors.background).lightness -
+                          0.1)
+                      .clamp(0.0, 1.0))
+              .toColor()
+              .withValues(alpha: 0.9),
           border: Border.all(
             color: config.themeColors.primary.withValues(alpha: 0.5),
             width: 1,

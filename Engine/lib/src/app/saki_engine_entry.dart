@@ -257,6 +257,9 @@ class _GameContainerState extends State<GameContainer> with WindowListener {
       gameModule.createSettingsScreen(
         onClose: () {},
       ),
+      gameModule.createAboutScreen(
+        onClose: () {},
+      ),
     ];
     _menuWarmupPageIndex = 0;
   }

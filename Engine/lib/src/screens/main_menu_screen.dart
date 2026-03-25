@@ -102,6 +102,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   bool _showLoadOverlay = false;
   bool _showDebugPanel = false;
   bool _showSettings = false;
+  bool _showAbout = false;
   String _appTitle = 'SakiEngine';
   late final LocalizationManager _localizationManager;
   bool _hasQuickSave = false; // 新增：标记是否有快速存档
@@ -273,6 +274,10 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
             _gameModule.createSettingsScreen(
               onClose: () => setState(() => _showSettings = false),
             ),
+          if (_showAbout)
+            _gameModule.createAboutScreen(
+              onClose: () => setState(() => _showAbout = false),
+            ),
           if (_showDebugPanel)
             DebugPanelDialog(
               onClose: () => setState(() => _showDebugPanel = false),
@@ -296,6 +301,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
       onContinueGame: _hasQuickSave ? _handleContinueGame : null,
       onLoadGame: () => setState(() => _showLoadOverlay = true),
       onSettings: () => setState(() => _showSettings = true),
+      onAbout: () => setState(() => _showAbout = true),
       onExit: () => _showExitConfirmation(context),
       config: config,
       scale: scale,

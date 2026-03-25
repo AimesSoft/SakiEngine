@@ -12,6 +12,7 @@ import 'package:sakiengine/src/widgets/common/configurable_menu_button.dart';
 import 'package:sakiengine/src/widgets/common/default_menu_buttons.dart';
 import 'package:sakiengine/src/widgets/dialogue_box.dart';
 import 'package:sakiengine/src/widgets/settings_screen.dart';
+import 'package:sakiengine/src/widgets/about_screen.dart';
 
 /// 游戏模块接口 - 定义项目可以覆盖的所有组件
 abstract class GameModule {
@@ -46,6 +47,21 @@ abstract class GameModule {
     GameManager? gameManager,
     Function(SaveSlot)? onLoadSlot,
   });
+
+  /// 关于页面工厂（可选覆盖）
+  Widget createAboutScreen({
+    required VoidCallback onClose,
+    bool useOverlayScaffold = true,
+    bool showHeader = true,
+    bool showFooter = false,
+  }) {
+    return AboutScreen(
+      onClose: onClose,
+      useOverlayScaffold: useOverlayScaffold,
+      showHeader: showHeader,
+      showFooter: showFooter,
+    );
+  }
 
   /// 对话框组件工厂
   Widget createDialogueBox({
@@ -85,6 +101,7 @@ abstract class GameModule {
     VoidCallback? onContinueGame,
     required VoidCallback onLoadGame,
     required VoidCallback onSettings,
+    required VoidCallback onAbout,
     required VoidCallback onExit,
     required SakiEngineConfig config,
     required double scale,
@@ -172,6 +189,21 @@ class DefaultGameModule implements GameModule {
   }
 
   @override
+  Widget createAboutScreen({
+    required VoidCallback onClose,
+    bool useOverlayScaffold = true,
+    bool showHeader = true,
+    bool showFooter = false,
+  }) {
+    return AboutScreen(
+      onClose: onClose,
+      useOverlayScaffold: useOverlayScaffold,
+      showHeader: showHeader,
+      showFooter: showFooter,
+    );
+  }
+
+  @override
   Widget createDialogueBox({
     Key? key,
     String? speaker,
@@ -221,6 +253,7 @@ class DefaultGameModule implements GameModule {
     VoidCallback? onContinueGame,
     required VoidCallback onLoadGame,
     required VoidCallback onSettings,
+    required VoidCallback onAbout,
     required VoidCallback onExit,
     required SakiEngineConfig config,
     required double scale,
@@ -230,6 +263,7 @@ class DefaultGameModule implements GameModule {
       onContinueGame: onContinueGame,
       onLoadGame: onLoadGame,
       onSettings: onSettings,
+      onAbout: onAbout,
       onExit: onExit,
       config: config,
       scale: scale,
