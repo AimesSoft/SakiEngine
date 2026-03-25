@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 
 enum RunBuildMode { debug, showcase, profile, release }
 
@@ -94,10 +95,32 @@ class LauncherUiSettings {
 final ValueNotifier<LauncherUiSettings> _settingsNotifier =
     ValueNotifier<LauncherUiSettings>(LauncherUiSettings.defaults());
 
+const Size _launcherWindowSize = Size(1200, 600);
+const String _launcherWindowTitle = 'SakiEngine 开发启动器';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await _configureDesktopWindow();
   _settingsNotifier.value = await _loadLauncherUiSettings();
   runApp(SakiLauncherApp(settingsNotifier: _settingsNotifier));
+}
+
+Future<void> _configureDesktopWindow() async {
+  if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) {
+    return;
+  }
+
+  await windowManager.ensureInitialized();
+  const windowOptions = WindowOptions(
+    size: _launcherWindowSize,
+    center: true,
+    title: _launcherWindowTitle,
+  );
+
+  await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.show();
+    await windowManager.focus();
+  });
 }
 
 class SakiLauncherApp extends StatelessWidget {
@@ -125,7 +148,7 @@ class SakiLauncherApp extends StatelessWidget {
       valueListenable: settingsNotifier,
       builder: (context, settings, _) {
         return MaterialApp(
-          title: 'SakiEngine 开发启动器',
+          title: _launcherWindowTitle,
           debugShowCheckedModeBanner: false,
           themeMode: settings.themeMode,
           theme: _buildTheme(

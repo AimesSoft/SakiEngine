@@ -1696,21 +1696,16 @@ class GameManager {
           }
         }
 
-        // 首次进入CG时保持背景不变，交由前景渲染器淡入
-        final isFirstCgDisplay = _currentState.cgCharacters.isEmpty;
-
-        if (isFirstCgDisplay) {
-          _currentState = _currentState.copyWith(
-            everShownCharacters: _everShownCharacters,
-            clearSceneFilter: true,
-            clearSceneLayers: true,
-            clearSceneAnimation: true,
-          );
-        } else {
-          _currentState = _currentState.copyWith(
-            everShownCharacters: _everShownCharacters,
-          );
-        }
+        // CG按scene切换语义处理：清理旧场景状态，避免露出后景
+        _currentState = _currentState.copyWith(
+          everShownCharacters: _everShownCharacters,
+          clearBackground: true,
+          clearMovieFile: true,
+          clearCharacters: true,
+          clearSceneFilter: true,
+          clearSceneLayers: true,
+          clearSceneAnimation: true,
+        );
 
         // 跟踪角色是否曾经显示过
         _everShownCharacters.add(finalCharacterKey);
@@ -3787,6 +3782,7 @@ class GameState {
 
   GameState copyWith({
     String? background,
+    bool clearBackground = false,
     String? movieFile, // 新增：视频文件参数
     int? movieRepeatCount, // 新增：视频重复播放次数参数
     bool clearMovieFile = false, // 新增：清理视频文件标志
@@ -3828,7 +3824,7 @@ class GameState {
     double? shakeIntensity, // 新增：震动强度
   }) {
     return GameState(
-      background: background ?? this.background,
+      background: clearBackground ? null : (background ?? this.background),
       movieFile: clearMovieFile
           ? null
           : (movieFile ?? this.movieFile), // 修复：正确处理movie文件清理

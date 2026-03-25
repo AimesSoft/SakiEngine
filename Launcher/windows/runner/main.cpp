@@ -26,7 +26,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
-  Win32Window::Size size(600, 400);
+  Win32Window::Size size(1200, 600);
   if (!window.Create(L"SakiEngine 开发启动器", origin, size)) {
     return EXIT_FAILURE;
   }
