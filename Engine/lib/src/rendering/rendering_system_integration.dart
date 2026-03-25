@@ -4,7 +4,7 @@
 /// 支持渐进式迁移和性能对比
 library rendering_system_integration;
 
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/rendering/composite_cg_renderer.dart';
@@ -56,7 +56,7 @@ class RenderingSystemManager {
   RenderingSystemType _currentSystem = _initialSystem();
 
   /// 是否启用性能监控
-  bool _performanceMonitoringEnabled = kDebugMode;
+  bool _performanceMonitoringEnabled = kEngineDebugMode;
 
   /// 性能统计
   final List<double> _renderTimings = [];
@@ -67,6 +67,7 @@ class RenderingSystemManager {
   static const double _performanceThreshold = 30.0; // FPS低于30时考虑切换
   static const Duration _autoSwitchCooldown = Duration(minutes: 1); // 切换冷却时间
   DateTime _lastAutoSwitch = DateTime.now();
+  String? _lastCgRendererDiag;
 
   /// 设置渲染系统类型
   void setRenderingSystem(RenderingSystemType system) {
@@ -75,7 +76,7 @@ class RenderingSystemManager {
     final oldSystem = _currentSystem;
     _currentSystem = system;
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('[RenderingSystemManager] Switched from $oldSystem to $system');
     }
 
@@ -95,36 +96,30 @@ class RenderingSystemManager {
     final stopwatch = Stopwatch()..start();
 
     try {
-      List<Widget> widgets;
-
-      switch (_getEffectiveSystem(cgCharacters.length)) {
-        case RenderingSystemType.composite:
-          widgets = CompositeCgRenderer.buildCgCharacters(
-            context,
-            cgCharacters,
-            gameManager,
-            skipAnimations: gameManager.isFastForwardMode,
-          );
-          break;
-        case RenderingSystemType.layered:
-          widgets = LayeredCgRenderer.buildCgCharacters(
-            context,
-            cgCharacters,
-            gameManager,
-          );
-          break;
-        case RenderingSystemType.auto:
-          // Auto模式下根据当前性能选择
-          widgets = _buildWithAutoSystem(context, cgCharacters, gameManager);
-          break;
+      // 强制统一使用 composite（shader 融合路径）
+      const effectiveSystem = RenderingSystemType.composite;
+      if (cgCharacters.isNotEmpty) {
+        final diag = '${effectiveSystem.name}(forced)|count=${cgCharacters.length}|'
+            'ff=${gameManager.isFastForwardMode}|current=${_currentSystem.name}';
+        if (diag != _lastCgRendererDiag) {
+          _lastCgRendererDiag = diag;
+          print('[RenderingSystemManager] CG renderer selected: $diag');
+        }
       }
+
+      final widgets = CompositeCgRenderer.buildCgCharacters(
+        context,
+        cgCharacters,
+        gameManager,
+        skipAnimations: gameManager.isFastForwardMode,
+      );
 
       stopwatch.stop();
       _recordPerformance(stopwatch.elapsedMicroseconds / 1000.0);
 
       return widgets;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[RenderingSystemManager] Render error: $e');
       }
 
@@ -160,7 +155,7 @@ class RenderingSystemManager {
           gameManager,
         );
       } catch (e) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print(
             '[RenderingSystemManager] Layered renderer failed, falling back: $e',
           );
@@ -194,6 +189,11 @@ class RenderingSystemManager {
     }
     if (_renderSystemOverride == 'layered') {
       return true;
+    }
+
+    // 单CG槽位必须使用composite，以保证差分切换走shader融合
+    if (characterCount == 1) {
+      return false;
     }
 
     // 多图层/多角色场景优先使用层叠渲染
@@ -279,7 +279,7 @@ class RenderingSystemManager {
 
     if (estimatedFps < _performanceThreshold) {
       // 性能不足，考虑切换系统
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print(
           '[RenderingSystemManager] Performance warning: ${estimatedFps.toStringAsFixed(1)} FPS, considering system switch',
         );
@@ -356,7 +356,7 @@ class RenderingSystemManager {
         break;
     }
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print(
         '[RenderingSystemManager] Maintenance completed for $_currentSystem system',
       );
@@ -370,7 +370,7 @@ class RenderingSystemManager {
     _renderTimings.clear();
     _memoryUsage.clear();
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('[RenderingSystemManager] All caches cleared');
     }
   }
@@ -383,7 +383,7 @@ class RenderingSystemManager {
       _memoryUsage.clear();
     }
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print(
         '[RenderingSystemManager] Performance monitoring: ${enabled ? "enabled" : "disabled"}',
       );

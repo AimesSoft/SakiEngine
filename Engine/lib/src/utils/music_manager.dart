@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:just_audio/just_audio.dart';
-import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
+import 'package:sakiengine/src/utils/bundle_asset_path_probe.dart';
+import 'package:sakiengine/src/config/game_path_resolver.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
 
@@ -39,10 +42,32 @@ class AudioTrackConfig {
   );
 }
 
+class _MusicPlayRequest {
+  final String assetPath;
+  final bool fadeTransition;
+  final Duration fadeDuration;
+  final bool loop;
+
+  const _MusicPlayRequest({
+    required this.assetPath,
+    required this.fadeTransition,
+    required this.fadeDuration,
+    required this.loop,
+  });
+}
+
 class MusicManager extends ChangeNotifier {
   static final MusicManager _instance = MusicManager._internal();
   factory MusicManager() => _instance;
   MusicManager._internal();
+  static const bool _musicSourceDiagnostics = bool.fromEnvironment(
+    'SAKI_MUSIC_SOURCE_DIAG',
+    defaultValue: false,
+  );
+  static const bool _verboseAudioLogs = bool.fromEnvironment(
+    'SAKI_AUDIO_VERBOSE_LOG',
+    defaultValue: false,
+  );
 
   // 统一的音频轨道管理
   final Map<AudioTrackType, AudioPlayer> _trackPlayers = {
@@ -58,6 +83,9 @@ class MusicManager extends ChangeNotifier {
   String? _projectName;
   String? _currentBackgroundMusic;
   String? _currentSound;
+  _MusicPlayRequest? _queuedMusicRequest;
+  Future<void>? _musicTransitionDrain;
+  bool _isMusicTransitioning = false;
 
   // 淡入淡出相关
   final Map<AudioTrackType, Timer?> _fadeTimers = {};
@@ -72,6 +100,18 @@ class MusicManager extends ChangeNotifier {
   String? get currentBackgroundMusic => _currentBackgroundMusic;
   String? get currentSound => _currentSound;
 
+  void _musicSourceLog(String message) {
+    if (_musicSourceDiagnostics && kEngineDebugMode) {
+      print('[MusicSourceDiag] $message');
+    }
+  }
+
+  void _audioVerboseLog(String message) {
+    if (_verboseAudioLogs && kEngineDebugMode) {
+      print('[MusicManager] $message');
+    }
+  }
+
   Future<void> initialize() async {
     // 获取项目名称
     try {
@@ -85,11 +125,13 @@ class MusicManager extends ChangeNotifier {
 
     // 设置音乐轨道为循环播放
     await _trackPlayers[AudioTrackType.music]!.setLoopMode(LoopMode.one);
-    _attachPlayerDiagnostics(_trackPlayers[AudioTrackType.music]!, 'music-main');
+    _attachPlayerDiagnostics(
+        _trackPlayers[AudioTrackType.music]!, 'music-main');
 
     // 设置音效轨道为单次播放
     await _trackPlayers[AudioTrackType.sound]!.setLoopMode(LoopMode.off);
-    _attachPlayerDiagnostics(_trackPlayers[AudioTrackType.sound]!, 'sound-main');
+    _attachPlayerDiagnostics(
+        _trackPlayers[AudioTrackType.sound]!, 'sound-main');
 
     // 初始化多个音效播放器支持重叠播放
     for (int i = 0; i < 5; i++) {
@@ -105,7 +147,7 @@ class MusicManager extends ChangeNotifier {
   }
 
   void _attachPlayerDiagnostics(AudioPlayer player, String label) {
-    if (!kDebugMode) {
+    if (!kEngineDebugMode) {
       return;
     }
     player.playbackEventStream.listen(
@@ -359,15 +401,14 @@ class MusicManager extends ChangeNotifier {
     bool loop = false, // 允许覆盖默认循环设置
   }) async {
     try {
-      if (kDebugMode) {
-        print(
-            '[MusicManager] playAudio request: track=${config.trackName}, assetPath=$assetPath, fade=$fadeTransition, fadeMs=${fadeDuration.inMilliseconds}, loop=$loop');
-      }
+      _audioVerboseLog(
+        'playAudio request: track=${config.trackName}, assetPath=$assetPath, '
+        'fade=$fadeTransition, fadeMs=${fadeDuration.inMilliseconds}, loop=$loop',
+      );
       // 根据轨道类型选择处理逻辑
       if (config.type == AudioTrackType.music) {
         await _playMusic(
           assetPath,
-          config,
           fadeTransition: fadeTransition,
           fadeDuration: fadeDuration,
           loop: loop || config.defaultLoop,
@@ -382,7 +423,7 @@ class MusicManager extends ChangeNotifier {
         );
       }
     } catch (e, stackTrace) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print(
             '[MusicManager] playAudio failed: track=${config.trackName}, assetPath=$assetPath, error=$e');
         print(stackTrace);
@@ -407,87 +448,141 @@ class MusicManager extends ChangeNotifier {
   /// 播放音乐的具体实现
   Future<void> _playMusic(
     String assetPath,
-    AudioTrackConfig config, {
+    {
     required bool fadeTransition,
     required Duration fadeDuration,
     required bool loop,
   }) async {
-    final musicPlayer = _trackPlayers[AudioTrackType.music]!;
-    if (kDebugMode) {
-      print(
-          '[MusicManager] _playMusic begin: new=$assetPath, current=$_currentBackgroundMusic, playerPlaying=${musicPlayer.playing}, fade=$fadeTransition');
+    _queuedMusicRequest = _MusicPlayRequest(
+      assetPath: assetPath,
+      fadeTransition: fadeTransition,
+      fadeDuration: fadeDuration,
+      loop: loop,
+    );
+
+    final activeDrain = _musicTransitionDrain;
+    if (activeDrain != null) {
+      await activeDrain;
+      return;
     }
-    if (_currentBackgroundMusic == assetPath && musicPlayer.playing) {
-      if (kDebugMode) {
-        print('[MusicManager] _playMusic skip: already playing same track');
+
+    final drainFuture = _drainQueuedMusicRequests();
+    _musicTransitionDrain = drainFuture;
+    try {
+      await drainFuture;
+    } finally {
+      if (identical(_musicTransitionDrain, drainFuture)) {
+        _musicTransitionDrain = null;
       }
+    }
+  }
+
+  Future<void> _drainQueuedMusicRequests() async {
+    while (true) {
+      final request = _queuedMusicRequest;
+      _queuedMusicRequest = null;
+      if (request == null) {
+        return;
+      }
+      await _playMusicRequest(request);
+    }
+  }
+
+  Future<void> _playMusicRequest(_MusicPlayRequest request) async {
+    final musicPlayer = _trackPlayers[AudioTrackType.music]!;
+    final assetPath = request.assetPath;
+    final fadeTransition = request.fadeTransition;
+    final fadeDuration = request.fadeDuration;
+    final loop = request.loop;
+
+    _musicSourceLog(
+      'playMusic request: assetPath="$assetPath", old="$_currentBackgroundMusic", fade=$fadeTransition, loop=$loop',
+    );
+    _audioVerboseLog(
+      '_playMusic begin: new=$assetPath, current=$_currentBackgroundMusic, '
+      'playerPlaying=${musicPlayer.playing}, transitioning=$_isMusicTransitioning, '
+      'fade=$fadeTransition',
+    );
+
+    if (_currentBackgroundMusic == assetPath &&
+        (musicPlayer.playing || _isMusicTransitioning)) {
+      _audioVerboseLog(
+        '_playMusic skip: already playing/transitioning same track',
+      );
       return;
     }
 
     if (!_dataManager.isMusicEnabled) {
       _currentBackgroundMusic = assetPath;
-      if (kDebugMode) {
-        print('[MusicManager] _playMusic abort: music disabled, only cached path');
-      }
+      _audioVerboseLog('_playMusic abort: music disabled, only cached path');
       return;
     }
 
     final oldMusicPath = _currentBackgroundMusic;
     _currentBackgroundMusic = assetPath;
-
-    Future<void> startNewMusic() async {
-      try {
-        await musicPlayer.stop();
-        await musicPlayer.setLoopMode(loop ? LoopMode.one : LoopMode.off);
-        await _setPlayerSource(musicPlayer, assetPath);
-        final playFuture = musicPlayer.play();
-        unawaited(playFuture.catchError((Object e, StackTrace stackTrace) {
-          if (kDebugMode) {
-            print('[MusicManager] music.play async failed: $assetPath, error=$e');
+    _isMusicTransitioning = true;
+    try {
+      Future<void> startNewMusic() async {
+        try {
+          _musicSourceLog('startNewMusic: stop current player then set source');
+          await musicPlayer.stop();
+          await musicPlayer.setLoopMode(loop ? LoopMode.one : LoopMode.off);
+          await _setPlayerSource(
+            musicPlayer,
+            assetPath,
+            sourceLabel: 'music',
+          );
+          final playFuture = musicPlayer.play();
+          unawaited(playFuture.catchError((Object e, StackTrace stackTrace) {
+            if (kEngineDebugMode) {
+              print(
+                  '[MusicManager] music.play async failed: $assetPath, error=$e');
+              print(stackTrace);
+            }
+          }));
+          _audioVerboseLog(
+            '_playMusic started (non-blocking): $assetPath, '
+            'playing=${musicPlayer.playing}, state=${musicPlayer.processingState}',
+          );
+        } catch (e, stackTrace) {
+          if (kEngineDebugMode) {
+            print(
+                '[MusicManager] _playMusic startNewMusic failed: $assetPath, error=$e');
             print(stackTrace);
           }
-        }));
-        if (kDebugMode) {
-          print(
-              '[MusicManager] _playMusic started (non-blocking): $assetPath, playing=${musicPlayer.playing}, state=${musicPlayer.processingState}');
+          rethrow;
         }
-      } catch (e, stackTrace) {
-        if (kDebugMode) {
-          print('[MusicManager] _playMusic startNewMusic failed: $assetPath, error=$e');
-          print(stackTrace);
-        }
-        rethrow;
       }
-    }
 
-    if (kDebugMode) {
-      print(
-          '[MusicManager] _playMusic transition: old=$oldMusicPath -> new=$assetPath');
-    }
-    if (oldMusicPath != null && fadeTransition) {
-      // 先淡出旧音乐
-      await _fadeOut(
-        AudioTrackType.music,
-        duration: Duration(milliseconds: fadeDuration.inMilliseconds ~/ 2),
-        onComplete: () async {
-          await startNewMusic();
-          await _fadeIn(
-            AudioTrackType.music,
-            duration: Duration(milliseconds: fadeDuration.inMilliseconds ~/ 2),
-          );
-        },
-      );
-    } else {
-      // 没有旧音乐或不需要过渡，直接播放
-      await startNewMusic();
-
-      if (fadeTransition) {
-        // 淡入新音乐
-        await _fadeIn(AudioTrackType.music, duration: fadeDuration);
+      _audioVerboseLog('_playMusic transition: old=$oldMusicPath -> new=$assetPath');
+      if (oldMusicPath != null && fadeTransition) {
+        // 先淡出旧音乐
+        await _fadeOut(
+          AudioTrackType.music,
+          duration: Duration(milliseconds: fadeDuration.inMilliseconds ~/ 2),
+          onComplete: () async {
+            await startNewMusic();
+            await _fadeIn(
+              AudioTrackType.music,
+              duration:
+                  Duration(milliseconds: fadeDuration.inMilliseconds ~/ 2),
+            );
+          },
+        );
       } else {
-        // 直接设置音量
-        await _updateTrackVolume(AudioTrackType.music);
+        // 没有旧音乐或不需要过渡，直接播放
+        await startNewMusic();
+
+        if (fadeTransition) {
+          // 淡入新音乐
+          await _fadeIn(AudioTrackType.music, duration: fadeDuration);
+        } else {
+          // 直接设置音量
+          await _updateTrackVolume(AudioTrackType.music);
+        }
       }
+    } finally {
+      _isMusicTransitioning = false;
     }
   }
 
@@ -519,7 +614,11 @@ class MusicManager extends ChangeNotifier {
 
     await player.stop();
     await player.setLoopMode(loop ? LoopMode.one : LoopMode.off);
-    await _setPlayerSource(player, assetPath);
+    await _setPlayerSource(
+      player,
+      assetPath,
+      sourceLabel: 'sound',
+    );
     await player.play();
 
     if (fadeTransition) {
@@ -534,42 +633,124 @@ class MusicManager extends ChangeNotifier {
     }
   }
 
-  Future<void> _setPlayerSource(AudioPlayer player, String assetPath) async {
+  Future<void> _setPlayerSource(
+    AudioPlayer player,
+    String assetPath, {
+    String sourceLabel = '',
+  }) async {
+    final traceMusic = sourceLabel == 'music' && _musicSourceDiagnostics;
     final trimmed = assetPath.trim();
-    if (kDebugMode) {
-      print('[MusicManager] _setPlayerSource input=$assetPath trimmed=$trimmed');
+    if (traceMusic) {
+      _musicSourceLog(
+        'setPlayerSource input: assetPath="$assetPath", trimmed="$trimmed"',
+      );
     }
+    _audioVerboseLog('_setPlayerSource input=$assetPath trimmed=$trimmed');
     if (trimmed.isEmpty) {
+      if (traceMusic) {
+        _musicSourceLog('setPlayerSource failed: empty assetPath');
+      }
       throw ArgumentError('assetPath must not be empty');
     }
     try {
       if (_isNetworkPath(trimmed)) {
+        if (traceMusic) {
+          _musicSourceLog('try setUrl("$trimmed")');
+        }
         await player.setUrl(trimmed);
+        if (traceMusic) {
+          _musicSourceLog('setUrl success: "$trimmed"');
+        }
         return;
       }
       if (trimmed.startsWith('file://')) {
-        await player.setFilePath(Uri.parse(trimmed).toFilePath());
+        final path = Uri.parse(trimmed).toFilePath();
+        if (traceMusic) {
+          _musicSourceLog('try setFilePath(from file://): "$path"');
+        }
+        await player.setFilePath(path);
+        if (traceMusic) {
+          _musicSourceLog('setFilePath success: "$path"');
+        }
         return;
       }
       if (trimmed.startsWith('/')) {
+        if (traceMusic) {
+          _musicSourceLog('try setFilePath(absolute): "$trimmed"');
+        }
         await player.setFilePath(trimmed);
+        if (traceMusic) {
+          _musicSourceLog('setFilePath success: "$trimmed"');
+        }
         return;
       }
       final resolved = _normalizeBundleAssetPath(trimmed);
-      if (kDebugMode) {
-        print('[MusicManager] _setPlayerSource resolvedAsset=$resolved');
+      final absoluteBundlePath = probeBundleAssetAbsolutePath(resolved);
+      final absoluteBundleExists = probeBundleAssetExists(resolved);
+      if (traceMusic) {
+        _musicSourceLog(
+          'normalized asset="$resolved", shouldUseFileSystemAssets=${GamePathResolver.shouldUseFileSystemAssets}',
+        );
+        _musicSourceLog(
+          'bundle absolute candidate: ${absoluteBundlePath ?? "<unavailable on this platform>"}, exists=${absoluteBundleExists ?? "<unknown>"}',
+        );
       }
-      final fallbackFilePath = _resolveGameAssetFallbackPath(resolved);
-      if (fallbackFilePath != null) {
-        if (kDebugMode) {
-          print(
-              '[MusicManager] try setFilePath first via SAKI_GAME_PATH: $fallbackFilePath');
+      if (absoluteBundlePath != null && absoluteBundleExists == true) {
+        if (traceMusic) {
+          _musicSourceLog(
+            'try setFilePath(bundle absolute first): "$absoluteBundlePath"',
+          );
         }
         try {
+          await player.setFilePath(absoluteBundlePath);
+          if (traceMusic) {
+            _musicSourceLog(
+              'setFilePath(bundle absolute first) success: "$absoluteBundlePath"',
+            );
+          }
+          return;
+        } catch (bundleFileError, bundleFileStackTrace) {
+          if (traceMusic) {
+            _musicSourceLog(
+              'setFilePath(bundle absolute first) failed: "$absoluteBundlePath", error=$bundleFileError',
+            );
+          }
+          if (kEngineDebugMode) {
+            print(
+                '[MusicManager] bundle absolute setFilePath failed: path=$absoluteBundlePath, error=$bundleFileError');
+            print(bundleFileStackTrace);
+          }
+        }
+      }
+      _audioVerboseLog('_setPlayerSource resolvedAsset=$resolved');
+      final fallbackFilePath = await _resolveGameAssetFallbackPath(resolved);
+      if (traceMusic) {
+        _musicSourceLog(
+          'fallback path resolve result: ${fallbackFilePath ?? "<null>"}',
+        );
+      }
+      if (fallbackFilePath != null) {
+        if (traceMusic) {
+          _musicSourceLog('try setFilePath(primary fallback): "$fallbackFilePath"');
+        }
+        _audioVerboseLog(
+          'try setFilePath first via SAKI_GAME_PATH: $fallbackFilePath',
+        );
+        try {
           await player.setFilePath(fallbackFilePath);
+          if (traceMusic) {
+            _musicSourceLog(
+              'setFilePath(primary fallback) success: "$fallbackFilePath"',
+            );
+          }
           return;
         } catch (fileError, fileStackTrace) {
-          if (kDebugMode) {
+          if (traceMusic) {
+            _musicSourceLog(
+              'setFilePath(primary fallback) failed: "$fallbackFilePath", error=$fileError',
+            );
+          }
+          if (kEngineDebugMode) {
             print(
                 '[MusicManager] setFilePath primary failed, fallback to setAsset: path=$fallbackFilePath, error=$fileError');
             print(fileStackTrace);
@@ -577,26 +758,50 @@ class MusicManager extends ChangeNotifier {
         }
       }
       try {
+        if (traceMusic) {
+          _musicSourceLog('try setAsset("$resolved")');
+        }
         await player.setAsset(resolved);
+        if (traceMusic) {
+          _musicSourceLog('setAsset success: "$resolved"');
+        }
         return;
       } catch (assetError, assetStackTrace) {
+        if (traceMusic) {
+          _musicSourceLog('setAsset failed: "$resolved", error=$assetError');
+        }
         if (fallbackFilePath != null) {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print(
                 '[MusicManager] setAsset failed, fallback to file path: $fallbackFilePath, error=$assetError');
           }
           try {
+            if (traceMusic) {
+              _musicSourceLog(
+                'try setFilePath(secondary fallback): "$fallbackFilePath"',
+              );
+            }
             await player.setFilePath(fallbackFilePath);
+            if (traceMusic) {
+              _musicSourceLog(
+                'setFilePath(secondary fallback) success: "$fallbackFilePath"',
+              );
+            }
             return;
           } catch (fallbackError, fallbackStackTrace) {
-            if (kDebugMode) {
+            if (traceMusic) {
+              _musicSourceLog(
+                'setFilePath(secondary fallback) failed: "$fallbackFilePath", error=$fallbackError',
+              );
+            }
+            if (kEngineDebugMode) {
               print(
                   '[MusicManager] fallback setFilePath failed: path=$fallbackFilePath, error=$fallbackError');
               print(fallbackStackTrace);
             }
           }
         }
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print(
               '[MusicManager] setAsset failed without usable fallback: resolved=$resolved, error=$assetError');
           print(assetStackTrace);
@@ -604,8 +809,14 @@ class MusicManager extends ChangeNotifier {
         rethrow;
       }
     } catch (e, stackTrace) {
-      if (kDebugMode) {
-        print('[MusicManager] _setPlayerSource failed: input=$assetPath, trimmed=$trimmed, error=$e');
+      if (traceMusic) {
+        _musicSourceLog(
+          'setPlayerSource final failure: input="$assetPath", trimmed="$trimmed", error=$e',
+        );
+      }
+      if (kEngineDebugMode) {
+        print(
+            '[MusicManager] _setPlayerSource failed: input=$assetPath, trimmed=$trimmed, error=$e');
         print(stackTrace);
       }
       rethrow;
@@ -623,17 +834,22 @@ class MusicManager extends ChangeNotifier {
     return 'Assets/$normalized';
   }
 
-  String? _resolveGameAssetFallbackPath(String resolvedAssetPath) {
-    const gamePath = String.fromEnvironment('SAKI_GAME_PATH');
-    if (gamePath.isEmpty) {
+  Future<String?> _resolveGameAssetFallbackPath(
+      String resolvedAssetPath) async {
+    if (!GamePathResolver.shouldUseFileSystemAssets) {
       return null;
     }
+
+    final gamePath = await GamePathResolver.resolveGamePath();
+    if (gamePath == null || gamePath.isEmpty) {
+      return null;
+    }
+
     if (resolvedAssetPath.startsWith('/')) {
       return resolvedAssetPath;
     }
-    final normalizedGamePath =
-        gamePath.endsWith('/') ? gamePath.substring(0, gamePath.length - 1) : gamePath;
-    return '$normalizedGamePath/$resolvedAssetPath';
+
+    return p.normalize(p.join(gamePath, resolvedAssetPath));
   }
 
   bool _isNetworkPath(String path) {
@@ -665,7 +881,7 @@ class MusicManager extends ChangeNotifier {
       if (_currentSound == null) return;
 
       if (fadeOut && _dataManager.isSoundEnabled) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[AudioManager] 淡出停止音效: $_currentSound');
         }
 
@@ -689,7 +905,7 @@ class MusicManager extends ChangeNotifier {
         _currentSound = null;
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('Error stopping sound effect: $e');
       }
     }
@@ -703,7 +919,7 @@ class MusicManager extends ChangeNotifier {
       if (_currentBackgroundMusic == null) return;
 
       if (fadeOut && _dataManager.isMusicEnabled) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[AudioManager] 淡出停止音乐: $_currentBackgroundMusic');
         }
 
@@ -720,7 +936,7 @@ class MusicManager extends ChangeNotifier {
         _currentBackgroundMusic = null;
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('Error stopping background music: $e');
       }
     }
@@ -734,7 +950,7 @@ class MusicManager extends ChangeNotifier {
       if (_currentBackgroundMusic == null) return;
 
       if (fadeOut && _dataManager.isMusicEnabled) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[AudioManager] 淡出清除音乐: $_currentBackgroundMusic');
         }
 
@@ -752,7 +968,7 @@ class MusicManager extends ChangeNotifier {
         _currentBackgroundMusic = null;
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('Error clearing background music: $e');
       }
     }
@@ -773,7 +989,7 @@ class MusicManager extends ChangeNotifier {
       if (_currentBackgroundMusic == null) return;
 
       if (fadeOut && _dataManager.isMusicEnabled) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[AudioManager] 淡出强制停止音乐: $_currentBackgroundMusic');
         }
 
@@ -789,12 +1005,12 @@ class MusicManager extends ChangeNotifier {
         _cancelTrackFade(AudioTrackType.music); // 取消任何正在进行的淡化
         await _trackPlayers[AudioTrackType.music]!.stop();
         _currentBackgroundMusic = null;
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[AudioManager] 强制停止背景音乐');
         }
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('Error force stopping background music: $e');
       }
     }
@@ -804,7 +1020,7 @@ class MusicManager extends ChangeNotifier {
     try {
       await _trackPlayers[AudioTrackType.music]!.pause();
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('Error pausing background music: $e');
       }
     }
@@ -819,7 +1035,7 @@ class MusicManager extends ChangeNotifier {
             duration: const Duration(milliseconds: 500));
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('Error resuming background music: $e');
       }
     }

@@ -1,11 +1,17 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:sakiengine/src/widgets/confirm_dialog.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
-import '../../utils/platform_window_manager_io.dart' if (dart.library.html) '../../utils/platform_window_manager_web.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
+import 'package:sakiengine/src/widgets/confirm_dialog.dart';
+
+import '../../utils/platform_window_manager_io.dart'
+    if (dart.library.html) '../../utils/platform_window_manager_web.dart';
 
 class ExitConfirmationDialog {
-  static Future<bool> showExitConfirmation(BuildContext context, {bool hasProgress = true}) async {
+  static Future<bool> showExitConfirmation(
+    BuildContext context, {
+    bool hasProgress = true,
+  }) async {
     final localization = LocalizationManager();
     final title = localization.t('dialog.exit.title');
     final content = hasProgress
@@ -40,13 +46,12 @@ class ExitConfirmationDialog {
         );
       },
     );
-    
+
     if (shouldExit == true) {
-      // 修复Windows关闭游戏的bug：直接销毁窗口，避免重复触发onWindowClose
       try {
-        await PlatformWindowManager.destroy();
-      } catch (e) {
-        // 如果销毁失败，使用系统退出
+        await PlatformWindowManager.setPreventClose(false);
+        await PlatformWindowManager.close();
+      } catch (_) {
         SystemNavigator.pop();
       }
     }

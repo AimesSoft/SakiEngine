@@ -1,0 +1,22 @@
+PODS:
+  - flutter_steamworks (0.0.1):
+    - FlutterMacOS
+  - FlutterMacOS (1.0.0)
+
+DEPENDENCIES:
+  - flutter_steamworks (from `Flutter/ephemeral/.symlinks/plugins/flutter_steamworks/macos`)
+  - FlutterMacOS (from `Flutter/ephemeral`)
+
+EXTERNAL SOURCES:
+  flutter_steamworks:
+    :path: Flutter/ephemeral/.symlinks/plugins/flutter_steamworks/macos
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+
+SPEC CHECKSUMS:
+  flutter_steamworks: 24d022b3907352a560fb585b4951e09ce9a031d0
+  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+
+PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
+
+COCOAPODS: 1.16.2

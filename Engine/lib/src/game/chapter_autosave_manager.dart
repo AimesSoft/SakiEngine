@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/game/save_load_manager.dart';
 import 'package:sakiengine/src/game/story_flowchart_manager.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
@@ -29,7 +29,7 @@ class ChapterAutoSaveManager {
   void onLabelPassed(String labelName) {
     _lastSeenLabel = labelName;
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[ChapterAutoSave] 📌 经过label: $labelName');
     }
   }
@@ -68,7 +68,7 @@ class ChapterAutoSaveManager {
     required dynamic Function() saveStateSnapshot,
     required StoryFlowchartManager flowchartManager,
   }) async {
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[ChapterAutoSave] 📢 对话显示 - currentLabel=$currentLabel, lastSeenLabel=$_lastSeenLabel');
     }
 
@@ -77,14 +77,14 @@ class ChapterAutoSaveManager {
       return; // 不是章节开头，跳过
     }
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[ChapterAutoSave] ✅ 检测到章节开头label后的第一句对话: $_lastSeenLabel');
     }
 
     try {
       final chapterNum = extractChapterNumberFromLabel(_lastSeenLabel);
       if (chapterNum == null) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[ChapterAutoSave] ❌ 无法从label提取章节编号: $_lastSeenLabel');
         }
         _lastSeenLabel = null;
@@ -95,7 +95,7 @@ class ChapterAutoSaveManager {
 
       // 检查是否已经创建过存档
       if (_savedChapters.contains(nodeId)) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[ChapterAutoSave] ⏭️ 章节 $chapterNum 已创建过存档，跳过');
         }
         _lastSeenLabel = null;
@@ -104,7 +104,7 @@ class ChapterAutoSaveManager {
 
       final displayName = '第${chapterNum}章';
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[ChapterAutoSave] 🎯 创建章节存档: $displayName (nodeId: $nodeId, scriptIndex: $scriptIndex)');
         //print('[ChapterAutoSave] 📝 存档时的详细信息: currentScript=$currentScriptFile, lastSeenLabel=$_lastSeenLabel');
       }
@@ -112,7 +112,7 @@ class ChapterAutoSaveManager {
       // 创建自动存档
       final snapshot = saveStateSnapshot();
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[ChapterAutoSave] 📊 存档快照信息: scriptIndex=${snapshot.scriptIndex}, nvlDialogues数量=${snapshot.nvlDialogues.length}');
         if (snapshot.nvlDialogues.isNotEmpty) {
           //print('[ChapterAutoSave] 📊 NVL最后一句: ${snapshot.nvlDialogues.last.dialogue}');
@@ -132,7 +132,7 @@ class ChapterAutoSaveManager {
         nvlDialogues: snapshot.nvlDialogues,
       );
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[ChapterAutoSave] 🔧 修正后的scriptIndex: ${fixedSnapshot.scriptIndex} (原始: ${snapshot.scriptIndex})');
       }
 
@@ -154,11 +154,11 @@ class ChapterAutoSaveManager {
       // 标记已创建
       _savedChapters.add(nodeId);
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[ChapterAutoSave] ✅ 章节存档创建成功: $displayName (autoSaveId: $actualAutoSaveId)');
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[ChapterAutoSave] ❌ 创建章节存档失败: $e');
       }
     } finally {

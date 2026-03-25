@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// 统一的游戏数据管理器
@@ -69,7 +69,7 @@ class UnifiedGameDataManager {
 
       _isInitialized = true;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[UnifiedGameDataManager] 初始化失败: $e');
       }
     }
@@ -83,7 +83,7 @@ class UnifiedGameDataManager {
       final data = _serialize();
       await file.writeAsBytes(data);
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[UnifiedGameDataManager] 保存失败: $e');
       }
     }
@@ -151,7 +151,7 @@ class UnifiedGameDataManager {
     // 读取版本号
     final version = reader.readInt32();
     if (version > _version) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[UnifiedGameDataManager] 版本不匹配: $version');
       }
       return;

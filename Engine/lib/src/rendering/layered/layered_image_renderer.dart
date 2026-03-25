@@ -6,7 +6,7 @@ library layered_image_renderer;
 
 import 'dart:async';
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/rendering/layered/layer_types.dart';
 import 'package:sakiengine/src/rendering/layered/smart_layer_cache.dart';
@@ -69,7 +69,7 @@ class LayeredImageRenderer {
       );
       
       if (layerInfos.isEmpty) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[LayeredImageRenderer] No layers found for: $imageId');
         }
         return null;
@@ -104,7 +104,7 @@ class LayeredImageRenderer {
       // 缓存状态
       _activeImages[imageId] = state;
       
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[LayeredImageRenderer] Created layered image: $imageId (${layers.length} layers)');
       }
       
@@ -129,7 +129,7 @@ class LayeredImageRenderer {
     try {
       final currentState = _activeImages[baseImageId];
       if (currentState == null) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[LayeredImageRenderer] Base image not found: $baseImageId');
         }
         return null;
@@ -138,7 +138,7 @@ class LayeredImageRenderer {
       // 解析新的图层信息（只处理变化的部分）
       final parts = baseImageId.split('_');
       if (parts.length < 4) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[LayeredImageRenderer] Invalid base image ID format: $baseImageId');
         }
         return null;
@@ -155,7 +155,7 @@ class LayeredImageRenderer {
         resourceId = '${parts[0]}_${parts[1]}_${parts[2]}'; // "cg_cp1_5"
         pose = parts[3]; // "pose1"
       } else {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[LayeredImageRenderer] Unexpected ID format: $baseImageId');
         }
         return null;
@@ -165,7 +165,7 @@ class LayeredImageRenderer {
       
       // 检查缓存
       if (_activeImages.containsKey(newImageId)) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[LayeredImageRenderer] Reusing cached layered image: $newImageId');
         }
         return _activeImages[newImageId]!;
@@ -233,7 +233,7 @@ class LayeredImageRenderer {
         newLayer: newState.layers.first,
       ));
       
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[LayeredImageRenderer] Fast updated layered image: $baseImageId -> $newImageId');
       }
       
@@ -271,7 +271,7 @@ class LayeredImageRenderer {
         }
       }
       
-      if (kDebugMode && textures.length != visibleLayers.length) {
+      if (kEngineDebugMode && textures.length != visibleLayers.length) {
         print('[LayeredImageRenderer] Warning: ${visibleLayers.length - textures.length} textures failed to load');
       }
       
@@ -309,7 +309,7 @@ class LayeredImageRenderer {
       }
       
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[LayeredImageRenderer] Preload failed: $e');
       }
     }
@@ -351,7 +351,7 @@ class LayeredImageRenderer {
       _activeImages.remove(key);
     }
     
-    if (keysToRemove.isNotEmpty && kDebugMode) {
+    if (keysToRemove.isNotEmpty && kEngineDebugMode) {
       print('[LayeredImageRenderer] Cleaned up ${keysToRemove.length} unused images');
     }
     
@@ -450,7 +450,7 @@ class LayeredImageRenderer {
     }
     _changeControllers.clear();
     
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('[LayeredImageRenderer] All render state cleared');
     }
   }

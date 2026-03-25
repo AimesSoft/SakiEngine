@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 /// 截图缩略图组件
 /// 用于显示存档截图，带有加载状态和错误处理
@@ -43,13 +45,18 @@ class ScreenshotThumbnail extends StatelessWidget {
     return Image.memory(
       screenshotData!,
       fit: BoxFit.cover,
+      filterQuality: ImageSamplingManager().resolveWidgetFilterQuality(
+        defaultQuality: FilterQuality.high,
+      ),
       frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
         if (wasSynchronouslyLoaded) return child;
-        
+
         return AnimatedOpacity(
           opacity: frame == null ? 0 : 1,
           duration: const Duration(milliseconds: 300),
-          child: frame == null ? _buildPlaceholder(Icons.image_outlined, '加载中...') : child,
+          child: frame == null
+              ? _buildPlaceholder(Icons.image_outlined, '加载中...')
+              : child,
         );
       },
       errorBuilder: (context, error, stackTrace) {

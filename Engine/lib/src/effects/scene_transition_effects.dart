@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:ui' as ui;
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 import 'package:sakiengine/src/utils/image_loader.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 /// 转场效果类型枚举
 enum TransitionType {
@@ -449,6 +451,10 @@ class _DissTransitionOverlayState extends State<_DissTransitionOverlay>
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
+                  filterQuality:
+                      ImageSamplingManager().resolveWidgetFilterQuality(
+                    defaultQuality: FilterQuality.high,
+                  ),
                 ),
               ),
             // 新背景，逐渐淡入（如果没有新图片，就不显示）
@@ -460,6 +466,10 @@ class _DissTransitionOverlayState extends State<_DissTransitionOverlay>
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
+                  filterQuality:
+                      ImageSamplingManager().resolveWidgetFilterQuality(
+                    defaultQuality: FilterQuality.high,
+                  ),
                 ),
               ),
           ],

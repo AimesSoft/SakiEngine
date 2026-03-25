@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 
 /// 统一的游戏数据管理器 (Web 平台版本)
 /// 将所有游戏数据（设置、变量、音量等）保存到浏览器 localStorage
@@ -61,7 +61,7 @@ class UnifiedGameDataManager {
 
       _isInitialized = true;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[UnifiedGameDataManager] 初始化失败: $e');
       }
     }
@@ -74,7 +74,7 @@ class UnifiedGameDataManager {
       final base64Data = base64Encode(data);
       html.window.localStorage[_getStorageKey(projectName)] = base64Data;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[UnifiedGameDataManager] 保存失败: $e');
       }
     }
@@ -142,7 +142,7 @@ class UnifiedGameDataManager {
     // 读取版本号
     final version = reader.readInt32();
     if (version > _version) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[UnifiedGameDataManager] 版本不匹配: $version');
       }
       return;

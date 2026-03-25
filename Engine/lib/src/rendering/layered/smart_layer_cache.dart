@@ -6,7 +6,7 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'dart:collection';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/rendering/layered/layer_types.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/utils/image_loader.dart';
@@ -62,7 +62,7 @@ class SmartLayerCache {
     // 检查缓存
     if (_textureCache.containsKey(assetPath)) {
       _cacheHits++;
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[SmartLayerCache] Cache hit: $assetPath');
       }
       return _textureCache[assetPath];
@@ -72,7 +72,7 @@ class SmartLayerCache {
     
     // 检查是否已在加载中
     if (_loadingTasks.containsKey(assetPath)) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[SmartLayerCache] Loading in progress: $assetPath');
       }
       return await _loadingTasks[assetPath];
@@ -86,7 +86,7 @@ class SmartLayerCache {
       final texture = await loadingTask;
       if (texture != null) {
         _cacheTexture(assetPath, texture);
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[SmartLayerCache] Loaded and cached: $assetPath');
         }
       }
@@ -153,7 +153,7 @@ class SmartLayerCache {
       try {
         await getLayerTexture(assetPath);
       } catch (e) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[SmartLayerCache] Preload failed: $assetPath - $e');
         }
       }
@@ -172,7 +172,7 @@ class SmartLayerCache {
     try {
       final fullPath = await AssetManager().findAsset(assetPath);
       if (fullPath == null) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[SmartLayerCache] Asset not found: $assetPath');
         }
         return null;
@@ -180,7 +180,7 @@ class SmartLayerCache {
       
       return await ImageLoader.loadImage(fullPath);
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[SmartLayerCache] Failed to load texture: $assetPath - $e');
       }
       return null;
@@ -220,7 +220,7 @@ class SmartLayerCache {
     
     if (oldestKey != null) {
       _evictTexture(oldestKey);
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[SmartLayerCache] Evicted LRU texture: $oldestKey');
       }
     }
@@ -248,7 +248,7 @@ class SmartLayerCache {
       _evictTexture(key);
     }
     
-    if (expiredKeys.isNotEmpty && kDebugMode) {
+    if (expiredKeys.isNotEmpty && kEngineDebugMode) {
       print('[SmartLayerCache] Cleaned up ${expiredKeys.length} expired textures');
     }
   }
@@ -266,7 +266,7 @@ class SmartLayerCache {
     // 重置统计
     _resetStats();
     
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('[SmartLayerCache] All cache cleared');
     }
   }
@@ -323,7 +323,7 @@ class SmartLayerCache {
   /// 启用/禁用预测性加载
   void setPredictiveLoading(bool enabled) {
     _predictiveLoadingEnabled = enabled;
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('[SmartLayerCache] Predictive loading: ${enabled ? "enabled" : "disabled"}');
     }
   }
@@ -331,7 +331,7 @@ class SmartLayerCache {
   /// 设置常见表情列表
   void setCommonExpressions(Set<String> expressions) {
     _commonExpressions = expressions;
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('[SmartLayerCache] Common expressions updated: $expressions');
     }
   }

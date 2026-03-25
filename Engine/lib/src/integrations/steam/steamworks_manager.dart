@@ -1,6 +1,6 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter_steamworks/flutter_steamworks.dart';
 
 class SteamworksInitOptions {
@@ -48,7 +48,7 @@ class SteamworksManager {
     }
 
     if (!isSupportedPlatform) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         debugPrint('Steamworks 当前平台不支持，跳过初始化。');
       }
       return false;
@@ -59,13 +59,13 @@ class SteamworksManager {
       if (ok) {
         _initialized = true;
         _options = options;
-      } else if (kDebugMode) {
+      } else if (kEngineDebugMode) {
         debugPrint('Steamworks 初始化失败，请确认 Steam 客户端是否已启动。');
       }
 
       return ok;
     } catch (error, stackTrace) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         debugPrint('Steamworks 初始化异常: $error');
         debugPrint(stackTrace.toString());
       }

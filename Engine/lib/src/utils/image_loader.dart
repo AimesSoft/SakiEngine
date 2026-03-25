@@ -1,13 +1,13 @@
 import 'dart:io';
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/config/game_path_resolver.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_avif/flutter_avif.dart';
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/utils/cg_image_compositor.dart';
-import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
 /// 图像加载器 - 支持多种图像格式包括AVIF和WebP
 ///
@@ -22,46 +22,12 @@ import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 /// 2. PNG版本 (可靠的透明通道)
 /// 3. AVIF原文件 (最后选择)
 class ImageLoader {
-  /// 获取游戏路径，从dart-define或环境变量获取
-  static String get _debugRoot {
-    if (kIsWeb) {
-      return '';
-    }
-    const fromDefine =
-        String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
-    if (fromDefine.isNotEmpty) return fromDefine;
-
-    final fromEnv = Platform.environment['SAKI_GAME_PATH'];
-    if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
-
-    return '';
-  }
-
-  /// 获取游戏路径，优先使用环境变量，如果没有则从assets读取default_game.txt
+  /// 获取游戏路径，统一由 GamePathResolver 解析
   static Future<String> _getGamePath() async {
-    if (kIsWeb) {
+    if (!GamePathResolver.shouldUseFileSystemAssets) {
       return '';
     }
-    // 如果环境变量已设置，直接使用
-    if (_debugRoot.isNotEmpty) {
-      return _debugRoot;
-    }
-
-    try {
-      // 从assets读取default_game.txt
-      final assetContent =
-          await EngineAssetLoader.loadString('assets/default_game.txt');
-      final defaultGame = assetContent.trim();
-
-      if (defaultGame.isEmpty) {
-        throw Exception('default_game.txt is empty');
-      }
-
-      final gamePath = p.join(Directory.current.path, 'Game', defaultGame);
-      return gamePath;
-    } catch (e) {
-      throw Exception('Failed to load default_game.txt from assets: $e');
-    }
+    return (await GamePathResolver.resolveGamePath()) ?? '';
   }
 
   /// 从资源路径加载图像
@@ -73,7 +39,7 @@ class ImageLoader {
       }
 
       // 在debug模式下，优先从外部文件系统加载
-      if (kDebugMode && !kIsWeb) {
+      if (GamePathResolver.shouldUseFileSystemAssets && !kIsWeb) {
         final externalImage = await _loadExternalImage(assetPath);
         if (externalImage != null) {
           return externalImage;
@@ -192,7 +158,7 @@ class ImageLoader {
       Uint8List bytes;
 
       // 在debug模式下，优先从外部文件系统获取数据
-      if (kDebugMode && !kIsWeb) {
+      if (GamePathResolver.shouldUseFileSystemAssets && !kIsWeb) {
         final gamePath = await _getGamePath();
         if (gamePath.isNotEmpty) {
           final relativePath = assetPath.startsWith('assets/')
@@ -203,7 +169,7 @@ class ImageLoader {
 
           if (await file.exists()) {
             bytes = await file.readAsBytes();
-            if (kDebugMode) {
+            if (kEngineDebugMode) {
               print('从外部文件加载AVIF: $fileSystemPath');
             }
           } else {

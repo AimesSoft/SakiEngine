@@ -1,7 +1,8 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/config/config_models.dart';
+import 'package:sakiengine/src/core/game_module.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/screens/game_play_screen.dart';
 import 'package:sakiengine/src/screens/review_screen.dart';
@@ -23,7 +24,6 @@ import 'package:sakiengine/src/widgets/common/common_indicator.dart';
 import 'package:sakiengine/src/widgets/nvl_screen.dart';
 import 'package:sakiengine/src/widgets/quick_menu.dart';
 import 'package:sakiengine/src/widgets/mobile_quick_menu.dart'; // 新增：手机端快捷菜单
-import 'package:sakiengine/src/widgets/settings_screen.dart';
 import 'package:sakiengine/src/widgets/mobile_touch_controller.dart';
 
 /// 游戏UI层组件
@@ -31,6 +31,7 @@ import 'package:sakiengine/src/widgets/mobile_touch_controller.dart';
 class GameUILayer extends StatefulWidget {
   final GameState gameState;
   final GameManager gameManager;
+  final GameModule gameModule;
   final DialogueProgressionManager dialogueProgressionManager;
   final String currentScript;
   final GlobalKey nvlScreenKey;
@@ -82,6 +83,7 @@ class GameUILayer extends StatefulWidget {
     super.key,
     required this.gameState,
     required this.gameManager,
+    required this.gameModule,
     required this.dialogueProgressionManager,
     required this.currentScript,
     required this.nvlScreenKey,
@@ -141,7 +143,8 @@ class GameUILayerState extends State<GameUILayer> {
     final isMobile = !kIsWeb && (Platform.isIOS || Platform.isAndroid);
     final uiScale = context.scaleFor(ComponentType.menu);
     final mediaPadding = MediaQuery.of(context).padding;
-    final quickMenuAreaWidth = 100.0 * uiScale + (isMobile ? mediaPadding.left : 0.0);
+    final quickMenuAreaWidth =
+        100.0 * uiScale + (isMobile ? mediaPadding.left : 0.0);
 
     final stackContent = Stack(
       children: [
@@ -237,7 +240,9 @@ class GameUILayerState extends State<GameUILayer> {
           isMobile
               ? Positioned(
                   left: 10 * uiScale + mediaPadding.left, // 左边距 + 刘海安全区
-                  top: (MediaQuery.of(context).size.height - MediaQuery.of(context).size.height * 0.9) / 2, // 垂直居中
+                  top: (MediaQuery.of(context).size.height -
+                          MediaQuery.of(context).size.height * 0.9) /
+                      2, // 垂直居中
                   child: HideableUI(
                     child: MobileQuickMenu(
                       onSave: widget.onToggleSave,
@@ -248,7 +253,8 @@ class GameUILayerState extends State<GameUILayer> {
                       onBack: widget.onHandleQuickMenuBack,
                       onPreviousDialogue: widget.onHandlePreviousDialogue,
                       onSkipRead: widget.onSkipRead, // 传递跳过已读文本回调
-                      isFastForwarding: widget.gameState.isFastForwarding, // 传递快进状态
+                      isFastForwarding:
+                          widget.gameState.isFastForwarding, // 传递快进状态
                       onAutoPlay: widget.onAutoPlay, // 传递自动播放回调
                       isAutoPlaying: widget.gameState.isAutoPlaying, // 传递自动播放状态
                       onThemeToggle: widget.onThemeToggle, // 传递主题切换回调
@@ -265,7 +271,8 @@ class GameUILayerState extends State<GameUILayer> {
                     onBack: widget.onHandleQuickMenuBack,
                     onPreviousDialogue: widget.onHandlePreviousDialogue,
                     onSkipRead: widget.onSkipRead, // 传递跳过已读文本回调
-                    isFastForwarding: widget.gameState.isFastForwarding, // 传递快进状态
+                    isFastForwarding:
+                        widget.gameState.isFastForwarding, // 传递快进状态
                     onAutoPlay: widget.onAutoPlay, // 传递自动播放回调
                     isAutoPlaying: widget.gameState.isAutoPlaying, // 传递自动播放状态
                     onThemeToggle: widget.onThemeToggle, // 传递主题切换回调
@@ -316,18 +323,30 @@ class GameUILayerState extends State<GameUILayer> {
         // 存档界面
         if (widget.showSaveOverlay)
           HideableUI(
-            child: SaveLoadScreen(
+            child: widget.gameModule.createSaveLoadScreen(
               mode: SaveLoadMode.save,
               gameManager: widget.gameManager,
               onClose: widget.onToggleSave,
+              onLoadSlot: widget.onLoadGame ??
+                  (saveSlot) {
+                    // 如果没有回调，使用传统的导航方式（兼容性）
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            GamePlayScreen(saveSlotToLoad: saveSlot),
+                      ),
+                      (route) => false,
+                    );
+                  },
             ),
           ),
 
         // 读档界面
         if (widget.showLoadOverlay)
           HideableUI(
-            child: SaveLoadScreen(
+            child: widget.gameModule.createSaveLoadScreen(
               mode: SaveLoadMode.load,
+              gameManager: widget.gameManager,
               onClose: widget.onToggleLoad,
               onLoadSlot: widget.onLoadGame ??
                   (saveSlot) {
@@ -346,8 +365,20 @@ class GameUILayerState extends State<GameUILayer> {
         // 设置界面
         if (widget.showSettings)
           HideableUI(
-            child: SettingsScreen(
+            child: widget.gameModule.createSettingsScreen(
               onClose: widget.onToggleSettings,
+              gameManager: widget.gameManager,
+              onLoadSlot: widget.onLoadGame ??
+                  (saveSlot) {
+                    // 如果没有回调，使用传统的导航方式（兼容性）
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            GamePlayScreen(saveSlotToLoad: saveSlot),
+                      ),
+                      (route) => false,
+                    );
+                  },
             ),
           ),
 
@@ -366,7 +397,7 @@ class GameUILayerState extends State<GameUILayer> {
           ),
 
         // 开发者面板 (仅Debug模式)
-        if (kDebugMode && widget.showDeveloperPanel)
+        if (kEngineDebugMode && widget.showDeveloperPanel)
           HideableUI(
             child: DeveloperPanel(
               onClose: widget.onToggleDeveloperPanel,
@@ -385,7 +416,7 @@ class GameUILayerState extends State<GameUILayer> {
           ),
 
         // 表情选择器 (仅Debug模式)
-        if (kDebugMode && widget.showExpressionSelector)
+        if (kEngineDebugMode && widget.showExpressionSelector)
           HideableUI(
             child: Builder(
               builder: (context) {

@@ -212,7 +212,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     }
 
     // 注册开发者面板快捷键 Shift+D (仅在Debug模式下)
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       _developerPanelHotKey = HotKey(
         key: PhysicalKeyboardKey.keyD,
         modifiers: [HotKeyModifier.shift],

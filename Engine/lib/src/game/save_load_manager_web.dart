@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/game/screenshot_generator.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
@@ -20,25 +20,48 @@ class SaveLoadManager {
   // 缓存脚本和配置，避免重复加载
   static ScriptNode? _cachedScript;
   static Map<String, CharacterConfig>? _cachedCharacterConfigs;
+  static Future<ScriptNode>? _scriptLoadFuture;
+  static Future<Map<String, CharacterConfig>>? _characterConfigsLoadFuture;
+
+  static Future<void> _ensureScriptLoaded() async {
+    if (_cachedScript != null) {
+      return;
+    }
+
+    _scriptLoadFuture ??= () async {
+      final scriptMerger = ScriptMerger();
+      return scriptMerger.getMergedScript();
+    }();
+
+    try {
+      _cachedScript = await _scriptLoadFuture!;
+    } finally {
+      _scriptLoadFuture = null;
+    }
+  }
+
+  static Future<void> _ensureCharacterConfigsLoaded() async {
+    if (_cachedCharacterConfigs != null) {
+      return;
+    }
+
+    _characterConfigsLoadFuture ??= () async {
+      final charactersContent =
+          await AssetManager().loadString('assets/GameScript/configs/characters.sks');
+      return ConfigParser().parseCharacters(charactersContent);
+    }();
+
+    try {
+      _cachedCharacterConfigs = await _characterConfigsLoadFuture!;
+    } finally {
+      _characterConfigsLoadFuture = null;
+    }
+  }
 
   /// 实时查询存档的对话预览文本
   /// 根据scriptIndex从当前脚本中查询对话内容
   static Future<String> getDialoguePreview(GameStateSnapshot snapshot) async {
     try {
-      // 加载脚本（如果未缓存）
-      if (_cachedScript == null) {
-        final scriptMerger = ScriptMerger();
-        _cachedScript = await scriptMerger.getMergedScript();
-      }
-
-      // 加载角色配置（如果未缓存）
-      if (_cachedCharacterConfigs == null) {
-        final charactersContent = await AssetManager()
-            .loadString('assets/GameScript/configs/characters.sks');
-        _cachedCharacterConfigs =
-            ConfigParser().parseCharacters(charactersContent);
-      }
-
       final currentState = snapshot.currentState;
 
       // 检查是否是选择界面
@@ -49,34 +72,6 @@ class SaveLoadManager {
             menuNode.choices.map((choice) => '[${choice.text}]').toList();
         final localization = LocalizationManager();
         return '${localization.t('saveLoad.choiceMenu')}\n${choiceTexts.join('\n')}';
-      }
-
-      // 确定要查询的scriptIndex
-      // 优先使用对话历史的最后一条，如果没有则使用当前scriptIndex
-      final int dialogueScriptIndex = snapshot.dialogueHistory.isNotEmpty
-          ? snapshot.dialogueHistory.last.scriptIndex
-          : snapshot.scriptIndex;
-
-      // 从脚本中查询对话
-      if (dialogueScriptIndex >= 0 &&
-          dialogueScriptIndex < _cachedScript!.children.length) {
-        final node = _cachedScript!.children[dialogueScriptIndex];
-
-        if (node is SayNode) {
-          final dialogue = node.dialogue;
-          String? speaker;
-
-          if (node.character != null) {
-            final characterConfig = _cachedCharacterConfigs![node.character];
-            speaker = characterConfig?.name;
-          }
-
-          if (speaker != null && speaker.isNotEmpty) {
-            return '【$speaker】${RichTextParser.cleanText(dialogue)}';
-          } else {
-            return RichTextParser.cleanText(dialogue);
-          }
-        }
       }
 
       // 如果无法从脚本查询，回退到NVL模式检查
@@ -90,7 +85,7 @@ class SaveLoadManager {
         }
       }
 
-      // 最后回退到当前状态的对话
+      // 普通模式优先使用当前状态的对话
       if (currentState.dialogue != null && currentState.dialogue!.isNotEmpty) {
         if (currentState.speaker != null && currentState.speaker!.isNotEmpty) {
           return '【${currentState.speaker}】${RichTextParser.cleanText(currentState.dialogue!)}';
@@ -99,9 +94,44 @@ class SaveLoadManager {
         }
       }
 
+      // 再回退到历史最后一句（避免不必要的脚本解析）
+      if (snapshot.dialogueHistory.isNotEmpty) {
+        final latestDialogue = snapshot.dialogueHistory.last;
+        if (latestDialogue.speaker != null && latestDialogue.speaker!.isNotEmpty) {
+          return '【${latestDialogue.speaker}】${RichTextParser.cleanText(latestDialogue.dialogue)}';
+        } else {
+          return RichTextParser.cleanText(latestDialogue.dialogue);
+        }
+      }
+
+      // 最后兜底：基于脚本索引查询（旧存档兼容）
+      final int dialogueScriptIndex = snapshot.scriptIndex;
+      if (dialogueScriptIndex >= 0) {
+        await _ensureScriptLoaded();
+        if (dialogueScriptIndex < _cachedScript!.children.length) {
+          final node = _cachedScript!.children[dialogueScriptIndex];
+          if (node is SayNode) {
+            final dialogue = node.dialogue;
+            String? speaker;
+
+            if (node.character != null) {
+              await _ensureCharacterConfigsLoaded();
+              final characterConfig = _cachedCharacterConfigs![node.character];
+              speaker = characterConfig?.name;
+            }
+
+            if (speaker != null && speaker.isNotEmpty) {
+              return '【$speaker】${RichTextParser.cleanText(dialogue)}';
+            } else {
+              return RichTextParser.cleanText(dialogue);
+            }
+          }
+        }
+      }
+
       return '...';
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[SaveLoadManager] 实时查询对话预览失败: $e');
       }
       return '...';
@@ -113,6 +143,8 @@ class SaveLoadManager {
   static void clearCache() {
     _cachedScript = null;
     _cachedCharacterConfigs = null;
+    _scriptLoadFuture = null;
+    _characterConfigsLoadFuture = null;
   }
 
   // Web平台使用默认项目名
@@ -129,7 +161,7 @@ class SaveLoadManager {
 
       return projectName;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('Error getting project name: $e');
       }
       return 'DefaultProject';

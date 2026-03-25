@@ -108,73 +108,55 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
     }
   }
 
-  /// 处理右键点击
-  void _handleRightClick(TapUpDetails details) {
-    if (_globalManager.isUIHidden) {
-      _setUIVisible();
-    } else {
-      _setUIHidden();
-    }
-  }
-
-  /// 处理键盘事件（移除ESC键功能，避免与覆盖层冲突）
-  bool _handleKeyEvent(KeyEvent event) {
-    // ESC键功能已移除，避免与overlay_scaffold冲突
-    // 只保留右键和左键的UI切换功能
-    return false;
-  }
-
   @override
   Widget build(BuildContext context) {
-    return KeyboardListener(
-      focusNode: FocusNode()..requestFocus(),
-      onKeyEvent: _handleKeyEvent,
-      child: Stack(
-        children: [
-          // 背景层 - 不会被隐藏
-          widget.backgroundChild,
-          
-          // 右键检测层 - 放在背景上面，UI下面
-          Positioned.fill(
-            child: Listener(
-              onPointerDown: (event) {
-                if (event.buttons == 2) { // 右键按下
-                  if (_isUIHidden) {
-                    _setUIVisible();
-                  } else {
-                    _setUIHidden();
-                  }
-                } else if (event.buttons == 1) { // 左键按下
-                  if (_isUIHidden) {
-                    _setUIVisible();
-                  } else {
-                    // UI显示状态下，左键推进剧情
-                    widget.onLeftClick?.call();
-                  }
+    return Stack(
+      children: [
+        // 背景层 - 不会被隐藏
+        widget.backgroundChild,
+
+        // 右键检测层 - 放在背景上面，UI下面
+        Positioned.fill(
+          child: Listener(
+            onPointerDown: (event) {
+              if (event.buttons == 2) {
+                // 右键按下
+                if (_isUIHidden) {
+                  _setUIVisible();
+                } else {
+                  _setUIHidden();
                 }
-              },
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                color: Colors.transparent,
-              ),
+              } else if (event.buttons == 1) {
+                // 左键按下
+                if (_isUIHidden) {
+                  _setUIVisible();
+                } else {
+                  // UI显示状态下，左键推进剧情
+                  widget.onLeftClick?.call();
+                }
+              }
+            },
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              color: Colors.transparent,
             ),
           ),
-          
-          // UI层 - 可以被隐藏，在最上面
-          AnimatedBuilder(
-            animation: _fadeAnimation,
-            builder: (context, child) {
-              return Opacity(
-                opacity: _fadeAnimation.value,
-                child: IgnorePointer(
-                  ignoring: _isUIHidden,
-                  child: widget.child,
-                ),
-              );
-            },
-          ),
-        ],
-      ),
+        ),
+
+        // UI层 - 可以被隐藏，在最上面
+        AnimatedBuilder(
+          animation: _fadeAnimation,
+          builder: (context, child) {
+            return Opacity(
+              opacity: _fadeAnimation.value,
+              child: IgnorePointer(
+                ignoring: _isUIHidden,
+                child: widget.child,
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }

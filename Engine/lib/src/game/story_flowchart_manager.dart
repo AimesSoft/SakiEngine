@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:crypto/crypto.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
@@ -10,25 +10,25 @@ import 'package:sakiengine/src/game/save_load_manager.dart';
 
 /// 剧情节点类型
 enum StoryNodeType {
-  chapter,    // 章节开始
-  branch,     // 分支选择
-  merge,      // 分支汇合
-  ending,     // 结局
+  chapter, // 章节开始
+  branch, // 分支选择
+  merge, // 分支汇合
+  ending, // 结局
 }
 
 /// 剧情流程节点
 class StoryFlowNode {
-  final String id;                    // 唯一标识
-  final String label;                 // 标签名（脚本中的label）
-  final StoryNodeType type;           // 节点类型
-  final String displayName;           // 显示名称（章节名/选项名）
-  final int scriptIndex;              // 脚本索引位置
-  final String? chapterName;          // 所属章节名
-  final String? parentNodeId;         // 父节点ID（来自哪个节点）
-  final List<String> childNodeIds;    // 子节点ID列表
-  final String? autoSaveId;           // 关联的自动存档ID
-  final bool isUnlocked;              // 是否已解锁（玩家是否到达过）
-  final DateTime? firstReachedTime;   // 首次到达时间
+  final String id; // 唯一标识
+  final String label; // 标签名（脚本中的label）
+  final StoryNodeType type; // 节点类型
+  final String displayName; // 显示名称（章节名/选项名）
+  final int scriptIndex; // 脚本索引位置
+  final String? chapterName; // 所属章节名
+  final String? parentNodeId; // 父节点ID（来自哪个节点）
+  final List<String> childNodeIds; // 子节点ID列表
+  final String? autoSaveId; // 关联的自动存档ID
+  final bool isUnlocked; // 是否已解锁（玩家是否到达过）
+  final DateTime? firstReachedTime; // 首次到达时间
   final Map<String, dynamic>? metadata; // 额外元数据
 
   StoryFlowNode({
@@ -118,7 +118,8 @@ class StoryFlowNode {
 
 /// 剧情流程图管理器
 class StoryFlowchartManager extends ChangeNotifier {
-  static final StoryFlowchartManager _instance = StoryFlowchartManager._internal();
+  static final StoryFlowchartManager _instance =
+      StoryFlowchartManager._internal();
   factory StoryFlowchartManager() => _instance;
   StoryFlowchartManager._internal();
 
@@ -154,7 +155,8 @@ class StoryFlowchartManager extends ChangeNotifier {
   Future<void> initialize() async {
     try {
       final dataManager = UnifiedGameDataManager();
-      final savedData = dataManager.getStringVariable('story_flowchart', defaultValue: '');
+      final savedData =
+          dataManager.getStringVariable('story_flowchart', defaultValue: '');
 
       if (savedData.isNotEmpty) {
         final jsonData = jsonDecode(savedData) as Map<String, dynamic>;
@@ -178,11 +180,11 @@ class StoryFlowchartManager extends ChangeNotifier {
         _currentNodeId = jsonData['currentNodeId'] as String?;
       }
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[StoryFlowchart] 初始化完成，加载了 ${_nodes.length} 个节点');
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[StoryFlowchart] 初始化失败: $e');
       }
     }
@@ -199,13 +201,14 @@ class StoryFlowchartManager extends ChangeNotifier {
 
       final dataManager = UnifiedGameDataManager();
       final projectName = await ProjectInfoManager().getAppName();
-      await dataManager.setStringVariable('story_flowchart', jsonEncode(jsonData), projectName);
+      await dataManager.setStringVariable(
+          'story_flowchart', jsonEncode(jsonData), projectName);
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[StoryFlowchart] 保存成功，共 ${_nodes.length} 个节点');
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[StoryFlowchart] 保存失败: $e');
       }
     }
@@ -254,7 +257,7 @@ class StoryFlowchartManager extends ChangeNotifier {
       await save();
       notifyListeners();
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[StoryFlowchart] 解锁节点: ${node.displayName} ($nodeId)');
       }
     }
@@ -278,19 +281,19 @@ class StoryFlowchartManager extends ChangeNotifier {
       final file = File('$directory/$autoSaveId.sakisav');
 
       final binaryData = saveSlot.toBinary();
-      await file.writeAsBytes(binaryData);
+      await SaveLoadManager.writeBinaryFileAtomically(file, binaryData);
 
       // 更新节点关联
       _nodes[nodeId] = node.copyWith(autoSaveId: autoSaveId);
       await save();
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[StoryFlowchart] 为节点 $nodeId (${node.displayName}) 创建自动存档文件: $autoSaveId.sakisav');
       }
 
       return autoSaveId;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[StoryFlowchart] 创建自动存档失败: $e');
       }
       return null;
@@ -356,7 +359,7 @@ class StoryFlowchartManager extends ChangeNotifier {
 
     notifyListeners();
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[StoryFlowchart] 已清空所有数据');
     }
   }

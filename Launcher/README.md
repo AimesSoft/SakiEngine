@@ -28,3 +28,13 @@ saki.bat
 saki.bat SakiEngine
 saki.bat <项目名>
 ```
+
+首次运行会自动引导工具链：
+
+- 系统已安装 Flutter/Node.js 时直接使用系统环境
+- 系统缺失时自动下载到仓库内 `.saki_toolchain/` 并继续启动
+
+脚本说明：
+
+- `saki.sh / saki.bat` 仅负责入口转发
+- 业务逻辑集中在 `tool/saki_cli.js`（跨平台）

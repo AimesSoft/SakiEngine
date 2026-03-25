@@ -1,17 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/config/game_path_resolver.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/services.dart' show rootBundle, AssetManifest;
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/game/game_script_localization.dart';
 import 'package:sakiengine/src/sks_compiler/compiled_sks_bundle.dart';
 import 'package:sakiengine/src/sks_compiler/compiled_sks_registry.dart';
-import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
 class AssetManager {
   static const bool _forceAssetDiagnostics =
-      bool.fromEnvironment('SAKI_ASSET_DIAG', defaultValue: true);
+      bool.fromEnvironment('SAKI_ASSET_DIAG', defaultValue: false);
 
   static final AssetManager _instance = AssetManager._internal();
   factory AssetManager() => _instance;
@@ -19,10 +19,11 @@ class AssetManager {
     // Print the CWD at initialization
     if (_shouldLoadFromExternal()) {
       print("AssetManager CWD: ${Directory.current.path}");
-      print("Game path from environment: $_debugRoot");
+      print(
+          "Game path hint: ${GamePathResolver.configuredGamePathHint() ?? ''}");
     }
     _assetDiag(
-      'AssetManager 初始化: mode=${kDebugMode ? "debug" : "release"}, '
+      'AssetManager 初始化: mode=${kEngineDebugMode ? "debug" : "release"}, '
       'cwd=${Directory.current.path}, external=${_shouldLoadFromExternal()}',
     );
   }
@@ -35,13 +36,11 @@ class AssetManager {
 
   // 检查是否应该从外部加载资源（仅桌面平台的Debug模式）
   static bool _shouldLoadFromExternal() {
-    if (!kDebugMode) return false;
-    // 只在桌面平台从外部加载
-    return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    return GamePathResolver.shouldUseFileSystemAssets;
   }
 
   static bool _shouldAssetDiagnostics() {
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       return false;
     }
     return _forceAssetDiagnostics &&
@@ -56,45 +55,13 @@ class AssetManager {
     stderr.writeln('[SAKI_ASSET_DIAG][$now] $message');
   }
 
-  // 获取游戏路径，从dart-define或环境变量获取
-  static String get _debugRoot {
-    const fromDefine =
-        String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
-    if (fromDefine.isNotEmpty) return fromDefine;
-
-    final fromEnv = Platform.environment['SAKI_GAME_PATH'];
-    if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
-
-    return '';
-  }
-
-  // 获取游戏路径，优先使用环境变量，如果没有则从assets读取default_game.txt
+  // 获取游戏路径，统一由 GamePathResolver 解析
   static Future<String> _getGamePath() async {
-    // 如果环境变量已设置，直接使用
-    if (_debugRoot.isNotEmpty) {
-      return _debugRoot;
+    final gamePath = await GamePathResolver.resolveGamePath();
+    if (gamePath == null || gamePath.isEmpty) {
+      return '';
     }
-
-    try {
-      // 从assets读取default_game.txt
-      final assetContent =
-          await EngineAssetLoader.loadString('assets/default_game.txt');
-      final defaultGame = assetContent.trim();
-
-      if (defaultGame.isEmpty) {
-        throw Exception('default_game.txt is empty');
-      }
-
-      final gamePath = p.join(Directory.current.path, 'Game', defaultGame);
-      if (_shouldLoadFromExternal()) {
-        print("Using game from assets: $defaultGame");
-        print("Game path resolved to: $gamePath");
-      }
-
-      return gamePath;
-    } catch (e) {
-      throw Exception('Failed to load default_game.txt from assets: $e');
-    }
+    return gamePath;
   }
 
   Future<String> loadString(String path) async {
@@ -364,7 +331,8 @@ class AssetManager {
       '.gif',
       '.bmp',
       '.webp',
-      '.avif'
+      '.avif',
+      '.svg'
     ];
     final videoExtensions = [
       '.mp4',
@@ -382,7 +350,8 @@ class AssetManager {
     final targetFileName = name.split('/').last;
     final targetFileNameLower = targetFileName.toLowerCase();
     final targetFileNameWithoutExt = p.basenameWithoutExtension(targetFileName);
-    final targetFileNameWithoutExtLower = targetFileNameWithoutExt.toLowerCase();
+    final targetFileNameWithoutExtLower =
+        targetFileNameWithoutExt.toLowerCase();
 
     // 提取路径部分，例如 "backgrounds/sky" -> "backgrounds"
     final pathParts = name.split('/');
@@ -407,9 +376,9 @@ class AssetManager {
         }
         final keyFileNameWithoutExtLower =
             p.basenameWithoutExtension(keyFileName).toLowerCase();
-        final fileNameMatched = keyFileNameWithoutExtLower ==
-                targetFileNameWithoutExtLower ||
-            keyFileNameLower == targetFileNameLower;
+        final fileNameMatched =
+            keyFileNameWithoutExtLower == targetFileNameWithoutExtLower ||
+                keyFileNameLower == targetFileNameLower;
 
         // 检查文件名是否匹配且路径包含cg（支持cg的任意子文件夹）
         if (fileNameMatched) {
@@ -437,9 +406,9 @@ class AssetManager {
           p.basenameWithoutExtension(keyFileName).toLowerCase();
 
       // 检查文件名是否匹配
-      final fileNameMatched = keyFileNameWithoutExtLower ==
-              targetFileNameWithoutExtLower ||
-          keyFileNameLower == targetFileNameLower;
+      final fileNameMatched =
+          keyFileNameWithoutExtLower == targetFileNameWithoutExtLower ||
+              keyFileNameLower == targetFileNameLower;
       if (fileNameMatched) {
         // 如果查询有路径要求，检查路径是否匹配
         if (targetPath.isNotEmpty) {
@@ -469,9 +438,9 @@ class AssetManager {
       }
       final keyFileNameWithoutExtLower =
           p.basenameWithoutExtension(keyFileName).toLowerCase();
-      final fileNameMatched = keyFileNameWithoutExtLower ==
-              targetFileNameWithoutExtLower ||
-          keyFileNameLower == targetFileNameLower;
+      final fileNameMatched =
+          keyFileNameWithoutExtLower == targetFileNameWithoutExtLower ||
+              keyFileNameLower == targetFileNameLower;
 
       if (fileNameMatched) {
         _imageCache[name] = key;
@@ -528,9 +497,9 @@ class AssetManager {
             final fileNameLower = fileName.toLowerCase();
             final fileNameWithoutExtLower =
                 p.basenameWithoutExtension(fileName).toLowerCase();
-            final fileNameMatched = fileNameWithoutExtLower ==
-                    fileNameToSearchWithoutExtLower ||
-                fileNameLower == fileNameToSearchLower;
+            final fileNameMatched =
+                fileNameWithoutExtLower == fileNameToSearchWithoutExtLower ||
+                    fileNameLower == fileNameToSearchLower;
             if (fileNameMatched) {
               // Debug模式下直接返回绝对路径，用于FileImage
               final assetPath = file.path.replaceAll('\\', '/');

@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'dart:convert' show utf8;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/game/screenshot_generator.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
@@ -13,32 +13,55 @@ import 'package:sakiengine/src/config/config_parser.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 import 'package:sakiengine/src/game/script_merger.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
+import 'package:sakiengine/src/config/game_path_resolver.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
-import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
 class SaveLoadManager {
   // 缓存脚本和配置，避免重复加载
   static ScriptNode? _cachedScript;
   static Map<String, CharacterConfig>? _cachedCharacterConfigs;
+  static Future<ScriptNode>? _scriptLoadFuture;
+  static Future<Map<String, CharacterConfig>>? _characterConfigsLoadFuture;
+
+  static Future<void> _ensureScriptLoaded() async {
+    if (_cachedScript != null) {
+      return;
+    }
+
+    _scriptLoadFuture ??= () async {
+      final scriptMerger = ScriptMerger();
+      return scriptMerger.getMergedScript();
+    }();
+
+    try {
+      _cachedScript = await _scriptLoadFuture!;
+    } finally {
+      _scriptLoadFuture = null;
+    }
+  }
+
+  static Future<void> _ensureCharacterConfigsLoaded() async {
+    if (_cachedCharacterConfigs != null) {
+      return;
+    }
+
+    _characterConfigsLoadFuture ??= () async {
+      final charactersContent =
+          await AssetManager().loadString('assets/GameScript/configs/characters.sks');
+      return ConfigParser().parseCharacters(charactersContent);
+    }();
+
+    try {
+      _cachedCharacterConfigs = await _characterConfigsLoadFuture!;
+    } finally {
+      _characterConfigsLoadFuture = null;
+    }
+  }
 
   /// 实时查询存档的对话预览文本
   /// 根据scriptIndex从当前脚本中查询对话内容
   static Future<String> getDialoguePreview(GameStateSnapshot snapshot) async {
     try {
-      // 加载脚本（如果未缓存）
-      if (_cachedScript == null) {
-        final scriptMerger = ScriptMerger();
-        _cachedScript = await scriptMerger.getMergedScript();
-      }
-
-      // 加载角色配置（如果未缓存）
-      if (_cachedCharacterConfigs == null) {
-        final charactersContent = await AssetManager()
-            .loadString('assets/GameScript/configs/characters.sks');
-        _cachedCharacterConfigs =
-            ConfigParser().parseCharacters(charactersContent);
-      }
-
       final currentState = snapshot.currentState;
 
       // 检查是否是选择界面
@@ -49,34 +72,6 @@ class SaveLoadManager {
             menuNode.choices.map((choice) => '[${choice.text}]').toList();
         final localization = LocalizationManager();
         return '${localization.t('saveLoad.choiceMenu')}\n${choiceTexts.join('\n')}';
-      }
-
-      // 确定要查询的scriptIndex
-      // 优先使用对话历史的最后一条，如果没有则使用当前scriptIndex
-      final int dialogueScriptIndex = snapshot.dialogueHistory.isNotEmpty
-          ? snapshot.dialogueHistory.last.scriptIndex
-          : snapshot.scriptIndex;
-
-      // 从脚本中查询对话
-      if (dialogueScriptIndex >= 0 &&
-          dialogueScriptIndex < _cachedScript!.children.length) {
-        final node = _cachedScript!.children[dialogueScriptIndex];
-
-        if (node is SayNode) {
-          final dialogue = node.dialogue;
-          String? speaker;
-
-          if (node.character != null) {
-            final characterConfig = _cachedCharacterConfigs![node.character];
-            speaker = characterConfig?.name;
-          }
-
-          if (speaker != null && speaker.isNotEmpty) {
-            return '【$speaker】${RichTextParser.cleanText(dialogue)}';
-          } else {
-            return RichTextParser.cleanText(dialogue);
-          }
-        }
       }
 
       // 如果无法从脚本查询，回退到NVL模式检查
@@ -90,7 +85,7 @@ class SaveLoadManager {
         }
       }
 
-      // 最后回退到当前状态的对话
+      // 普通模式优先使用当前状态的对话
       if (currentState.dialogue != null && currentState.dialogue!.isNotEmpty) {
         if (currentState.speaker != null && currentState.speaker!.isNotEmpty) {
           return '【${currentState.speaker}】${RichTextParser.cleanText(currentState.dialogue!)}';
@@ -99,9 +94,44 @@ class SaveLoadManager {
         }
       }
 
+      // 再回退到历史最后一句（避免不必要的脚本解析）
+      if (snapshot.dialogueHistory.isNotEmpty) {
+        final latestDialogue = snapshot.dialogueHistory.last;
+        if (latestDialogue.speaker != null && latestDialogue.speaker!.isNotEmpty) {
+          return '【${latestDialogue.speaker}】${RichTextParser.cleanText(latestDialogue.dialogue)}';
+        } else {
+          return RichTextParser.cleanText(latestDialogue.dialogue);
+        }
+      }
+
+      // 最后兜底：基于脚本索引查询（旧存档兼容）
+      final int dialogueScriptIndex = snapshot.scriptIndex;
+      if (dialogueScriptIndex >= 0) {
+        await _ensureScriptLoaded();
+        if (dialogueScriptIndex < _cachedScript!.children.length) {
+          final node = _cachedScript!.children[dialogueScriptIndex];
+          if (node is SayNode) {
+            final dialogue = node.dialogue;
+            String? speaker;
+
+            if (node.character != null) {
+              await _ensureCharacterConfigsLoaded();
+              final characterConfig = _cachedCharacterConfigs![node.character];
+              speaker = characterConfig?.name;
+            }
+
+            if (speaker != null && speaker.isNotEmpty) {
+              return '【$speaker】${RichTextParser.cleanText(dialogue)}';
+            } else {
+              return RichTextParser.cleanText(dialogue);
+            }
+          }
+        }
+      }
+
       return '...';
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[SaveLoadManager] 实时查询对话预览失败: $e');
       }
       return '...';
@@ -112,40 +142,24 @@ class SaveLoadManager {
   static void clearCache() {
     _cachedScript = null;
     _cachedCharacterConfigs = null;
+    _scriptLoadFuture = null;
+    _characterConfigsLoadFuture = null;
   }
 
   // 获取当前游戏项目名称
   Future<String> _getCurrentProjectName() async {
     try {
-      // 优先从环境变量获取游戏路径
-      const fromDefine =
-          String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
-      if (fromDefine.isNotEmpty) {
-        return p.basename(fromDefine);
+      final projectName = await GamePathResolver.resolveProjectName();
+      if (projectName != null && projectName.isNotEmpty) {
+        return projectName;
       }
-
-      final fromEnv = Platform.environment['SAKI_GAME_PATH'];
-      if (fromEnv != null && fromEnv.isNotEmpty) {
-        return p.basename(fromEnv);
-      }
-
-      // 从assets读取default_game.txt
-      final assetContent =
-          await EngineAssetLoader.loadString('assets/default_game.txt');
-      final projectName = assetContent.trim();
-
-      if (projectName.isEmpty) {
-        throw Exception('Project name is empty in default_game.txt');
-      }
-
-      return projectName;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('Error getting project name: $e');
       }
-      // 如果无法获取项目名称，使用默认值
-      return 'DefaultProject';
     }
+    // 如果无法获取项目名称，使用默认值
+    return 'DefaultProject';
   }
 
   Future<String> getSavesDirectory() async {
@@ -196,7 +210,7 @@ class SaveLoadManager {
     );
 
     final binaryData = saveSlot.toBinary();
-    await file.writeAsBytes(binaryData);
+    await writeBinaryFileAtomically(file, binaryData);
   }
 
   /// 快速存档功能
@@ -227,7 +241,7 @@ class SaveLoadManager {
     );
 
     final binaryData = saveSlot.toBinary();
-    await file.writeAsBytes(binaryData);
+    await writeBinaryFileAtomically(file, binaryData);
   }
 
   /// 读取快速存档
@@ -237,7 +251,7 @@ class SaveLoadManager {
       final file = File('$directory/quicksave.sakisav');
       if (await file.exists()) {
         final binaryData = await file.readAsBytes();
-        return SaveSlot.fromBinary(binaryData);
+        return _decodeSaveSlot(binaryData, file.path);
       }
     } catch (e) {
       print('Error loading quick save: $e');
@@ -263,7 +277,7 @@ class SaveLoadManager {
       final file = File('$directory/save_$slotId.sakisav');
       if (await file.exists()) {
         final binaryData = await file.readAsBytes();
-        return SaveSlot.fromBinary(binaryData);
+        return _decodeSaveSlot(binaryData, file.path);
       }
     } catch (e) {
       print('Error loading game from slot $slotId: $e');
@@ -289,7 +303,10 @@ class SaveLoadManager {
           final binaryData = await fileEntity.readAsBytes();
           //print('DEBUG: 成功读取 ${binaryData.length} 字节数据');
 
-          final saveSlot = SaveSlot.fromBinary(binaryData);
+          final saveSlot = _decodeSaveSlot(binaryData, fileEntity.path);
+          if (saveSlot == null) {
+            continue;
+          }
           //print('DEBUG: 成功解析存档，ID=${saveSlot.id}, 时间=${saveSlot.saveTime}');
 
           saveSlots.add(saveSlot);
@@ -415,7 +432,7 @@ class SaveLoadManager {
       );
 
       final binaryData = updatedSaveSlot.toBinary();
-      await toFile.writeAsBytes(binaryData);
+      await writeBinaryFileAtomically(toFile, binaryData);
       await fromFile.delete();
 
       return true;
@@ -464,7 +481,7 @@ class SaveLoadManager {
           isLocked: saveSlot1.isLocked,
         );
         final binaryData = updatedSaveSlot1.toBinary();
-        await file2.writeAsBytes(binaryData);
+        await writeBinaryFileAtomically(file2, binaryData);
       }
 
       if (saveSlot2 != null) {
@@ -478,7 +495,7 @@ class SaveLoadManager {
           isLocked: saveSlot2.isLocked,
         );
         final binaryData = updatedSaveSlot2.toBinary();
-        await file1.writeAsBytes(binaryData);
+        await writeBinaryFileAtomically(file1, binaryData);
       }
 
       return true;
@@ -506,11 +523,61 @@ class SaveLoadManager {
       final directory = await getSavesDirectory();
       final file = File('$directory/save_$slotId.sakisav');
       final binaryData = updatedSlot.toBinary();
-      await file.writeAsBytes(binaryData);
+      await writeBinaryFileAtomically(file, binaryData);
       return true;
     } catch (e) {
       print('Error toggling lock for slot $slotId: $e');
       return false;
+    }
+  }
+
+  static Future<void> writeBinaryFileAtomically(
+      File targetFile, Uint8List data) async {
+    await targetFile.parent.create(recursive: true);
+
+    final tempPath =
+        '${targetFile.path}.tmp.${DateTime.now().microsecondsSinceEpoch}';
+    final tempFile = File(tempPath);
+    try {
+      await tempFile.writeAsBytes(data, flush: true);
+      if (await targetFile.exists()) {
+        await targetFile.delete();
+      }
+      await tempFile.rename(targetFile.path);
+    } finally {
+      if (await tempFile.exists()) {
+        try {
+          await tempFile.delete();
+        } catch (_) {
+          // 忽略清理失败
+        }
+      }
+    }
+  }
+
+  SaveSlot? _decodeSaveSlot(Uint8List binaryData, String filePath) {
+    if (binaryData.length < 8) {
+      if (kEngineDebugMode) {
+        print('跳过损坏存档（长度过短）: $filePath');
+      }
+      return null;
+    }
+
+    final magic = String.fromCharCodes(binaryData.sublist(0, 4));
+    if (magic != 'SAKI') {
+      if (kEngineDebugMode) {
+        print('跳过非SAKI格式存档: $filePath');
+      }
+      return null;
+    }
+
+    try {
+      return SaveSlot.fromBinary(binaryData);
+    } catch (e) {
+      if (kEngineDebugMode) {
+        print('解析存档失败 $filePath: $e');
+      }
+      return null;
     }
   }
 }
@@ -526,7 +593,7 @@ class GameConfigManager {
 
     final file = File('${configDir.path}/game.sakiconfig');
     final binaryData = config.toBinary();
-    await file.writeAsBytes(binaryData);
+    await SaveLoadManager.writeBinaryFileAtomically(file, binaryData);
   }
 
   /// 从.sakiconfig文件加载游戏配置

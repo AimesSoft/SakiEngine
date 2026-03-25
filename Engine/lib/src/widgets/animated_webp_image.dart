@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/config/game_path_resolver.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:path/path.dart' as p;
-import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 import 'package:sakiengine/src/utils/webp_preload_cache.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 // 平台特定导入
 import 'animated_webp_image_io.dart'
@@ -66,48 +67,12 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
     super.dispose();
   }
 
-  /// 获取游戏路径，从dart-define或环境变量获取
-  String get _debugRoot {
-    const fromDefine =
-        String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
-    if (fromDefine.isNotEmpty) return fromDefine;
-
-    // Web平台不支持环境变量访问
-    if (kIsWeb) {
-      return '';
-    }
-
-    // 使用平台特定实现
-    return getPlatformEnvironment('SAKI_GAME_PATH');
-  }
-
-  /// 获取游戏路径，优先使用环境变量，如果没有则从assets读取default_game.txt
+  /// 获取游戏路径，统一由 GamePathResolver 解析
   Future<String> _getGamePath() async {
-    // Web平台直接返回空，不使用外部文件系统
-    if (kIsWeb) {
+    if (!GamePathResolver.shouldUseFileSystemAssets || kIsWeb) {
       return '';
     }
-
-    // 如果环境变量已设置，直接使用
-    if (_debugRoot.isNotEmpty) {
-      return _debugRoot;
-    }
-
-    try {
-      // 从assets读取default_game.txt
-      final assetContent =
-          await EngineAssetLoader.loadString('assets/default_game.txt');
-      final defaultGame = assetContent.trim();
-
-      if (defaultGame.isEmpty) {
-        throw Exception('default_game.txt is empty');
-      }
-
-      final gamePath = p.join(getCurrentDirectoryPath(), 'Game', defaultGame);
-      return gamePath;
-    } catch (e) {
-      return '';
-    }
+    return (await GamePathResolver.resolveGamePath()) ?? '';
   }
 
   /// 加载WebP字节数据，支持外部文件系统
@@ -120,7 +85,7 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
       }
 
       // 在debug模式下，优先从外部文件系统加载
-      if (kDebugMode && !kIsWeb) {
+      if (GamePathResolver.shouldUseFileSystemAssets && !kIsWeb) {
         final gamePath = await _getGamePath();
         if (gamePath.isNotEmpty) {
           final relativePath = widget.assetPath.startsWith('assets/')
@@ -289,7 +254,7 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
         });
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[AnimatedWebPImage] 加载WebP失败: $e');
       }
       if (mounted) {
@@ -303,6 +268,10 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
 
   @override
   Widget build(BuildContext context) {
+    final filterQuality = ImageSamplingManager().resolveWidgetFilterQuality(
+      defaultQuality: FilterQuality.high,
+    );
+
     if (_isLoading) {
       return SizedBox(
         width: widget.width,
@@ -351,6 +320,7 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
           fit: widget.fit ?? BoxFit.contain,
           width: widget.width,
           height: widget.height,
+          filterQuality: filterQuality,
         ),
       );
     }
@@ -381,6 +351,7 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
                     fit: widget.fit ?? BoxFit.contain,
                     width: widget.width,
                     height: widget.height,
+                    filterQuality: filterQuality,
                   );
                 } catch (e) {
                   // 如果动画渲染出错，显示第一帧
@@ -389,6 +360,7 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
                     fit: widget.fit ?? BoxFit.contain,
                     width: widget.width,
                     height: widget.height,
+                    filterQuality: filterQuality,
                   );
                 }
               },
@@ -398,6 +370,7 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
               fit: widget.fit ?? BoxFit.contain,
               width: widget.width,
               height: widget.height,
+              filterQuality: filterQuality,
             ),
     );
   }

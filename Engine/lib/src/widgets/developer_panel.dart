@@ -1,9 +1,9 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
-import 'package:sakiengine/src/config/asset_manager.dart';
+import 'package:sakiengine/src/config/game_path_resolver.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/game/game_script_localization.dart';
@@ -120,11 +120,11 @@ class _DeveloperPanelState extends State<DeveloperPanel>
                 _scrollToCurrentPosition();
               });
 
-              if (kDebugMode) {
+              if (kEngineDebugMode) {
                 print('开发者面板: 成功加载脚本 ${matchedFile.path}');
               }
             } catch (readError) {
-              if (kDebugMode) {
+              if (kEngineDebugMode) {
                 print('开发者面板: 读取脚本文件失败: $readError');
               }
               _currentScriptContent = '''// 当前正在播放的脚本: $currentScriptName.sks
@@ -174,7 +174,7 @@ $attemptedMessage
   void _scrollToCurrentPosition() {
     try {
       if (_currentScriptContent.isEmpty) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('开发者面板: 脚本内容为空，跳过滚动');
         }
         return;
@@ -183,7 +183,7 @@ $attemptedMessage
       // 获取当前对话文本
       final currentDialogue = widget.gameManager.currentDialogueText;
       if (currentDialogue.isEmpty) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('开发者面板: 当前对话文本为空，跳过滚动');
         }
         return;
@@ -192,7 +192,7 @@ $attemptedMessage
       final lines = _currentScriptContent.split('\n');
       if (lines.isEmpty) return;
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('开发者面板: 搜索对话文本: "$currentDialogue"');
       }
 
@@ -200,18 +200,18 @@ $attemptedMessage
       int targetLine = _findLineByDialogueText(lines, currentDialogue);
 
       if (targetLine >= 0) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('开发者面板: 找到对话文本位置，行号=$targetLine');
         }
       } else {
         // 如果找不到完全匹配，尝试模糊搜索
         targetLine = _findLineByPartialText(lines, currentDialogue);
         if (targetLine >= 0) {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print('开发者面板: 通过模糊搜索找到位置，行号=$targetLine');
           }
         } else {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print('开发者面板: 未找到对话文本，跳过滚动');
           }
           return;
@@ -232,13 +232,13 @@ $attemptedMessage
           curve: Curves.easeInOut,
         );
 
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print(
               '开发者面板: 滚动到位置 $targetOffset (行 $adjustedLine, 原始行 $targetLine)');
         }
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('开发者面板: 滚动到当前位置失败: $e');
       }
     }
@@ -299,7 +299,7 @@ $attemptedMessage
       // 从GameManager获取当前脚本执行索引
       return widget.gameManager.currentScriptIndex;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('开发者面板: 无法获取当前脚本索引: $e');
       }
       return 0;
@@ -310,12 +310,12 @@ $attemptedMessage
     // 从GameManager获取当前正在加载的脚本文件名
     try {
       final currentScriptFile = widget.gameManager.currentScriptFile;
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('开发者面板: 获取到当前脚本文件名: $currentScriptFile');
       }
       return currentScriptFile;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('开发者面板: 获取当前脚本名称失败: $e');
       }
       return 'start'; // 默认脚本
@@ -413,7 +413,7 @@ $attemptedMessage
   Future<void> _browseAndLoadScript() async {
     try {
       // 生成可能的脚本目录路径
-      final possibleDirs = _generatePossibleScriptDirs();
+      final possibleDirs = await _generatePossibleScriptDirs();
 
       Directory? scriptDir;
       for (final dirPath in possibleDirs) {
@@ -483,7 +483,7 @@ $attemptedMessage
     }
   }
 
-  List<String> _generatePossibleScriptDirs() {
+  Future<List<String>> _generatePossibleScriptDirs() async {
     final currentDir = Directory.current.path;
     final homeDir = Platform.environment['HOME'] ?? '';
     final variants = GameScriptLocalization.candidateDirectories();
@@ -512,16 +512,18 @@ $attemptedMessage
       }
     }
 
-    const fromDefine = String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
-    if (fromDefine.isNotEmpty && !fromDefine.contains('Containers')) {
-      addVariantPath((dir) => p.join(fromDefine, dir, 'labels'));
+    final resolvedGamePath = await GamePathResolver.resolveGamePath();
+    if (resolvedGamePath != null &&
+        resolvedGamePath.isNotEmpty &&
+        !resolvedGamePath.contains('Containers')) {
+      addVariantPath((dir) => p.join(resolvedGamePath, dir, 'labels'));
     }
 
-    final envPath = Platform.environment['SAKI_GAME_PATH'];
-    if (envPath != null &&
-        envPath.isNotEmpty &&
-        !envPath.contains('Containers')) {
-      addVariantPath((dir) => p.join(envPath, dir, 'labels'));
+    final configuredPath = GamePathResolver.configuredGamePathHint();
+    if (configuredPath != null &&
+        configuredPath.isNotEmpty &&
+        !configuredPath.contains('Containers')) {
+      addVariantPath((dir) => p.join(configuredPath, dir, 'labels'));
     }
 
     if (homeDir.isNotEmpty) {
@@ -648,36 +650,20 @@ $attemptedMessage
 
   // 复制AssetManager中的游戏路径获取逻辑
   Future<String?> _getGamePathFromAssetManager() async {
-    // 首先检查环境变量
-    const fromDefine =
-        String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
-    if (fromDefine.isNotEmpty) return fromDefine;
-
-    final fromEnv = Platform.environment['SAKI_GAME_PATH'];
-    if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
-
     try {
-      // 从assets读取default_game.txt
-      final assetContent =
-          await AssetManager().loadString('assets/default_game.txt');
-      final defaultGame = assetContent.trim();
-
-      if (defaultGame.isEmpty) {
-        throw Exception('default_game.txt is empty');
+      final gamePath = await GamePathResolver.resolveGamePath();
+      if (gamePath != null && gamePath.isNotEmpty) {
+        if (kEngineDebugMode) {
+          print("开发者面板: 解析到游戏路径: $gamePath");
+        }
+        return gamePath;
       }
-
-      final gamePath = p.join(Directory.current.path, 'Game', defaultGame);
-      if (kDebugMode) {
-        print("开发者面板: 从default_game.txt获取游戏路径: $gamePath");
-      }
-
-      return gamePath;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('开发者面板: 无法获取游戏路径: $e');
       }
-      return null;
     }
+    return null;
   }
 
   Future<void> _saveAndReloadScript() async {
@@ -704,11 +690,11 @@ $attemptedMessage
         await file.writeAsString(_scriptController.text);
         saveSuccess = true;
 
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('开发者面板: 直接文件写入成功 $_currentScriptPath');
         }
       } catch (directWriteError) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('开发者面板: 直接文件写入失败: $directWriteError');
         }
 
@@ -727,7 +713,7 @@ $attemptedMessage
 
           if (result.exitCode == 0) {
             saveSuccess = true;
-            if (kDebugMode) {
+            if (kEngineDebugMode) {
               print('开发者面板: 命令行写入成功 $_currentScriptPath');
             }
           } else {
@@ -747,7 +733,7 @@ $attemptedMessage
 
             if (result.exitCode == 0) {
               saveSuccess = true;
-              if (kDebugMode) {
+              if (kEngineDebugMode) {
                 print('开发者面板: cp命令写入成功 $_currentScriptPath');
               }
             } else {
@@ -809,7 +795,7 @@ $attemptedMessage
           ),
         );
       }
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('开发者面板: 保存脚本失败: $e');
       }
     }

@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/game/game_script_localization.dart';
 import 'package:sakiengine/src/sks_compiler/compiled_sks_bundle.dart';
@@ -21,7 +21,7 @@ class ScriptMerger {
     if (precompiledBundle != null && precompiledBundle.hasLabelScripts) {
       _loadFromCompiledBundle(precompiledBundle);
       if (_loadedScripts.isNotEmpty) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[ScriptMerger] 使用预编译脚本，共 ${_loadedScripts.length} 个文件');
         }
         return;
@@ -42,17 +42,17 @@ class ScriptMerger {
           _loadedScripts[fileNameWithoutExt] = script;
           _collectLabels(fileNameWithoutExt, script);
         } catch (e) {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             //print('[ScriptMerger] 加载脚本文件失败: $fileName - $e');
           }
         }
       }
       
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[ScriptMerger] 全局标签映射构建完成，共 ${_globalLabelMap.length} 个标签');
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('[ScriptMerger] 构建全局标签映射失败: $e');
       }
     }
@@ -114,7 +114,7 @@ class ScriptMerger {
     for (final node in script.children) {
       if (node is LabelNode) {
         _globalLabelMap[node.name] = fileNameWithoutExt;
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[ScriptMerger] 发现标签: ${node.name} 在文件 $fileNameWithoutExt 中');
         }
       }

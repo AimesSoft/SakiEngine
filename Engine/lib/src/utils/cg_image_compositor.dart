@@ -3,11 +3,12 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:collection';
 
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/utils/cg_cache_storage.dart';
 import 'package:sakiengine/src/utils/character_layer_parser.dart';
 import 'package:sakiengine/src/utils/image_loader.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 /// CG图像合成器 - 负责将多层图像合成为单张图像并将结果保存到磁盘缓存
 class CgImageCompositor {
@@ -105,7 +106,7 @@ class CgImageCompositor {
       }
       return file.readAsBytesSync();
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[CgImageCompositor] Failed to read cache file: $e');
       }
       return null;
@@ -127,7 +128,7 @@ class CgImageCompositor {
   ) async {
     try {
       if (kIsWeb) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print(
             '[CgImageCompositor] Skip CPU composition on Web for $cacheKey',
           );
@@ -197,7 +198,7 @@ class CgImageCompositor {
 
       return savedPath;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[CgImageCompositor] Composition failed: $e');
       }
       return null;
@@ -238,7 +239,9 @@ class CgImageCompositor {
       for (final image in layerImages) {
         final paint = ui.Paint()
           ..isAntiAlias = true
-          ..filterQuality = ui.FilterQuality.high;
+          ..filterQuality = ImageSamplingManager().resolveCanvasFilterQuality(
+            defaultQuality: ui.FilterQuality.high,
+          );
         final srcRect = ui.Rect.fromLTWH(
           0,
           0,
@@ -274,7 +277,7 @@ class CgImageCompositor {
       _memoryPathCache[cacheKey] = memoryPath;
       return memoryPath;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print(
           '[CgImageCompositor] Failed to save composite image in memory: $e',
         );
@@ -300,7 +303,7 @@ class CgImageCompositor {
       await file.writeAsBytes(bytes, flush: false);
       await CgCacheStorage().pruneIfNeeded();
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print(
           '[CgImageCompositor] Disk cache saved: $cacheKey (${bytes.length} bytes)',
         );
@@ -308,7 +311,7 @@ class CgImageCompositor {
 
       return file.path;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[CgImageCompositor] Failed to save composite image: $e');
       }
       return null;
@@ -324,11 +327,11 @@ class CgImageCompositor {
       _compositingTasks.clear();
       await CgCacheStorage().clear();
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[CgImageCompositor] Disk cache cleared');
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[CgImageCompositor] Failed to clear cache: $e');
       }
     }

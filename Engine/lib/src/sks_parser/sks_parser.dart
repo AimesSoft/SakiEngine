@@ -1,6 +1,15 @@
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 
 class SksParser {
+  static const bool _musicParseDiagnostics =
+      bool.fromEnvironment('SAKI_MUSIC_PARSE_DIAGNOSTICS', defaultValue: false);
+
+  static void _logMusicParse(String message) {
+    if (_musicParseDiagnostics) {
+      print('[SksParser][music] $message');
+    }
+  }
+
   static bool _isValidHexColor(String color) {
     if (!color.startsWith('#')) return false;
     final hex = color.substring(1);
@@ -550,8 +559,15 @@ class SksParser {
           nodes.add(FxNode(filterString));
           break;
         case 'play':
+          _logMusicParse(
+            'line=${i + 1} play raw="$originalLine" parsed="$trimmedLine" parts=${parts.join('|')}',
+          );
           if (parts.length >= 3 && parts[1] == 'music') {
             final musicFile = parts.sublist(2).join(' ').trim();
+            _logMusicParse('line=${i + 1} parsed play music -> "$musicFile"');
+            if (musicFile.isEmpty) {
+              _logMusicParse('line=${i + 1} warning: musicFile is empty');
+            }
             nodes.add(PlayMusicNode(musicFile));
           } else if (parts.length >= 3 && parts[1] == 'sound') {
             // play sound filename [loop]

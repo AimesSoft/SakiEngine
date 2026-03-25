@@ -3,7 +3,7 @@
 /// 定义了层叠图像系统中的基础数据类型
 library layer_types;
 
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 
 /// 图层类型枚举
 enum LayerType {

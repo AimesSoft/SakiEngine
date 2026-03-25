@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
@@ -265,7 +265,7 @@ class _ReviewOverlayState extends State<ReviewOverlay> {
       case AxisDirection.up:
         return metrics.pixels <= metrics.minScrollExtent + tolerance;
       default:
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           debugPrint('[ReviewOverlay] Unexpected axisDirection=${metrics.axisDirection}, treating as latest');
         }
         return true;
@@ -283,7 +283,7 @@ class _ReviewOverlayState extends State<ReviewOverlay> {
       case AxisDirection.up:
         return delta < 0;
       default:
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           debugPrint('[ReviewOverlay] Unexpected axisDirection=$axisDirection in delta check');
         }
         return delta > 0;

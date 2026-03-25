@@ -6,10 +6,11 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/rendering/layered/layer_types.dart';
 import 'package:sakiengine/src/rendering/layered/layered_image_renderer.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 /// 高性能层叠图像显示组件
 ///
@@ -237,7 +238,7 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
 
       stopwatch.stop();
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print(
           '[LayeredImageWidget] Loaded in ${stopwatch.elapsedMilliseconds}ms: $imageId (${newTextures.length} layers)',
         );
@@ -251,7 +252,7 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
         _errorMessage = e.toString();
       });
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[LayeredImageWidget] Load error: $e\n$stackTrace');
       }
     }
@@ -345,7 +346,7 @@ class _LayeredImageWidgetState extends State<LayeredImageWidget>
 
   /// 构建错误组件
   Widget _buildErrorWidget() {
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       return Container(
         color: Colors.red.withOpacity(0.1),
         child: Center(
@@ -466,13 +467,14 @@ class _LayerPainter extends CustomPainter {
       // 高质量绘制
       final paint = ui.Paint()
         ..isAntiAlias = true
-        ..filterQuality = preferSpeed
-            ? ui.FilterQuality.low
-            : ui.FilterQuality.high;
+        ..filterQuality =
+            ImageSamplingManager().resolveCanvasFilterQualityBySpeed(
+          preferSpeed: preferSpeed,
+        );
 
       canvas.drawImageRect(texture, sourceRect, destinationRect, paint);
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('[_LayerPainter] Paint error: $e');
       }
       // 静默失败，避免崩溃
@@ -500,7 +502,7 @@ class LayeredImagePerformanceMonitor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!kDebugMode) return child;
+    if (!kEngineDebugMode) return child;
 
     return Stack(
       children: [

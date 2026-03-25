@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:html' as html;
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 /// 已读文本跟踪器 - Web平台版本
@@ -73,7 +73,7 @@ class ReadTextTracker extends ChangeNotifier {
       html.window.localStorage.remove(_storageKey);
       _readDialogues.clear();
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('清除已读记录失败: $e');
       }
       _readDialogues.clear();
@@ -94,7 +94,7 @@ class ReadTextTracker extends ChangeNotifier {
         }
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('加载已读记录失败: $e');
       }
     }
@@ -111,7 +111,7 @@ class ReadTextTracker extends ChangeNotifier {
       };
       html.window.localStorage[_storageKey] = json.encode(data);
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('保存已读记录失败: $e');
       }
     }
@@ -137,7 +137,7 @@ class ReadTextTracker extends ChangeNotifier {
       await _saveToStorage();
       notifyListeners();
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('导入已读记录失败: $e');
       }
     }

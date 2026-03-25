@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/config/game_path_resolver.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
 /// 管理 CG 预合成结果的磁盘缓存目录
 class CgCacheStorage {
@@ -44,10 +44,8 @@ class CgCacheStorage {
 
   Future<String> _resolveProjectName() async {
     try {
-      final content =
-          await EngineAssetLoader.loadString('assets/default_game.txt');
-      final projectName = content.trim();
-      if (projectName.isNotEmpty) {
+      final projectName = await GamePathResolver.resolveProjectName();
+      if (projectName != null && projectName.isNotEmpty) {
         return projectName;
       }
     } catch (_) {

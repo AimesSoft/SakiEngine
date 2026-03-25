@@ -1,9 +1,10 @@
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/utils/character_layer_parser.dart';
 import 'package:sakiengine/src/utils/expression_offset_manager.dart';
 import 'package:sakiengine/src/utils/image_loader.dart';
+import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 class CharacterCompositeCache {
   CharacterCompositeCache._();
@@ -23,7 +24,7 @@ class CharacterCompositeCache {
   Future<ui.Image?> preload(String resourceId, String pose, String expression) {
     final key = _buildKey(resourceId, pose, expression);
     //print('[CharacterCompositeCache] preload调用 - key: $key');
-    
+
     final cached = _imageCache[key];
     if (cached != null) {
       //print('[CharacterCompositeCache] 使用缓存图像 - key: $key');
@@ -52,10 +53,11 @@ class CharacterCompositeCache {
     return task;
   }
 
-  Future<ui.Image?> _compose(String resourceId, String pose, String expression) async {
+  Future<ui.Image?> _compose(
+      String resourceId, String pose, String expression) async {
     try {
       //print('[CharacterCompositeCache] 开始合成角色 - resourceId: $resourceId, pose: $pose, expression: $expression');
-      
+
       final layerInfos = await CharacterLayerParser.parseCharacterLayers(
         resourceId: resourceId,
         pose: pose,
@@ -63,7 +65,7 @@ class CharacterCompositeCache {
       );
 
       //print('[CharacterCompositeCache] 图层解析完成 - 图层数量: ${layerInfos.length}');
-      
+
       if (layerInfos.isEmpty) {
         //print('[CharacterCompositeCache] 没有图层信息，返回null');
         return null;
@@ -74,13 +76,13 @@ class CharacterCompositeCache {
 
       for (final info in layerInfos) {
         //print('[CharacterCompositeCache] 处理图层: ${info.layerType}, 资源名: ${info.assetName}');
-        
+
         final assetPath = await AssetManager().findAsset(info.assetName);
         if (assetPath == null) {
           //print('[CharacterCompositeCache] 找不到资源: ${info.assetName}');
           continue;
         }
-        
+
         final image = await ImageLoader.loadImage(assetPath);
         if (image == null) {
           //print('[CharacterCompositeCache] 图像加载失败: $assetPath');
@@ -114,16 +116,18 @@ class CharacterCompositeCache {
       }
 
       //print('[CharacterCompositeCache] 开始Canvas合成 - 基础尺寸: ${base.width}x${base.height}');
-      
+
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder);
       final paint = ui.Paint()
         ..isAntiAlias = true
-        ..filterQuality = ui.FilterQuality.high;
+        ..filterQuality = ImageSamplingManager().resolveCanvasFilterQuality(
+          defaultQuality: ui.FilterQuality.high,
+        );
 
       final width = base.width.toDouble();
       final height = base.height.toDouble();
-      
+
       // 保存基础图像的尺寸，用于后续的toImage调用
       final baseWidth = base.width;
       final baseHeight = base.height;
@@ -147,16 +151,16 @@ class CharacterCompositeCache {
       }
 
       //print('[CharacterCompositeCache] Canvas绘制完成，开始转换为图像');
-      
+
       final picture = recorder.endRecording();
       final composed = await picture.toImage(baseWidth, baseHeight);
       picture.dispose();
-      
+
       // 现在安全地释放所有图层图像
       for (final layer in images) {
         layer.image.dispose();
       }
-      
+
       //print('[CharacterCompositeCache] 图像合成成功');
       return composed;
     } catch (e, stackTrace) {

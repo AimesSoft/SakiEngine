@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/core/game_module.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
 
@@ -26,7 +26,7 @@ class ProjectModuleLoader {
   void registerModule(String projectName, GameModuleFactory factory) {
     final normalizedName = projectName.toLowerCase();
     _registeredModules[normalizedName] = factory;
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[ProjectModuleLoader] 注册项目模块: $normalizedName');
     }
   }
@@ -51,13 +51,13 @@ class ProjectModuleLoader {
         _currentModule = _registeredModules[normalizedProjectName]!();
         await _currentModule!.initialize();
 
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[ProjectModuleLoader] 加载已注册模块: $projectName');
         }
 
         return _currentModule!;
       } catch (e) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           //print('[ProjectModuleLoader] 加载已注册模块失败: $projectName, 错误: $e');
         }
       }
@@ -67,7 +67,7 @@ class ProjectModuleLoader {
     _currentModule = DefaultGameModule();
     await _currentModule!.initialize();
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       //print('[ProjectModuleLoader] 使用默认模块: $projectName');
     }
 

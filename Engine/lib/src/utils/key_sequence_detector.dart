@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/config/game_path_resolver.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
-import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/game/game_script_localization.dart';
 
 /// 按键序列检测器
@@ -32,7 +32,7 @@ class KeySequenceDetector {
     _isListening = true;
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       final sequenceNames =
           _targetSequence.map((key) => key.debugName).join('-');
       print('按键序列检测器: 开始监听序列 $sequenceNames');
@@ -48,7 +48,7 @@ class KeySequenceDetector {
     HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     _currentSequence.clear();
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('按键序列检测器: 停止监听');
     }
   }
@@ -65,14 +65,14 @@ class KeySequenceDetector {
         _currentSequence.add(key);
         _resetTimeout();
 
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print(
               '按键序列检测器: 按键 ${key.debugName} 匹配，当前序列长度: ${_currentSequence.length}/${_targetSequence.length}');
         }
 
         // 检查序列是否完成
         if (_currentSequence.length == _targetSequence.length) {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print('按键序列检测器: 序列完成！');
           }
           _onSequenceComplete();
@@ -84,7 +84,7 @@ class KeySequenceDetector {
       } else {
         // 按键不匹配，重置序列
         if (_currentSequence.isNotEmpty) {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print('按键序列检测器: 按键 ${key.debugName} 不匹配，重置序列');
           }
           _resetSequence();
@@ -98,7 +98,7 @@ class KeySequenceDetector {
   void _resetTimeout() {
     _cancelTimeoutTimer();
     _timeoutTimer = Timer(_sequenceTimeout, () {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('按键序列检测器: 序列超时，重置');
       }
       _resetSequence();
@@ -146,7 +146,7 @@ class LongPressKeyDetector {
     _isListening = true;
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('长按键检测器: 开始监听 ${_targetKey.debugName} 长按事件');
     }
   }
@@ -160,7 +160,7 @@ class LongPressKeyDetector {
     HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     _isKeyPressed = false;
 
-    if (kDebugMode) {
+    if (kEngineDebugMode) {
       print('长按键检测器: 停止监听');
     }
   }
@@ -175,7 +175,7 @@ class LongPressKeyDetector {
           _isKeyPressed = true;
           _startLongPressTimer();
 
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print('长按键检测器: ${_targetKey.debugName} 按下，开始计时');
           }
         }
@@ -186,7 +186,7 @@ class LongPressKeyDetector {
           _isKeyPressed = false;
           _cancelLongPressTimer();
 
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print('长按键检测器: ${_targetKey.debugName} 松开，取消计时');
           }
         }
@@ -201,7 +201,7 @@ class LongPressKeyDetector {
     _cancelLongPressTimer();
     _longPressTimer = Timer(_longPressDuration, () {
       if (_isKeyPressed && _isListening) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('长按键检测器: ${_targetKey.debugName} 长按触发');
         }
         _onLongPress();
@@ -237,7 +237,7 @@ class ScriptContentModifier {
     try {
       final file = File(scriptFilePath);
       if (!await file.exists()) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('脚本修改器: 文件不存在 $scriptFilePath');
         }
         return false;
@@ -258,7 +258,7 @@ class ScriptContentModifier {
             lines[i] = lines[i].replaceAll(line, modifiedLine);
             modified = true;
 
-            if (kDebugMode) {
+            if (kEngineDebugMode) {
               print('脚本修改器: 修改对话行');
               print('原始行: $line');
               print('修改后: $modifiedLine');
@@ -272,18 +272,18 @@ class ScriptContentModifier {
         final modifiedContent = lines.join('\n');
         await _writeScriptFile(file, modifiedContent);
 
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('脚本修改器: 成功保存修改的脚本文件');
         }
         return true;
       } else {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('脚本修改器: 未找到匹配的对话行');
         }
         return false;
       }
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('脚本修改器: 修改脚本文件失败: $e');
       }
       return false;
@@ -297,7 +297,7 @@ class ScriptContentModifier {
     final trimmedLine = line.trim();
     final trimmedDialogue = targetDialogue.trim();
 
-    if (kDebugMode && line.contains(targetDialogue.replaceAll('"', ''))) {
+    if (kEngineDebugMode && line.contains(targetDialogue.replaceAll('"', ''))) {
       print('ScriptModifier: 检查行匹配');
       print('ScriptModifier: 行内容: "$trimmedLine"');
       print('ScriptModifier: 目标对话: "$trimmedDialogue"');
@@ -321,7 +321,7 @@ class ScriptContentModifier {
       final dialogueContent = trimmedLine.substring(1, trimmedLine.length - 1);
       if (normalizeDialogue(dialogueContent) ==
           normalizeDialogue(trimmedDialogue)) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('ScriptModifier: 匹配格式1（纯对话）');
         }
         return true;
@@ -335,14 +335,16 @@ class ScriptContentModifier {
       if (parts.isNotEmpty) {
         final lineCharacterId = parts[0];
 
-        if (kDebugMode && line.contains(targetDialogue.replaceAll('"', ''))) {
+        if (kEngineDebugMode &&
+            line.contains(targetDialogue.replaceAll('"', ''))) {
           print('ScriptModifier: 行角色ID: "$lineCharacterId"');
         }
 
         // 如果指定了expectedCharacterId，必须匹配
         if (expectedCharacterId != null &&
             lineCharacterId != expectedCharacterId) {
-          if (kDebugMode && line.contains(targetDialogue.replaceAll('"', ''))) {
+          if (kEngineDebugMode &&
+              line.contains(targetDialogue.replaceAll('"', ''))) {
             print(
                 'ScriptModifier: 角色ID不匹配: "$lineCharacterId" != "$expectedCharacterId"');
           }
@@ -354,7 +356,8 @@ class ScriptContentModifier {
         if (quoteStart >= 0 && quoteEnd > quoteStart) {
           final dialogueContent =
               trimmedLine.substring(quoteStart + 1, quoteEnd);
-          if (kDebugMode && line.contains(targetDialogue.replaceAll('"', ''))) {
+          if (kEngineDebugMode &&
+              line.contains(targetDialogue.replaceAll('"', ''))) {
             print('ScriptModifier: 提取的对话内容: "$dialogueContent"');
             print(
                 'ScriptModifier: 标准化后的对话内容: "${normalizeDialogue(dialogueContent)}"');
@@ -367,7 +370,7 @@ class ScriptContentModifier {
           // 使用标准化后的文本进行比较
           if (normalizeDialogue(dialogueContent) ==
               normalizeDialogue(trimmedDialogue)) {
-            if (kDebugMode) {
+            if (kEngineDebugMode) {
               print('ScriptModifier: 匹配格式2/3（角色+对话）');
             }
             return true;
@@ -443,7 +446,7 @@ class ScriptContentModifier {
     String? newExpression,
   }) async {
     try {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('ScriptModifier: 开始修改对话行');
         print('ScriptModifier: 文件路径: $scriptFilePath');
         print('ScriptModifier: 目标对话: "$targetDialogue"');
@@ -454,7 +457,7 @@ class ScriptContentModifier {
 
       final file = File(scriptFilePath);
       if (!await file.exists()) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('ScriptModifier: 文件不存在');
         }
         return false;
@@ -464,7 +467,7 @@ class ScriptContentModifier {
       final lines = content.split('\n');
       bool modified = false;
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('ScriptModifier: 读取到 ${lines.length} 行脚本');
       }
 
@@ -476,13 +479,13 @@ class ScriptContentModifier {
             .replaceAll('"', '')
             .replaceAll('「', '')
             .replaceAll('」', '');
-        if (kDebugMode && line.contains(dialogueCore)) {
+        if (kEngineDebugMode && line.contains(dialogueCore)) {
           print('ScriptModifier: 找到包含关键词的行 $i: "$line"');
         }
 
         // 检查是否是包含目标对话的行，同时验证角色ID
         if (_isTargetDialogueLine(line, targetDialogue, characterId)) {
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print('ScriptModifier: 确认匹配行 $i: "$line"');
           }
 
@@ -492,14 +495,14 @@ class ScriptContentModifier {
             lines[i] = lines[i].replaceAll(line, modifiedLine);
             modified = true;
 
-            if (kDebugMode) {
+            if (kEngineDebugMode) {
               print('ScriptModifier: 修改对话行（pose+expression）');
               print('ScriptModifier: 原始行: $line');
               print('ScriptModifier: 修改后: $modifiedLine');
             }
             break; // 只修改第一个匹配的行
           } else {
-            if (kDebugMode) {
+            if (kEngineDebugMode) {
               print('ScriptModifier: 修改后的行与原始行相同，无需更改');
             }
           }
@@ -510,19 +513,19 @@ class ScriptContentModifier {
         final modifiedContent = lines.join('\n');
         await _writeScriptFile(file, modifiedContent);
 
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('ScriptModifier: 成功保存修改的脚本文件（pose+expression）');
         }
         return true;
       } else {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('ScriptModifier: 未找到匹配的对话行或无需修改');
         }
       }
 
       return false;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('ScriptModifier: 修改对话行失败: $e');
       }
       return false;
@@ -538,12 +541,12 @@ class ScriptContentModifier {
     try {
       await file.writeAsString(content);
       writeSuccess = true;
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('脚本修改器: 直接文件写入成功');
       }
     } catch (e) {
       lastError = '直接写入失败: $e';
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('脚本修改器: $lastError');
       }
     }
@@ -555,12 +558,12 @@ class ScriptContentModifier {
         await tempFile.writeAsString(content);
         await tempFile.rename(file.path);
         writeSuccess = true;
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('脚本修改器: 临时文件写入成功');
         }
       } catch (e) {
         lastError += ', 临时文件写入失败: $e';
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('脚本修改器: 临时文件写入失败: $e');
         }
       }
@@ -585,7 +588,7 @@ class ScriptContentModifier {
 
         if (result.exitCode == 0) {
           writeSuccess = true;
-          if (kDebugMode) {
+          if (kEngineDebugMode) {
             print('脚本修改器: 命令行写入成功');
           }
         } else {
@@ -619,13 +622,13 @@ class ScriptContentModifier {
         }
       }
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print(
             '脚本修改器: 未找到脚本文件 $scriptName.sks (尝试目录: ${candidateDirs.join(', ')})');
       }
       return null;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('脚本修改器: 获取脚本文件路径失败: $e');
       }
       return null;
@@ -635,34 +638,18 @@ class ScriptContentModifier {
   /// 从AssetManager获取游戏路径
   static Future<String?> _getGamePathFromAssetManager() async {
     try {
-      // 首先检查环境变量
-      const fromDefine =
-          String.fromEnvironment('SAKI_GAME_PATH', defaultValue: '');
-      if (fromDefine.isNotEmpty) return fromDefine;
-
-      final fromEnv = Platform.environment['SAKI_GAME_PATH'];
-      if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
-
-      // 从assets读取default_game.txt
-      final assetContent =
-          await AssetManager().loadString('assets/default_game.txt');
-      final defaultGame = assetContent.trim();
-
-      if (defaultGame.isEmpty) {
-        throw Exception('default_game.txt is empty');
+      final gamePath = await GamePathResolver.resolveGamePath();
+      if (gamePath != null && gamePath.isNotEmpty) {
+        if (kEngineDebugMode) {
+          print("脚本修改器: 解析到游戏路径: $gamePath");
+        }
+        return gamePath;
       }
-
-      final gamePath = p.join(Directory.current.path, 'Game', defaultGame);
-      if (kDebugMode) {
-        print("脚本修改器: 从default_game.txt获取游戏路径: $gamePath");
-      }
-
-      return gamePath;
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('脚本修改器: 无法获取游戏路径: $e');
       }
-      return null;
     }
+    return null;
   }
 }

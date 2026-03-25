@@ -1,7 +1,7 @@
 import 'dart:convert' show utf8;
 import 'dart:typed_data';
 import 'dart:math' show min;
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 

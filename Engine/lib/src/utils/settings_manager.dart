@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
@@ -15,6 +15,7 @@ class SettingsManager extends ChangeNotifier {
   static const bool defaultIsFullscreen = false;
   static const bool defaultDarkMode = false;
   static const bool defaultMouseParallaxEnabled = true;
+  static const bool defaultShowFpsOverlay = false;
   static const bool defaultMusicEnabled = true;
   static const bool defaultSoundEnabled = true;
   static const double defaultMusicVolume = 0.8;
@@ -29,6 +30,7 @@ class SettingsManager extends ChangeNotifier {
   static const String defaultFastForwardMode = 'read_only'; // 'read_only' or 'force'
   static const String defaultMouseRollbackBehavior = 'rewind'; // 'rewind' or 'history'
   static const String defaultDialogueFontFamily = 'SourceHanSansCN'; // 对话文字字体
+  static const String _showFpsOverlayKey = 'sakiengine.showFpsOverlay';
 
   final _dataManager = UnifiedGameDataManager();
   String? _projectName;
@@ -175,6 +177,29 @@ class SettingsManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> getShowFpsOverlay() async {
+    await init();
+    return _dataManager.getBoolVariable(
+      _showFpsOverlayKey,
+      defaultValue: defaultShowFpsOverlay,
+    );
+  }
+
+  bool get currentShowFpsOverlay => _dataManager.getBoolVariable(
+        _showFpsOverlayKey,
+        defaultValue: defaultShowFpsOverlay,
+      );
+
+  Future<void> setShowFpsOverlay(bool enabled) async {
+    await init();
+    await _dataManager.setBoolVariable(
+      _showFpsOverlayKey,
+      enabled,
+      _projectName!,
+    );
+    notifyListeners();
+  }
+
   // 菜单页面显示模式设置
   Future<String> getMenuDisplayMode() async {
     await init();
@@ -246,6 +271,7 @@ class SettingsManager extends ChangeNotifier {
     await _dataManager.setSpeakerAnimation(defaultSpeakerAnimation, _projectName!);
     await _dataManager.setAutoHideQuickMenu(defaultAutoHideQuickMenu, _projectName!);
     await _dataManager.setMouseParallaxEnabled(defaultMouseParallaxEnabled, _projectName!);
+    await _dataManager.setBoolVariable(_showFpsOverlayKey, defaultShowFpsOverlay, _projectName!);
     await _dataManager.setMenuDisplayMode(projectDefaultMenuDisplayMode, _projectName!);
     await _dataManager.setFastForwardMode(defaultFastForwardMode, _projectName!);
     await _dataManager.setMouseRollbackBehavior(defaultMouseRollbackBehavior, _projectName!);
@@ -270,6 +296,7 @@ class SettingsManager extends ChangeNotifier {
       'isFullscreen': await getIsFullscreen(),
       'typewriterCharsPerSecond': await getTypewriterCharsPerSecond(),
       'skipPunctuationDelay': await getSkipPunctuationDelay(),
+      'showFpsOverlay': await getShowFpsOverlay(),
     };
   }
 }

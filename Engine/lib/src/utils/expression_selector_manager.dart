@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/services.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/utils/key_sequence_detector.dart';
@@ -24,7 +24,7 @@ class ExpressionSelectorManager {
 
   /// 初始化Shift+C快捷键检测（仅在Debug模式下）
   void initialize() {
-    if (!kDebugMode) return;
+    if (!kEngineDebugMode) return;
     
     // 使用Shift+C快捷键，避免与其他功能冲突
     _setupShiftCHotkey();
@@ -38,7 +38,7 @@ class ExpressionSelectorManager {
 
   /// 处理键盘事件
   bool _handleKeyEvent(KeyEvent event) {
-    if (!kDebugMode) return false;
+    if (!kEngineDebugMode) return false;
     
     // 检查Shift+C组合键
     if (event is KeyDownEvent && 
@@ -104,7 +104,7 @@ class ExpressionSelectorManager {
         return;
       }
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('表情选择器: 检测到说话角色 ${speakerInfo.speakerName} (${speakerInfo.characterId})');
         print('当前pose: ${speakerInfo.currentPose}, expression: ${speakerInfo.currentExpression}');
       }
@@ -113,7 +113,7 @@ class ExpressionSelectorManager {
       setExpressionSelectorVisibility(true);
 
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         //print('表情选择器: 获取角色信息失败: $e');
       }
       showNotificationCallback('获取角色信息失败');
@@ -212,18 +212,18 @@ class ExpressionSelectorManager {
   /// 处理表情选择变更
   Future<void> handleExpressionSelectionChanged(String characterId, String pose, String expression) async {
     try {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('ExpressionSelector: 开始处理表情选择变更 - characterId: $characterId, pose: $pose, expression: $expression');
       }
 
       // 获取当前对话文本
       final currentDialogue = gameManager.currentDialogueText;
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('ExpressionSelector: 当前对话文本: "$currentDialogue"');
       }
       
       if (currentDialogue.isEmpty) {
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('ExpressionSelector: 对话文本为空，尝试从当前状态获取');
         }
         // 尝试从当前状态获取对话
@@ -241,7 +241,7 @@ class ExpressionSelectorManager {
       await _processExpressionChange(currentDialogue, characterId, pose, expression);
 
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('ExpressionSelector: 处理表情选择变更失败: $e');
       }
       showNotificationCallback('应用差分失败: $e');
@@ -251,13 +251,13 @@ class ExpressionSelectorManager {
   /// 处理表情变更的核心逻辑
   Future<void> _processExpressionChange(String dialogue, String characterId, String pose, String expression) async {
     try {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('ExpressionSelector: 处理表情变更 - dialogue: "$dialogue", characterId: $characterId');
       }
 
       // 获取当前脚本文件路径
       final scriptPath = await ScriptContentModifier.getCurrentScriptFilePath(gameManager.currentScriptFile);
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('ExpressionSelector: 脚本文件路径: $scriptPath');
       }
       
@@ -270,7 +270,7 @@ class ExpressionSelectorManager {
       final speakerInfo = getCurrentSpeakerInfo();
       final scriptCharacterKey = speakerInfo?.scriptCharacterKey ?? characterId;
       
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('ExpressionSelector: 脚本角色Key: $scriptCharacterKey');
       }
 
@@ -283,7 +283,7 @@ class ExpressionSelectorManager {
         newExpression: expression,
       );
 
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('ExpressionSelector: 脚本修改结果: $success');
       }
 
@@ -291,7 +291,7 @@ class ExpressionSelectorManager {
         showNotificationCallback('已应用差分: $pose / $expression');
         
         // 触发脚本重载
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('ExpressionSelector: 触发脚本重载');
         }
         triggerReloadCallback();
@@ -300,7 +300,7 @@ class ExpressionSelectorManager {
       }
 
     } catch (e) {
-      if (kDebugMode) {
+      if (kEngineDebugMode) {
         print('ExpressionSelector: 处理表情变更异常: $e');
       }
       showNotificationCallback('处理表情变更失败: $e');

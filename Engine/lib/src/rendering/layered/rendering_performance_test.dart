@@ -5,7 +5,7 @@ library rendering_performance_test;
 
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart';
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/rendering/rendering_system_integration.dart';
@@ -169,7 +169,7 @@ class RenderingPerformanceTester {
         
       } catch (e) {
         errorCount++;
-        if (kDebugMode) {
+        if (kEngineDebugMode) {
           print('[PerformanceTester] Render error in $systemType: $e');
         }
       }
