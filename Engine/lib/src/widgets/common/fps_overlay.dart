@@ -94,8 +94,13 @@ class _FpsOverlayState extends State<FpsOverlay> {
           ),
           child: Text(
             _fps > 0 ? 'FPS ${_fps.toStringAsFixed(1)}' : 'FPS --',
+            textHeightBehavior: const TextHeightBehavior(
+              applyHeightToFirstAscent: false,
+              applyHeightToLastDescent: false,
+            ),
             style: config.dialogueTextStyle.copyWith(
               fontSize: config.dialogueTextStyle.fontSize! * textScale * 0.48,
+              decoration: TextDecoration.none,
               fontWeight: FontWeight.w700,
               color: Colors.white,
             ),
