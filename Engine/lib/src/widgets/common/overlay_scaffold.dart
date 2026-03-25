@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/services.dart';
@@ -15,6 +17,10 @@ class OverlayScaffold extends StatefulWidget {
   final Widget content;
   final Widget? footer;
   final bool showHeader;
+  final bool enableWindowDragInWindowedMode;
+  final bool clearBackdropInWindowedMode;
+  final bool disableWindowTintOverlay;
+  final double windowedDragHandleHeight;
   final void Function(bool triggeredByOverscroll) onClose;
 
   const OverlayScaffold({
@@ -23,6 +29,10 @@ class OverlayScaffold extends StatefulWidget {
     required this.content,
     this.footer,
     this.showHeader = true,
+    this.enableWindowDragInWindowedMode = false,
+    this.clearBackdropInWindowedMode = false,
+    this.disableWindowTintOverlay = false,
+    this.windowedDragHandleHeight = 56.0,
     required this.onClose,
   });
 
@@ -39,6 +49,9 @@ class OverlayScaffoldState extends State<OverlayScaffold>
   bool _isClosing = false;
 
   String _menuDisplayMode = SettingsManager.defaultMenuDisplayMode;
+  Offset _windowDragDelta = Offset.zero;
+  Offset _dragStartGlobal = Offset.zero;
+  Offset _dragStartDelta = Offset.zero;
 
   // ESC热键
   late HotKey _escHotKey;
@@ -138,12 +151,51 @@ class OverlayScaffoldState extends State<OverlayScaffold>
     close(triggeredByOverscroll: triggeredByOverscroll);
   }
 
+  Offset _clampWindowDragDelta(Offset delta, Size screenSize, Size windowSize) {
+    final maxDx = math.max(0.0, (screenSize.width - windowSize.width) / 2);
+    final maxDy = math.max(0.0, (screenSize.height - windowSize.height) / 2);
+    return Offset(
+      delta.dx.clamp(-maxDx, maxDx).toDouble(),
+      delta.dy.clamp(-maxDy, maxDy).toDouble(),
+    );
+  }
+
+  void _onWindowDragStart(DragStartDetails details) {
+    _dragStartGlobal = details.globalPosition;
+    _dragStartDelta = _windowDragDelta;
+  }
+
+  void _onWindowDragUpdate(
+    DragUpdateDetails details, {
+    required Size screenSize,
+    required Size windowSize,
+  }) {
+    final delta = details.globalPosition - _dragStartGlobal;
+    final next = _dragStartDelta + delta;
+    setState(() {
+      _windowDragDelta = _clampWindowDragDelta(next, screenSize, windowSize);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final config = SakiEngineConfig();
     final uiScale = context.scaleFor(ComponentType.ui);
     final textScale = context.scaleFor(ComponentType.text);
+    final isFullscreen = _menuDisplayMode == 'fullscreen';
+    final windowWidth =
+        isFullscreen ? screenSize.width : screenSize.width * 0.85;
+    final windowHeight =
+        isFullscreen ? screenSize.height : screenSize.height * 0.8;
+    final windowSize = Size(windowWidth, windowHeight);
+    final clampedWindowDelta = isFullscreen
+        ? Offset.zero
+        : _clampWindowDragDelta(_windowDragDelta, screenSize, windowSize);
+    final backdropColor = (widget.clearBackdropInWindowedMode && !isFullscreen)
+        ? Colors.transparent
+        : config.themeColors.primaryDark
+            .withOpacity(0.5 * _backdropAnimation.value);
 
     return AnimatedBuilder(
       animation: _animationController,
@@ -155,93 +207,130 @@ class OverlayScaffoldState extends State<OverlayScaffold>
             width: double.infinity,
             height: double.infinity,
             decoration: BoxDecoration(
-              color: config.themeColors.primaryDark
-                  .withOpacity(0.5 * _backdropAnimation.value),
+              color: backdropColor,
             ),
             child: GestureDetector(
               onTap: () {},
               onSecondaryTap: _handleClose,
               child: Center(
-                child: Transform.scale(
-                  scale: _scaleAnimation.value,
-                  child: FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Container(
-                      width: _menuDisplayMode == 'fullscreen'
-                          ? screenSize.width
-                          : screenSize.width * 0.85,
-                      height: _menuDisplayMode == 'fullscreen'
-                          ? screenSize.height
-                          : screenSize.height * 0.8,
-                      decoration: _menuDisplayMode == 'fullscreen'
-                          ? null
-                          : BoxDecoration(
-                              borderRadius: BorderRadius.circular(
-                                  config.baseWindowBorder),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black
-                                      .withOpacity(0.3 * _fadeAnimation.value),
-                                  blurRadius: 20 * uiScale,
-                                  offset: Offset(0, 8 * uiScale),
-                                ),
-                              ],
-                            ),
-                      child: ClipRRect(
-                        borderRadius: _menuDisplayMode == 'fullscreen'
-                            ? BorderRadius.zero
-                            : BorderRadius.circular(config.baseWindowBorder),
-                        child: Stack(
-                          children: [
-                            // 底层：纯色背景
-                            Container(
-                              width: double.infinity,
-                              height: double.infinity,
-                              color: config.themeColors.background,
-                            ),
-                            // 中层：背景图片
-                            if (config.baseWindowBackground != null &&
-                                config.baseWindowBackground!.isNotEmpty)
-                              Positioned.fill(
-                                child: Opacity(
-                                  opacity: config.baseWindowBackgroundAlpha,
-                                  child: ColorFiltered(
-                                    colorFilter: SvgColorFilterUtils
-                                        .getSvgColorTemperatureFilter(config),
-                                    child: Align(
-                                      alignment: Alignment(
-                                        (config.baseWindowXAlign - 0.5) * 2,
-                                        (config.baseWindowYAlign - 0.5) * 2,
+                // windowed 模式允许在页面内拖动菜单窗口
+                child: Transform.translate(
+                  offset: clampedWindowDelta,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Transform.scale(
+                        scale: _scaleAnimation.value,
+                        child: FadeTransition(
+                          opacity: _fadeAnimation,
+                          child: Container(
+                            width: windowWidth,
+                            height: windowHeight,
+                            decoration: isFullscreen
+                                ? null
+                                : BoxDecoration(
+                                    borderRadius: BorderRadius.circular(
+                                        config.baseWindowBorder),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(
+                                            0.3 * _fadeAnimation.value),
+                                        blurRadius: 20 * uiScale,
+                                        offset: Offset(0, 8 * uiScale),
                                       ),
-                                      child: Transform.scale(
-                                        scale: config.baseWindowBackgroundScale,
-                                        child: SmartAssetImage(
-                                          assetName:
-                                              config.baseWindowBackground!,
-                                          fit: BoxFit.contain,
+                                    ],
+                                  ),
+                            child: ClipRRect(
+                              borderRadius: isFullscreen
+                                  ? BorderRadius.zero
+                                  : BorderRadius.circular(
+                                      config.baseWindowBorder),
+                              child: Stack(
+                                children: [
+                                  // 底层：纯色背景
+                                  Container(
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    color: config.themeColors.background,
+                                  ),
+                                  // 中层：背景图片
+                                  if (config.baseWindowBackground != null &&
+                                      config.baseWindowBackground!.isNotEmpty)
+                                    Positioned.fill(
+                                      child: Opacity(
+                                        opacity:
+                                            config.baseWindowBackgroundAlpha,
+                                        child: ColorFiltered(
+                                          colorFilter: SvgColorFilterUtils
+                                              .getSvgColorTemperatureFilter(
+                                                  config),
+                                          child: Align(
+                                            alignment: Alignment(
+                                              (config.baseWindowXAlign - 0.5) *
+                                                  2,
+                                              (config.baseWindowYAlign - 0.5) *
+                                                  2,
+                                            ),
+                                            child: Transform.scale(
+                                              scale: config
+                                                  .baseWindowBackgroundScale,
+                                              child: SmartAssetImage(
+                                                assetName: config
+                                                    .baseWindowBackground!,
+                                                fit: BoxFit.contain,
+                                              ),
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
+                                  // 上层：可选半透明控件层
+                                  Container(
+                                    color: widget.disableWindowTintOverlay
+                                        ? Colors.transparent
+                                        : config.themeColors.background
+                                            .withOpacity(
+                                                config.baseWindowAlpha),
+                                    child: Column(
+                                      children: [
+                                        if (widget.showHeader)
+                                          _buildHeader(
+                                              uiScale, textScale, config),
+                                        Expanded(child: widget.content),
+                                        if (widget.footer != null)
+                                          widget.footer!,
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ),
-                            // 上层：半透明控件
-                            Container(
-                              color: config.themeColors.background
-                                  .withOpacity(config.baseWindowAlpha),
-                              child: Column(
-                                children: [
-                                  if (widget.showHeader)
-                                    _buildHeader(uiScale, textScale, config),
-                                  Expanded(child: widget.content),
-                                  if (widget.footer != null) widget.footer!,
                                 ],
                               ),
                             ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
+                      if (widget.enableWindowDragInWindowedMode &&
+                          !isFullscreen)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          top: 0,
+                          height: widget.windowedDragHandleHeight * uiScale,
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.move,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onPanStart: _onWindowDragStart,
+                              onPanUpdate: (details) {
+                                _onWindowDragUpdate(
+                                  details,
+                                  screenSize: screenSize,
+                                  windowSize: windowSize,
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
