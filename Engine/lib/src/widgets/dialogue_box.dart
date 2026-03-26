@@ -47,10 +47,6 @@ class _DialogueBoxState extends State<DialogueBox>
   late AnimationController _textFadeController;
   late Animation<double> _textFadeAnimation;
 
-  // 用于获取对话框位置的GlobalKey
-  final GlobalKey _dialogueKey = GlobalKey();
-  OverlayEntry? _overlayEntry;
-
   void _onSettingsChanged() {
     if (mounted) {
       setState(() {
@@ -111,88 +107,17 @@ class _DialogueBoxState extends State<DialogueBox>
       if (_enableTypewriter) {
         _typewriterController.startTyping(widget.dialogue);
       }
-
-      // 创建overlay
-      _updateOverlay();
     });
   }
 
   @override
   void dispose() {
-    _removeOverlay();
     widget.progressionManager?.registerTypewriter(null);
     SettingsManager().removeListener(_onSettingsChanged);
     _typewriterController.removeListener(_onTypewriterStateChanged);
     _typewriterController.dispose();
     _textFadeController.dispose();
     super.dispose();
-  }
-
-  void _createOverlay() {
-    if (!_isRead || _overlayEntry != null) return;
-
-    _overlayEntry = OverlayEntry(
-      builder: (context) => _buildReadStatusOverlay(),
-    );
-
-    Overlay.of(context).insert(_overlayEntry!);
-  }
-
-  void _removeOverlay() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
-  }
-
-  void _updateOverlay() {
-    if (_isRead) {
-      if (_overlayEntry == null) {
-        _createOverlay();
-      } else {
-        _overlayEntry!.markNeedsBuild();
-      }
-    } else {
-      _removeOverlay();
-    }
-  }
-
-  Widget _buildReadStatusOverlay() {
-    final RenderBox? renderBox =
-        _dialogueKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return const SizedBox.shrink();
-
-    final position = renderBox.localToGlobal(Offset.zero);
-    final config = SakiEngineConfig();
-    final uiScale = context.scaleFor(ComponentType.ui);
-    final textScale = context.scaleFor(ComponentType.text);
-
-    return Positioned(
-      left: position.dx - 9.0 * uiScale, // 调整位置使标签中心对齐到对话框左上角
-      top: position.dy - 14.0 * uiScale,
-      child: Transform.rotate(
-        angle: -45 * 3.14159 / 180,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: 18.0 * uiScale,
-            vertical: 4.0 * uiScale,
-          ),
-          decoration: BoxDecoration(
-            color: config.themeColors.primary.withOpacity(0.8),
-          ),
-          child: Text(
-            '已读',
-            maxLines: 1,
-            softWrap: false,
-            overflow: TextOverflow.clip,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 14.0 * textScale,
-              fontWeight: FontWeight.bold,
-              decoration: TextDecoration.none,
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -227,46 +152,16 @@ class _DialogueBoxState extends State<DialogueBox>
       if (_enableTypewriter) {
         _typewriterController.startTyping(widget.dialogue);
       }
-
-      // 更新overlay
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _updateOverlay();
-      });
     }
   }
 
   Widget _buildReadStatusTag() {
-    final RenderBox? renderBox = _dialogueKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) {
-      return const SizedBox.shrink();
-    }
-    
-    final position = renderBox.localToGlobal(Offset.zero);
     final uiScale = context.scaleFor(ComponentType.ui);
     final textScale = context.scaleFor(ComponentType.text);
-    
-    // 计算旋转后的标签尺寸以正确对齐中心点
-    final labelWidth = 36.0 * uiScale + 18.0 * 2 * uiScale;
-    final labelHeight = 14.0 * textScale + 4.0 * 2 * uiScale;
-    
-    final diagonal = (labelWidth + labelHeight) / 2;
-    final centerOffsetX = diagonal * 0.5;
-    final centerOffsetY = diagonal * 0.3;
-    
-    final finalLeft = position.dx - centerOffsetX;
-    final finalTop = position.dy - centerOffsetY;
-    
-    // 转换为相对于Stack的坐标
-    final stackPosition = context.findRenderObject() as RenderBox?;
-    if (stackPosition == null) return const SizedBox.shrink();
-    
-    final stackGlobalPosition = stackPosition.localToGlobal(Offset.zero);
-    final relativeLeft = finalLeft - stackGlobalPosition.dx;
-    final relativeTop = finalTop - stackGlobalPosition.dy;
-    
+
     return Positioned(
-      left: relativeLeft + 20*uiScale,
-      top: relativeTop + 20*uiScale,
+      left: 12.0 * uiScale,
+      top: -8.0 * uiScale,
       child: ReadStatusIndicator(
         isRead: _isRead,
         uiScale: uiScale,
@@ -329,7 +224,6 @@ class _DialogueBoxState extends State<DialogueBox>
               clipBehavior: Clip.none, // 允许子组件超出边界
               children: [
                 Container(
-                  key: _dialogueKey, // 添加key来获取位置
                   child: DialogueBackground(
                     isHovered: _isHovered,
                     dialogOpacity: _dialogOpacity,
