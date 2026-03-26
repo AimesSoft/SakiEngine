@@ -17,6 +17,10 @@ import 'package:sakiengine/src/config/game_path_resolver.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
 
 class SaveLoadManager {
+  static const int _autoSaveSlotCount = 18;
+  static const String _autoSaveFilePrefix = 'autosave_';
+  static const String _autoSaveIndexFileName = 'autosave_index.txt';
+
   // 缓存脚本和配置，避免重复加载
   static ScriptNode? _cachedScript;
   static Map<String, CharacterConfig>? _cachedCharacterConfigs;
@@ -269,6 +273,90 @@ class SaveLoadManager {
       print('Error checking quick save: $e');
       return false;
     }
+  }
+
+  Future<int> _readAutoSaveIndex() async {
+    try {
+      final directory = await getSavesDirectory();
+      final file = File('$directory/$_autoSaveIndexFileName');
+      if (!await file.exists()) {
+        return 1;
+      }
+
+      final content = await file.readAsString();
+      final parsed = int.tryParse(content.trim());
+      if (parsed != null && parsed >= 1 && parsed <= _autoSaveSlotCount) {
+        return parsed;
+      }
+    } catch (_) {
+      // 忽略读取失败，回退到默认位置
+    }
+    return 1;
+  }
+
+  Future<void> _writeAutoSaveIndex(int index) async {
+    final directory = await getSavesDirectory();
+    final file = File('$directory/$_autoSaveIndexFileName');
+    await file.writeAsString(index.toString(), flush: true);
+  }
+
+  /// 自动存档（环形缓冲）
+  Future<void> autoSave(
+    String currentScript,
+    GameStateSnapshot snapshot, {
+    String dialoguePreview = '',
+  }) async {
+    final directory = await getSavesDirectory();
+    final currentIndex = await _readAutoSaveIndex();
+    final file = File('$directory/${_autoSaveFilePrefix}$currentIndex.sakisav');
+    final now = DateTime.now();
+
+    final saveSlot = SaveSlot(
+      id: int.parse(now.millisecondsSinceEpoch.toString().substring(0, 10)),
+      saveTime: now,
+      currentScript: currentScript,
+      dialoguePreview: dialoguePreview,
+      snapshot: snapshot,
+      screenshotData: null,
+      isLocked: false,
+    );
+
+    final binaryData = saveSlot.toBinary();
+    await writeBinaryFileAtomically(file, binaryData);
+
+    final nextIndex = currentIndex >= _autoSaveSlotCount ? 1 : currentIndex + 1;
+    await _writeAutoSaveIndex(nextIndex);
+  }
+
+  /// 获取自动存档列表（按时间倒序）
+  Future<List<SaveSlot>> listAutoSaveSlots() async {
+    final directory = await getSavesDirectory();
+    final autoSaveSlots = <SaveSlot>[];
+
+    for (int i = 1; i <= _autoSaveSlotCount; i++) {
+      final file = File('$directory/${_autoSaveFilePrefix}$i.sakisav');
+      if (!await file.exists()) {
+        continue;
+      }
+
+      try {
+        final binaryData = await file.readAsBytes();
+        final saveSlot = _decodeSaveSlot(binaryData, file.path);
+        if (saveSlot != null) {
+          autoSaveSlots.add(saveSlot);
+        }
+      } catch (_) {
+        // 忽略损坏/读取失败的自动存档
+      }
+    }
+
+    autoSaveSlots.sort((a, b) => b.saveTime.compareTo(a.saveTime));
+    return autoSaveSlots;
+  }
+
+  Future<bool> hasAutoSave() async {
+    final slots = await listAutoSaveSlots();
+    return slots.isNotEmpty;
   }
 
   Future<SaveSlot?> loadGame(int slotId) async {

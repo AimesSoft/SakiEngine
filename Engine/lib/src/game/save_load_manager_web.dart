@@ -16,6 +16,9 @@ import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
 class SaveLoadManager {
   static const String _storageKeyPrefix = 'saki_save_';
+  static const int _autoSaveSlotCount = 18;
+  static const String _autoSaveStorageKeyPrefix = 'saki_autosave_slot_';
+  static const String _autoSaveIndexKey = 'saki_autosave_index';
 
   // 缓存脚本和配置，避免重复加载
   static ScriptNode? _cachedScript;
@@ -175,6 +178,10 @@ class SaveLoadManager {
 
   String _getSaveKey(int slotId) {
     return '${_storageKeyPrefix}slot_$slotId';
+  }
+
+  String _getAutoSaveKey(int slotIndex) {
+    return '$_autoSaveStorageKeyPrefix$slotIndex';
   }
 
   Future<void> saveGame(int slotId, String currentScript,
@@ -349,6 +356,74 @@ class SaveLoadManager {
     // }
     return html.window.localStorage.containsKey('quicksave.sakisav');
     // return false;
+  }
+
+  int _readAutoSaveIndex() {
+    final raw = html.window.localStorage[_autoSaveIndexKey];
+    final parsed = int.tryParse(raw ?? '');
+    if (parsed != null && parsed >= 1 && parsed <= _autoSaveSlotCount) {
+      return parsed;
+    }
+    return 1;
+  }
+
+  void _writeAutoSaveIndex(int index) {
+    html.window.localStorage[_autoSaveIndexKey] = index.toString();
+  }
+
+  /// 自动存档（环形缓冲）
+  Future<void> autoSave(
+    String currentScript,
+    GameStateSnapshot snapshot, {
+    String dialoguePreview = '',
+  }) async {
+    final currentIndex = _readAutoSaveIndex();
+    final now = DateTime.now();
+
+    final saveSlot = SaveSlot(
+      id: int.parse(now.millisecondsSinceEpoch.toString().substring(0, 10)),
+      saveTime: now,
+      currentScript: currentScript,
+      dialoguePreview: dialoguePreview,
+      snapshot: snapshot,
+      screenshotData: null,
+      isLocked: false,
+    );
+
+    final binaryData = saveSlot.toBinary();
+    final base64Data = base64Encode(binaryData);
+    html.window.localStorage[_getAutoSaveKey(currentIndex)] = base64Data;
+
+    final nextIndex = currentIndex >= _autoSaveSlotCount ? 1 : currentIndex + 1;
+    _writeAutoSaveIndex(nextIndex);
+  }
+
+  /// 获取自动存档列表（按时间倒序）
+  Future<List<SaveSlot>> listAutoSaveSlots() async {
+    final autoSaveSlots = <SaveSlot>[];
+
+    for (int i = 1; i <= _autoSaveSlotCount; i++) {
+      final base64Data = html.window.localStorage[_getAutoSaveKey(i)];
+      if (base64Data == null) {
+        continue;
+      }
+
+      try {
+        final binaryData = base64Decode(base64Data);
+        final slot = SaveSlot.fromBinary(binaryData);
+        autoSaveSlots.add(slot);
+      } catch (_) {
+        // 忽略损坏/读取失败的自动存档
+      }
+    }
+
+    autoSaveSlots.sort((a, b) => b.saveTime.compareTo(a.saveTime));
+    return autoSaveSlots;
+  }
+
+  Future<bool> hasAutoSave() async {
+    final slots = await listAutoSaveSlots();
+    return slots.isNotEmpty;
   }
 
   Future<SaveSlot?> loadGame(int slotId) async {

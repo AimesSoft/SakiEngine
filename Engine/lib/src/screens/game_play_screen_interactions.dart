@@ -40,7 +40,13 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     });
   }
 
-  void _returnToMainMenu() {
+  void _returnToMainMenu() async {
+    try {
+      await _gameManager.createAutoSaveBeforeMainMenu();
+    } catch (_) {
+      // 忽略自动存档失败，保持返回流程可用
+    }
+
     // 停止所有音效，保留音乐
     _gameManager.stopAllSounds();
 

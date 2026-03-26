@@ -202,6 +202,25 @@ class GameManager {
     }
   }
 
+  Future<void> _createRuntimeAutoSave({required String reason}) async {
+    try {
+      await SaveLoadManager().autoSave(
+        currentScriptFile,
+        saveStateSnapshot(),
+        dialoguePreview: reason,
+      );
+    } catch (e) {
+      if (kEngineDebugMode) {
+        print('[AutoSave] 运行时自动存档失败($reason): $e');
+      }
+    }
+  }
+
+  /// 在返回主菜单前触发自动存档（供外部UI主动返回时调用）
+  Future<void> createAutoSaveBeforeMainMenu() async {
+    await _createRuntimeAutoSave(reason: '返回主菜单');
+  }
+
   /// 查找章节结束前的最后一个有对话的scene
   /// 章节结束可能是：jump到下一章、遇到下一个chapter背景、或return
   int? _findLastSceneWithDialogueBeforeChapterEnd(int startIndex) {
@@ -1297,6 +1316,9 @@ class GameManager {
       }
 
       if (node is BackgroundNode) {
+        // 每次scene切换前都创建自动存档
+        await _createRuntimeAutoSave(reason: 'scene');
+
         // 检查当前scene是否是章节末尾前最后一个没有对话的scene
         await _checkChapterEndAutoSave(_scriptIndex);
 
@@ -1426,6 +1448,9 @@ class GameManager {
       }
 
       if (node is MovieNode) {
+        // 每次scene切换前都创建自动存档
+        await _createRuntimeAutoSave(reason: 'movie');
+
         // Movie处理逻辑，类似BackgroundNode但用于视频播放
         // 检测是否包含chapter，如果是则停止快进
         if (_isFastForwardMode && _containsChapter(node.movieFile)) {
@@ -2258,6 +2283,9 @@ class GameManager {
       }
 
       if (node is MenuNode) {
+        // 分支选择前创建运行时自动存档
+        await _createRuntimeAutoSave(reason: '分支选择');
+
         // 分支选择前创建自动存档
         await _checkAndCreateAutoSave(_scriptIndex, reason: '分支选择');
 
@@ -2273,6 +2301,9 @@ class GameManager {
       }
 
       if (node is ReturnNode) {
+        // 在回主菜单前创建运行时自动存档
+        await _createRuntimeAutoSave(reason: '结局返回');
+
         // 在结局前创建自动存档
         await _checkAndCreateAutoSave(_scriptIndex, reason: '结局');
 
