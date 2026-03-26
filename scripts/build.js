@@ -205,12 +205,12 @@ function prepareReleasePubspecAssets(gameDir, cacheDir, pubspecPath) {
     throw new Error('发布资源清单为空，已中止构建。');
   }
 
-  const imageRegex = /^Assets\/images\/.*\.(png|jpg|jpeg|gif|bmp|webp|avif|mp4|mov|avi|mkv|webm)$/i;
-  const imageCount = unique.filter((p) => imageRegex.test(p)).length;
+  const mediaRegex = /^Assets\/.*\.(png|jpg|jpeg|gif|bmp|webp|avif|mp4|mov|avi|mkv|webm)$/i;
+  const imageCount = unique.filter((p) => mediaRegex.test(p)).length;
   const hasAssetsRoot = rawEntries.some((entry) => entry === 'Assets' || entry === 'Assets/');
   if (hasAssetsRoot && imageCount === 0) {
     throw new Error(
-      '检测到配置了 Assets/，但展开后没有任何 Assets/images 资源。为防止发布包缺少美术素材，已中止构建。',
+      '检测到配置了 Assets/，但展开后没有任何图片/视频资源。为防止发布包缺少美术素材，已中止构建。',
     );
   }
 

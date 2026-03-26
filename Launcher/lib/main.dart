@@ -1329,13 +1329,13 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     final mediaCount = deduped
         .where(
           (entry) => RegExp(
-            r'^Assets/images/.*\.(png|jpg|jpeg|gif|bmp|webp|avif|mp4|mov|avi|mkv|webm)$',
+            r'^Assets/.*\.(png|jpg|jpeg|gif|bmp|webp|avif|mp4|mov|avi|mkv|webm)$',
             caseSensitive: false,
           ).hasMatch(entry),
         )
         .length;
     if (hasAssetsRoot && mediaCount == 0) {
-      throw _TaskFailure('检测到配置了 Assets/，但展开后没有 Assets/images 资源，已中止构建');
+      throw _TaskFailure('检测到配置了 Assets/，但展开后没有图片/视频资源，已中止构建');
     }
 
     final output = <String>[];

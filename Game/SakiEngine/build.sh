@@ -361,10 +361,10 @@ prepare_release_pubspec_assets() {
   fi
 
   local image_count
-  image_count=$(grep -E -i "^Assets/images/.*\.(png|jpg|jpeg|gif|bmp|webp|avif|mp4|mov|avi|mkv|webm)$" \
+  image_count=$(grep -E -i "^Assets/.*\.(png|jpg|jpeg|gif|bmp|webp|avif|mp4|mov|avi|mkv|webm)$" \
     "$unique_assets_file" | wc -l | xargs)
   if grep -q -E "^Assets/?$" "$raw_assets_file" && [ "$image_count" -eq 0 ]; then
-    echo -e "${RED}错误: 检测到配置了 Assets/，但展开后没有任何 Assets/images 资源。${NC}"
+    echo -e "${RED}错误: 检测到配置了 Assets/，但展开后没有任何图片/视频资源。${NC}"
     echo -e "${RED}为防止发布包缺少美术素材，已中止构建。${NC}"
     exit 1
   fi

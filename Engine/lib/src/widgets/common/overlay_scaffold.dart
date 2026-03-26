@@ -192,14 +192,14 @@ class OverlayScaffoldState extends State<OverlayScaffold>
     final clampedWindowDelta = isFullscreen
         ? Offset.zero
         : _clampWindowDragDelta(_windowDragDelta, screenSize, windowSize);
-    final backdropColor = (widget.clearBackdropInWindowedMode && !isFullscreen)
-        ? Colors.transparent
-        : config.themeColors.primaryDark
-            .withOpacity(0.5 * _backdropAnimation.value);
-
     return AnimatedBuilder(
       animation: _animationController,
       builder: (context, child) {
+        final backdropColor =
+            (widget.clearBackdropInWindowedMode && !isFullscreen)
+                ? Colors.transparent
+                : config.themeColors.primaryDark
+                    .withOpacity(0.5 * _backdropAnimation.value);
         return GestureDetector(
           onTap: _handleClose,
           onSecondaryTap: _handleClose,
