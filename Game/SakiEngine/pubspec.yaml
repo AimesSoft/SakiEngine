@@ -30,11 +30,21 @@ flutter:
   uses-material-design: true
   assets:
     - default_game.txt
-    - Assets/
-    - GameScript/
-    - GameScript_en/
-    - GameScript_ja/
-    - GameScript_zh-Hant/
+    - Assets/fonts/SourceHanSansCN-Bold.ttf
+    - Assets/images/backgrounds/bg-school.webp
+    - Assets/images/backgrounds/sky.jpg
+    - Assets/images/characters/xiayo-happy.png
+    - Assets/images/characters/xiayo-pose1.png
+    - Assets/images/characters/yuki-eye.png
+    - Assets/images/characters/yuki-eye2.png
+    - Assets/images/characters/yuki-happy.png
+    - Assets/images/characters/yuki-pose1.png
+    - Assets/images/characters/yuki-pose2.png
+    - Assets/images/characters/yuki-sad.png
+    - Assets/images/characters/yuki-say.png
+    - Assets/images/characters/yuki-shy.png
+    - Assets/images/characters/yuki-star.png
+    - Assets/images/characters/yuki-think.png
   fonts:
     - family: SourceHanSansCN
       fonts:
@@ -55,4 +65,3 @@ flutter_launcher_icons:
   macos:
     generate: true
     image_path: "icon.png"
-
