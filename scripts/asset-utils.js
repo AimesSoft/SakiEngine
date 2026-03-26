@@ -217,6 +217,57 @@ function ensureProjectIcon(projectDir, projectRoot) {
     return false;
 }
 
+function ensureWebIconConfig(pubspecPath) {
+    if (!fs.existsSync(pubspecPath)) {
+        return false;
+    }
+
+    const content = fs.readFileSync(pubspecPath, 'utf8');
+    const lines = content.split(/\r?\n/);
+
+    const launcherStart = lines.findIndex((line) => /^flutter_launcher_icons:\s*$/.test(line));
+    if (launcherStart < 0) {
+        return false;
+    }
+
+    let launcherEnd = lines.length - 1;
+    for (let i = launcherStart + 1; i < lines.length; i += 1) {
+        if (/^\S/.test(lines[i])) {
+            launcherEnd = i - 1;
+            break;
+        }
+    }
+
+    const hasWeb = lines
+        .slice(launcherStart + 1, launcherEnd + 1)
+        .some((line) => /^  web:\s*$/.test(line));
+
+    if (hasWeb) {
+        return false;
+    }
+
+    const webBlock = [
+        '  web:',
+        '    generate: true',
+        '    image_path: "icon.png"',
+        '    background_color: "#ffffff"',
+        '    theme_color: "#ffffff"',
+    ];
+
+    let insertAt = launcherEnd + 1;
+    for (let i = launcherStart + 1; i <= launcherEnd; i += 1) {
+        if (/^  windows:\s*$/.test(lines[i]) || /^  macos:\s*$/.test(lines[i])) {
+            insertAt = i;
+            break;
+        }
+    }
+
+    lines.splice(insertAt, 0, ...webBlock);
+    fs.writeFileSync(pubspecPath, `${lines.join('\n')}\n`);
+    colorLog('已自动补充 flutter_launcher_icons.web 配置', 'yellow');
+    return true;
+}
+
 function generateAppIcons(projectDir) {
     const pubspecPath = path.join(projectDir, 'pubspec.yaml');
     const iconPath = path.join(projectDir, 'icon.png');
@@ -236,6 +287,7 @@ function generateAppIcons(projectDir) {
     }
 
     try {
+        ensureWebIconConfig(pubspecPath);
         colorLog('正在生成应用图标...', 'yellow');
         execSync('flutter pub run flutter_launcher_icons:main', {
             cwd: projectDir,

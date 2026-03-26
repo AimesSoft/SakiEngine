@@ -21,6 +21,14 @@ class SaveLoadManager {
   static const String _autoSaveStorageKeyPrefix = 'saki_autosave_slot_';
   static const String _autoSaveIndexKey = 'saki_autosave_index';
 
+  /// Web 平台没有文件系统：用 localStorage 模拟原子写入语义。
+  /// 这里保持与 IO 版本同名 API，避免跨平台调用处编译失败。
+  static Future<void> writeBinaryFileAtomically(
+      Object targetFile, Uint8List data) async {
+    final storageKey = targetFile.toString();
+    html.window.localStorage[storageKey] = base64Encode(data);
+  }
+
   // 缓存脚本和配置，避免重复加载
   static ScriptNode? _cachedScript;
   static Map<String, CharacterConfig>? _cachedCharacterConfigs;
