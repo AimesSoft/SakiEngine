@@ -13,6 +13,8 @@ class ScreenshotThumbnail extends StatelessWidget {
   final Color? placeholderColor;
   final Color? iconColor;
   final double iconSize;
+  final bool useLoadingPlaceholder;
+  final bool gaplessPlayback;
 
   const ScreenshotThumbnail({
     super.key,
@@ -23,6 +25,8 @@ class ScreenshotThumbnail extends StatelessWidget {
     this.placeholderColor,
     this.iconColor,
     this.iconSize = 24.0,
+    this.useLoadingPlaceholder = true,
+    this.gaplessPlayback = false,
   });
 
   @override
@@ -45,20 +49,23 @@ class ScreenshotThumbnail extends StatelessWidget {
     return Image.memory(
       screenshotData!,
       fit: BoxFit.cover,
+      gaplessPlayback: gaplessPlayback,
       filterQuality: ImageSamplingManager().resolveWidgetFilterQuality(
         defaultQuality: FilterQuality.high,
       ),
-      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-        if (wasSynchronouslyLoaded) return child;
+      frameBuilder: useLoadingPlaceholder
+          ? (context, child, frame, wasSynchronouslyLoaded) {
+              if (wasSynchronouslyLoaded) return child;
 
-        return AnimatedOpacity(
-          opacity: frame == null ? 0 : 1,
-          duration: const Duration(milliseconds: 300),
-          child: frame == null
-              ? _buildPlaceholder(Icons.image_outlined, '加载中...')
-              : child,
-        );
-      },
+              return AnimatedOpacity(
+                opacity: frame == null ? 0 : 1,
+                duration: const Duration(milliseconds: 300),
+                child: frame == null
+                    ? _buildPlaceholder(Icons.image_outlined, '加载中...')
+                    : child,
+              );
+            }
+          : null,
       errorBuilder: (context, error, stackTrace) {
         return _buildPlaceholder(Icons.broken_image_outlined, '图片损坏');
       },
