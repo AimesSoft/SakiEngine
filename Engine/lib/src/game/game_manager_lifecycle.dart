@@ -147,7 +147,7 @@ extension _GameManagerLifecycle on GameManager {
           dialogueScriptIndex < _script.children.length) {
         final currentNode = _script.children[dialogueScriptIndex];
         if (currentNode is SayNode) {
-          freshDialogue = currentNode.dialogue;
+          freshDialogue = _resolveScriptText(currentNode.dialogue);
           if (currentNode.character != null) {
             final characterConfig = _characterConfigs[currentNode.character];
             freshSpeaker = characterConfig?.name;

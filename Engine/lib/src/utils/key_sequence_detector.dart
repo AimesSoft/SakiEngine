@@ -5,6 +5,7 @@ import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/game/game_script_localization.dart';
+import 'package:sakiengine/src/localization/script_text_localizer.dart';
 
 /// 按键序列检测器
 /// 用于检测特定按键序列，如连续按下 c-o-n-s-o-l-e
@@ -306,7 +307,8 @@ class ScriptContentModifier {
 
     // 标准化对话文本 - 统一引号类型和去除引号
     String normalizeDialogue(String text) {
-      return text
+      final localized = ScriptTextLocalizer.resolve(text);
+      return localized
           .replaceAll('"', '')
           .replaceAll('「', '')
           .replaceAll('」', '')

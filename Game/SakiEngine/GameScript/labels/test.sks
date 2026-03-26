@@ -1,21 +1,21 @@
 label after_choice8
 show yuki pose1 sad at pose
-yk "你看到我的立绘了吗？1"
-yk pose2 happy "你看到我的立绘了吗？2"
+yk "/zhs 你看到我的立绘了吗？1/ /zhc 你看到我的立繪了嗎？1/ /en Can you see my sprite? 1/ /jp 私の立ち絵が見える？1/"
+yk pose2 happy "/zhs 你看到我的立绘了吗？2/ /zhc 你看到我的立繪了嗎？2/ /en Can you see my sprite? 2/ /jp 私の立ち絵が見える？2/"
 show yuki pose2 star at pose
-yk "你看到我的立绘了吗？3"
+yk "/zhs 你看到我的立绘了吗？3/ /zhc 你看到我的立繪了嗎？3/ /en Can you see my sprite? 3/ /jp 私の立ち絵が見える？3/"
 
 // 测试时序差分切换功能
-yk [sad,2.0,happy] "这是时序差分切换测试，我先显示悲伤表情，2秒后会变为开心表情！"
-yk "刚才的表情切换你看到了吗？"
+yk [sad,2.0,happy] "/zhs 这是时序差分切换测试，我先显示悲伤表情，2秒后会变为开心表情！/ /zhc 這是時序差分切換測試，我先顯示悲傷表情，2秒後會變為開心表情！/ /en This is a timed expression switch test. I start sad, then turn happy after 2 seconds!/ /jp 時間差分切替テストです。最初は悲しい表情で、2秒後に笑顔になります！/"
+yk "/zhs 刚才的表情切换你看到了吗？/ /zhc 剛才的表情切換你看到了嗎？/ /en Did you see that expression change?/ /jp さっきの表情変化、見えた？/"
 
 // 测试更快的切换
-yk [star,0.5,shocked] "这次切换更快，从星星眼到惊讶只需0.5秒！"
-yk "这样的表情变化会让对话更生动。"
+yk [star,0.5,shocked] "/zhs 这次切换更快，从星星眼到惊讶只需0.5秒！/ /zhc 這次切換更快，從星星眼到驚訝只需0.5秒！/ /en This switch is faster: starry eyes to shocked in only 0.5 seconds!/ /jp 今回はもっと速い切替です。星目から驚きまで0.5秒！/"
+yk "/zhs 这样的表情变化会让对话更生动。/ /zhc 這樣的表情變化會讓對話更生動。/ /en Expression changes like this make dialogue more lively./ /jp こういう表情変化で会話がもっと生き生きします。/"
 
 // 测试与姿势结合
 show yuki pose1 happy
-yk pose1 [happy,1.5,sad] "我还可以在指定姿势的同时使用时序差分切换。"
-yk "新功能测试完成！"
+yk pose1 [happy,1.5,sad] "/zhs 我还可以在指定姿势的同时使用时序差分切换。/ /zhc 我還可以在指定姿勢的同時使用時序差分切換。/ /en I can also use timed expression switching while specifying a pose./ /jp 指定したポーズのまま時間差分切替も使えます。/"
+yk "/zhs 新功能测试完成！/ /zhc 新功能測試完成！/ /en New feature test complete!/ /jp 新機能テスト完了！/"
 
 return

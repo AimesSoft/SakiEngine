@@ -2,8 +2,10 @@
 import 'dart:html' as html;
 
 class PlatformWindowManager {
-  static final Map<WindowListener, StreamSubscription<html.Event>> _listeners =
-      <WindowListener, StreamSubscription<html.Event>>{};
+  static bool get supportsWindowStateSync => true;
+
+  static final Map<WindowListener, List<StreamSubscription<html.Event>>>
+      _listeners = <WindowListener, List<StreamSubscription<html.Event>>>{};
 
   static Future<void> ensureInitialized() async {}
 
@@ -14,20 +16,39 @@ class PlatformWindowManager {
   static void addListener(WindowListener listener) {
     removeListener(listener);
 
-    final subscription = html.window.onBeforeUnload.listen((_) {
+    final subscriptions = <StreamSubscription<html.Event>>[];
+
+    subscriptions.add(html.window.onBeforeUnload.listen((_) {
       Future.microtask(() => listener.onWindowClose());
-    });
-    _listeners[listener] = subscription;
+    }));
+
+    subscriptions.add(html.document.onFullscreenChange.listen((_) {
+      final isFullscreen = html.document.fullscreenElement != null;
+      if (isFullscreen) {
+        listener.onWindowEnterFullScreen();
+      } else {
+        listener.onWindowLeaveFullScreen();
+      }
+    }));
+
+    _listeners[listener] = subscriptions;
   }
 
   static void removeListener(WindowListener listener) {
-    final subscription = _listeners.remove(listener);
-    subscription?.cancel();
+    final subscriptions = _listeners.remove(listener);
+    if (subscriptions == null) {
+      return;
+    }
+    for (final subscription in subscriptions) {
+      subscription.cancel();
+    }
   }
 
   static Future<void> destroy() async {
-    for (final subscription in _listeners.values) {
-      subscription.cancel();
+    for (final subscriptions in _listeners.values) {
+      for (final subscription in subscriptions) {
+        subscription.cancel();
+      }
     }
     _listeners.clear();
 
@@ -61,8 +82,30 @@ class PlatformWindowManager {
       }
     } catch (_) {}
   }
+
+  static Future<bool?> isFullScreen() async {
+    try {
+      return html.document.fullscreenElement != null;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 mixin WindowListener {
   Future<void> onWindowClose();
+
+  void onWindowEnterFullScreen() {}
+
+  void onWindowLeaveFullScreen() {}
+
+  void onWindowResize() {}
+
+  void onWindowResized() {}
+
+  void onWindowMaximize() {}
+
+  void onWindowUnmaximize() {}
+
+  void onWindowRestore() {}
 }

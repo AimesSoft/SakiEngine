@@ -13,6 +13,7 @@ import 'package:sakiengine/src/localization/localization_manager.dart';
 import 'package:sakiengine/src/game/script_merger.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/utils/engine_asset_loader.dart';
+import 'package:sakiengine/src/localization/script_text_localizer.dart';
 
 class SaveLoadManager {
   static const String _storageKeyPrefix = 'saki_save_';
@@ -49,8 +50,8 @@ class SaveLoadManager {
     }
 
     _characterConfigsLoadFuture ??= () async {
-      final charactersContent =
-          await AssetManager().loadString('assets/GameScript/configs/characters.sks');
+      final charactersContent = await AssetManager()
+          .loadString('assets/GameScript/configs/characters.sks');
       return ConfigParser().parseCharacters(charactersContent);
     }();
 
@@ -100,7 +101,8 @@ class SaveLoadManager {
       // 再回退到历史最后一句（避免不必要的脚本解析）
       if (snapshot.dialogueHistory.isNotEmpty) {
         final latestDialogue = snapshot.dialogueHistory.last;
-        if (latestDialogue.speaker != null && latestDialogue.speaker!.isNotEmpty) {
+        if (latestDialogue.speaker != null &&
+            latestDialogue.speaker!.isNotEmpty) {
           return '【${latestDialogue.speaker}】${RichTextParser.cleanText(latestDialogue.dialogue)}';
         } else {
           return RichTextParser.cleanText(latestDialogue.dialogue);
@@ -114,7 +116,7 @@ class SaveLoadManager {
         if (dialogueScriptIndex < _cachedScript!.children.length) {
           final node = _cachedScript!.children[dialogueScriptIndex];
           if (node is SayNode) {
-            final dialogue = node.dialogue;
+            final dialogue = ScriptTextLocalizer.resolve(node.dialogue);
             String? speaker;
 
             if (node.character != null) {

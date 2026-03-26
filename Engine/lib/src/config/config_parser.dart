@@ -1,18 +1,47 @@
 import 'package:sakiengine/src/config/config_models.dart';
+import 'package:sakiengine/src/localization/script_text_localizer.dart';
+import 'package:sakiengine/src/sks_parser/sks_line_utils.dart';
 
 class ConfigParser {
   Map<String, CharacterConfig> parseCharacters(String content) {
     final configs = <String, CharacterConfig>{};
     final lines = content.split('\n');
 
-    for (final line in lines) {
-      if (line.trim().isEmpty || line.startsWith('//')) continue;
-      final parts = line.split(':').map((p) => p.trim()).toList();
-      if (parts.length < 3) continue;
+    for (final rawLine in lines) {
+      final lineWithoutComment =
+          SksLineUtils.stripLineCommentOutsideQuotes(rawLine);
+      final line = lineWithoutComment.trim();
+      if (line.isEmpty || line.startsWith('//')) {
+        continue;
+      }
 
-      final id = parts[0];
-      final name = parts[1].replaceAll('"', '');
-      final resourceIdAndPose = parts[2].split(' ');
+      final match =
+          RegExp(r'^([^:]+):\s*"([^"]*)"\s*:\s*(.+)$').firstMatch(line);
+      String id;
+      String name;
+      String resourceSpec;
+      if (match != null) {
+        id = match.group(1)!.trim();
+        final rawName = match.group(2)!;
+        name = ScriptTextLocalizer.resolve(rawName);
+        resourceSpec = match.group(3)!.trim();
+      } else {
+        final parts = line.split(':').map((p) => p.trim()).toList();
+        if (parts.length < 3) {
+          continue;
+        }
+        id = parts[0];
+        name = ScriptTextLocalizer.resolve(parts[1].replaceAll('"', ''));
+        resourceSpec = parts.sublist(2).join(':').trim();
+      }
+
+      final resourceIdAndPose = resourceSpec
+          .split(RegExp(r'\s+'))
+          .where((p) => p.isNotEmpty)
+          .toList();
+      if (resourceIdAndPose.isEmpty) {
+        continue;
+      }
       final resourceId = resourceIdAndPose[0];
       String? defaultPoseId;
       if (resourceIdAndPose.length > 2 && resourceIdAndPose[1] == 'at') {
@@ -33,8 +62,11 @@ class ConfigParser {
     final configs = <String, PoseConfig>{};
     final lines = content.split('\n');
 
-    for (final line in lines) {
-      if (line.trim().isEmpty || line.startsWith('//')) continue;
+    for (final rawLine in lines) {
+      final lineWithoutComment =
+          SksLineUtils.stripLineCommentOutsideQuotes(rawLine);
+      final line = lineWithoutComment.trim();
+      if (line.isEmpty || line.startsWith('//')) continue;
 
       final parts = line.split(':');
       if (parts.length != 2) continue;
@@ -80,4 +112,4 @@ class ConfigParser {
     }
     return configs;
   }
-} 
+}

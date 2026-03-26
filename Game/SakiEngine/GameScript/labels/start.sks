@@ -1,113 +1,113 @@
 //label// SakiEngine 剧情标签脚本文件
 label start
 scene bg school 
-yk pose2 happy"欢迎来到SakiEngine！"
-yk "1111"
+yk pose2 happy "/zhs 欢迎来到SakiEngine！/ /zhc 歡迎來到SakiEngine！/ /en Welcome to SakiEngine!/ /jp SakiEngineへようこそ！/"
+yk "/zhs 1111/ /zhc 1111/ /en 1111/ /jp 1111/"
 menu
-"动画测试" after_choice1
-"保持沉默" after_choice2
-"表情测试" after_choice3
-"测试长句子" after_choice4
-"测试断句" after_choice6
-"切换背景" after_choice5
-"切换背景&&旁白" after_choice7
-"测试旁白模式" after_choice_nvl
-"测试电影旁白模式" after_choice_nvlm
-"测试计时器" after_choice_timer
-"立绘测试" after_choice8
+"/zhs 动画测试/ /zhc 動畫測試/ /en Animation Test/ /jp アニメーションテスト/" after_choice1
+"/zhs 保持沉默/ /zhc 保持沉默/ /en Stay Silent/ /jp 黙っている/" after_choice2
+"/zhs 表情测试/ /zhc 表情測試/ /en Expression Test/ /jp 表情テスト/" after_choice3
+"/zhs 测试长句子/ /zhc 測試長句子/ /en Long Sentence Test/ /jp 長文テスト/" after_choice4
+"/zhs 测试断句/ /zhc 測試斷句/ /en Sentence Break Test/ /jp 句読点テスト/" after_choice6
+"/zhs 切换背景/ /zhc 切換背景/ /en Switch Background/ /jp 背景切り替え/" after_choice5
+"/zhs 切换背景&&旁白/ /zhc 切換背景&&旁白/ /en Background && Narration/ /jp 背景&&ナレーション/" after_choice7
+"/zhs 测试旁白模式/ /zhc 測試旁白模式/ /en NVL Mode Test/ /jp NVLモードテスト/" after_choice_nvl
+"/zhs 测试电影旁白模式/ /zhc 測試電影旁白模式/ /en Cinematic NVL Test/ /jp シネマNVLモードテスト/" after_choice_nvlm
+"/zhs 测试计时器/ /zhc 測試計時器/ /en Timer Test/ /jp タイマーテスト/" after_choice_timer
+"/zhs 立绘测试/ /zhc 立繪測試/ /en Sprite Test/ /jp 立ち絵テスト/" after_choice8
 endmenu
 //就是这样，选择之后会跳转到after_choice1，after_choice2，after_choice3
 label after_choice1
-yk an jump "这是跳。"
-yk an shake "这是抖动。"
-yk an bounce "这是弹跳。"
-"嘿嘿，喜欢吗？"
-"那我以后每天都给你带巧克力哦！"
-yk "嗯嗯！"
+yk an jump "/zhs 这是跳。/ /zhc 這是跳躍。/ /en This is jump./ /jp これはジャンプです。/"
+yk an shake "/zhs 这是抖动。/ /zhc 這是抖動。/ /en This is shake./ /jp これはシェイクです。/"
+yk an bounce "/zhs 这是弹跳。/ /zhc 這是彈跳。/ /en This is bounce./ /jp これはバウンスです。/"
+"/zhs 嘿嘿，喜欢吗？/ /zhc 嘿嘿，喜歡嗎？/ /en Hehe, do you like it?/ /jp えへへ、気に入った？/"
+"/zhs 那我以后每天都给你带巧克力哦！/ /zhc 那我以後每天都給你帶巧克力喔！/ /en Then I'll bring you chocolate every day!/ /jp じゃあこれから毎日チョコを持ってくるね！/"
+yk "/zhs 嗯嗯！/ /zhc 嗯嗯！/ /en Yep!/ /jp うん！/"
 return
 
 label after_choice2
-yk sad "……你怎么不说话？"
-yk "不理你了。"
-yk happy "哼，生气了。"
+yk sad "/zhs ……你怎么不说话？/ /zhc ……你怎麼不說話？/ /en ...Why aren't you speaking?/ /jp ……どうして黙ってるの？/"
+yk "/zhs 不理你了。/ /zhc 不理你了。/ /en Fine, I'll ignore you./ /jp もう知らない。/"
+yk happy "/zhs 哼，生气了。/ /zhc 哼，生氣了。/ /en Hmph, I'm mad./ /jp ふん、怒ったからね。/"
 return 
 
 label after_choice3
-yk pose1 "这是站姿。"
-yk pose2 "这是思考。"
-yk pose1 happy "这是开心。"
-yk sad "这是不好的表情。"
-yk eye "这是闭眼。"
-yk eye2 "这是闭眼张嘴。"
-yk shy "这是害羞。"
-yk star "这是星星眼。"
-yk pose2 think "这是思考。"
-yk say "这是说话。"
+yk pose1 "/zhs 这是站姿。/ /zhc 這是站姿。/ /en This is standing pose./ /jp これは立ち姿です。/"
+yk pose2 "/zhs 这是思考。/ /zhc 這是思考。/ /en This is thinking pose./ /jp これは考えるポーズです。/"
+yk pose1 happy "/zhs 这是开心。/ /zhc 這是開心。/ /en This is happy./ /jp これは嬉しい表情です。/"
+yk sad "/zhs 这是不好的表情。/ /zhc 這是不好的表情。/ /en This is a sad expression./ /jp これは悲しい表情です。/"
+yk eye "/zhs 这是闭眼。/ /zhc 這是閉眼。/ /en This is closed eyes./ /jp これは目を閉じた表情です。/"
+yk eye2 "/zhs 这是闭眼张嘴。/ /zhc 這是閉眼張嘴。/ /en This is closed eyes with open mouth./ /jp これは目を閉じて口を開けた表情です。/"
+yk shy "/zhs 这是害羞。/ /zhc 這是害羞。/ /en This is shy./ /jp これは照れ顔です。/"
+yk star "/zhs 这是星星眼。/ /zhc 這是星星眼。/ /en This is starry eyes./ /jp これは星目の表情です。/"
+yk pose2 think "/zhs 这是思考。/ /zhc 這是思考。/ /en This is thinking./ /jp これは考え中です。/"
+yk say "/zhs 这是说话。/ /zhc 這是說話。/ /en This is speaking./ /jp これは話している表情です。/"
 return
 
 label after_choice4
-yk "这是一句很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长的句子。"
-yk "这是一句很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长的句子。2"
-yk "这是一句很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长的句子。3"
-yk "这是一句很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长的句子。4"
+yk "/zhs 这是一句很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长的句子。/ /zhc 這是一句很長很長很長很長很長很長很長很長很長很長很長很長很長很長很長很長的句子。/ /en This is a very, very, very long sentence used for testing./ /jp これはとてもとてもとても長い文章のテストです。/"
+yk "/zhs 这是一句很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长的句子。2/ /zhc 這是一句很長很長很長很長很長很長很長很長很長很長很長很長很長很長很長很長的句子。2/ /en This is a very long sentence for testing. 2/ /jp これは長文テストです。2/"
+yk "/zhs 这是一句很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长的句子。3/ /zhc 這是一句很長很長很長很長很長很長很長很長很長很長很長很長很長很長很長很長的句子。3/ /en This is a very long sentence for testing. 3/ /jp これは長文テストです。3/"
+yk "/zhs 这是一句很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长的句子。4/ /zhc 這是一句很長很長很長很長很長很長很長很長很長很長很長很長很長很長很長很長的句子。4/ /en This is a very long sentence for testing. 4/ /jp これは長文テストです。4/"
 return
 
 label after_choice5
 scene sky
-yk "背景被切换咯～"
+yk "/zhs 背景被切换咯～/ /zhc 背景被切換囉～/ /en Background switched~/ /jp 背景が切り替わったよ〜/"
 scene bg school
-yk say "背景又切回来了。"
-yk sad "再见。"
+yk say "/zhs 背景又切回来了。/ /zhc 背景又切回來了。/ /en Background switched back./ /jp 背景が戻ったよ。/"
+yk sad "/zhs 再见。/ /zhc 再見。/ /en Bye./ /jp じゃあね。/"
 return
 label after_choice_timer
 scene sky timer 2.0
-yk "背景被切换咯～，经过了2秒。"
+yk "/zhs 背景被切换咯～，经过了2秒。/ /zhc 背景被切換囉～，經過了2秒。/ /en Background switched~ after 2 seconds./ /jp 背景が切り替わったよ〜、2秒経過。/"
 scene bg school timer 5.0
-yk say "背景又切回来了。很不得了，五秒过去了。"
-yk sad "再见。"
+yk say "/zhs 背景又切回来了。很不得了，五秒过去了。/ /zhc 背景又切回來了。很不得了，五秒過去了。/ /en Background switched back. Amazing, five seconds have passed./ /jp 背景が戻ったよ。すごい、5秒経った。/"
+yk sad "/zhs 再见。/ /zhc 再見。/ /en Bye./ /jp じゃあね。/"
 return
 label after_choice7
 nvl
-"这是旁白模式的开始。"
-"在这个模式下，所有的文本都会累积显示。"
-"就像小说一样。"
-yk "我也可以在旁白模式中说话。"
-"旁白可以继续。"
-"这样可以讲述更长的故事。"
+"/zhs 这是旁白模式的开始。/ /zhc 這是旁白模式的開始。/ /en This is the start of NVL mode./ /jp これはNVLモードの始まりです。/"
+"/zhs 在这个模式下，所有的文本都会累积显示。/ /zhc 在這個模式下，所有的文本都會累積顯示。/ /en In this mode, all lines stay on screen./ /jp このモードでは、テキストが積み上がって表示されます。/"
+"/zhs 就像小说一样。/ /zhc 就像小說一樣。/ /en Just like reading a novel./ /jp 小説のような表示です。/"
+yk "/zhs 我也可以在旁白模式中说话。/ /zhc 我也可以在旁白模式中說話。/ /en I can also speak in NVL mode./ /jp 私もNVLモードで話せます。/"
+"/zhs 旁白可以继续。/ /zhc 旁白可以繼續。/ /en Narration can continue./ /jp ナレーションは続きます。/"
+"/zhs 这样可以讲述更长的故事。/ /zhc 這樣可以講述更長的故事。/ /en This works well for longer storytelling./ /jp こうすると長い物語を語れます。/"
 endnvl
 scene sky
-yk "背景被切换咯～"
-yk "嗯。"
+yk "/zhs 背景被切换咯～/ /zhc 背景被切換囉～/ /en Background switched~/ /jp 背景が切り替わったよ〜/"
+yk "/zhs 嗯。/ /zhc 嗯。/ /en Mm./ /jp うん。/"
 scene bg school
-yk say "背景又切回来了。"
-yk sad "再见。"
+yk say "/zhs 背景又切回来了。/ /zhc 背景又切回來了。/ /en Background switched back./ /jp 背景が戻ったよ。/"
+yk sad "/zhs 再见。/ /zhc 再見。/ /en Bye./ /jp じゃあね。/"
 return
 
 label after_choice6
-yk "你好，世界。"
-yk "平凡的天才展现才能，真正的天才忘却才能。"
-yk "没有爱，就看不见。"
-yk "自由的定义是什么？让你可以像这样发问。"
+yk "/zhs 你好，世界。/ /zhc 你好，世界。/ /en Hello, world./ /jp こんにちは、世界。/"
+yk "/zhs 平凡的天才展现才能，真正的天才忘却才能。/ /zhc 平凡的天才展現才能，真正的天才忘卻才能。/ /en Ordinary geniuses show their talent; true geniuses forget it./ /jp 凡才は才能を見せ、真の天才は才能を忘れる。/"
+yk "/zhs 没有爱，就看不见。/ /zhc 沒有愛，就看不見。/ /en Without love, you cannot see it./ /jp 愛がなければ、見えない。/"
+yk "/zhs 自由的定义是什么？让你可以像这样发问。/ /zhc 自由的定義是什麼？讓你可以像這樣發問。/ /en What is freedom? The ability to ask this very question./ /jp 自由とは何か？こうして問いを立てられること。/"
 label after_choice_nvl
 nvl
-"这是旁白模式的开始。"
-"在这个模式下，所有的文本都会累积显示。"
-"就像小说一样。"
-yk "我也可以在旁白模式中说话。"
-"旁白可以继续。"
-"这样可以讲述更长的故事。"
+"/zhs 这是旁白模式的开始。/ /zhc 這是旁白模式的開始。/ /en This is the start of NVL mode./ /jp これはNVLモードの始まりです。/"
+"/zhs 在这个模式下，所有的文本都会累积显示。/ /zhc 在這個模式下，所有的文本都會累積顯示。/ /en In this mode, all lines stay on screen./ /jp このモードでは、テキストが積み上がって表示されます。/"
+"/zhs 就像小说一样。/ /zhc 就像小說一樣。/ /en Just like reading a novel./ /jp 小説のような表示です。/"
+yk "/zhs 我也可以在旁白模式中说话。/ /zhc 我也可以在旁白模式中說話。/ /en I can also speak in NVL mode./ /jp 私もNVLモードで話せます。/"
+"/zhs 旁白可以继续。/ /zhc 旁白可以繼續。/ /en Narration can continue./ /jp ナレーションは続きます。/"
+"/zhs 这样可以讲述更长的故事。/ /zhc 這樣可以講述更長的故事。/ /en This works well for longer storytelling./ /jp こうすると長い物語を語れます。/"
 endnvl
-yk "现在退出旁白模式了。"
+yk "/zhs 现在退出旁白模式了。/ /zhc 現在退出旁白模式了。/ /en Now we exit NVL mode./ /jp これでNVLモードを終了します。/"
 return
 
 label after_choice_nvlm
 nvlm
-"这是宽幅电影模式的旁白。"
-"在这个模式下，上下会有黑边。"
-"就像看电影一样的感觉。"
-yk "我在电影模式中说话。"
-"这种模式更有电影感。"
-"适合重要剧情的叙述。"
+"/zhs 这是宽幅电影模式的旁白。/ /zhc 這是寬幅電影模式的旁白。/ /en This is narration in cinematic mode./ /jp これはシネマモードのナレーションです。/"
+"/zhs 在这个模式下，上下会有黑边。/ /zhc 在這個模式下，上下會有黑邊。/ /en In this mode, black bars appear top and bottom./ /jp このモードでは上下に黒帯が表示されます。/"
+"/zhs 就像看电影一样的感觉。/ /zhc 就像看電影一樣的感覺。/ /en It feels like watching a movie./ /jp 映画を見ているような雰囲気です。/"
+yk "/zhs 我在电影模式中说话。/ /zhc 我在電影模式中說話。/ /en I'm speaking in cinematic mode./ /jp シネマモードで話しています。/"
+"/zhs 这种模式更有电影感。/ /zhc 這種模式更有電影感。/ /en This mode feels more cinematic./ /jp このモードはより映画的です。/"
+"/zhs 适合重要剧情的叙述。/ /zhc 適合重要劇情的敘述。/ /en Great for important story scenes./ /jp 重要なシーンの演出に向いています。/"
 endnvlm
-yk "现在退出电影旁白模式了。"
+yk "/zhs 现在退出电影旁白模式了。/ /zhc 現在退出電影旁白模式了。/ /en Now we exit cinematic NVL mode./ /jp これでシネマNVLモードを終了します。/"
 return

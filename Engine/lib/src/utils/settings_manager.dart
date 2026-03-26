@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
@@ -5,7 +7,7 @@ import 'package:sakiengine/src/config/project_info_manager.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
 import 'platform_window_manager_io.dart' if (dart.library.html) 'platform_window_manager_web.dart';
 
-class SettingsManager extends ChangeNotifier {
+class SettingsManager extends ChangeNotifier with WindowListener {
   static final SettingsManager _instance = SettingsManager._internal();
   factory SettingsManager() => _instance;
   SettingsManager._internal();
@@ -35,6 +37,12 @@ class SettingsManager extends ChangeNotifier {
   final _dataManager = UnifiedGameDataManager();
   String? _projectName;
   bool _isInitialized = false;
+  bool _windowSyncInitialized = false;
+  bool _isApplyingWindowFullscreenState = false;
+  Timer? _windowFullscreenPollTimer;
+
+  static const Duration _windowFullscreenPollInterval =
+      Duration(milliseconds: 400);
 
   Future<void> init() async {
     if (_isInitialized) return;
@@ -50,6 +58,59 @@ class SettingsManager extends ChangeNotifier {
     await _dataManager.init(_projectName!);
 
     _isInitialized = true;
+    await _ensureWindowFullscreenSync();
+  }
+
+  Future<void> _ensureWindowFullscreenSync() async {
+    if (_windowSyncInitialized) {
+      return;
+    }
+    if (!PlatformWindowManager.supportsWindowStateSync) {
+      return;
+    }
+    _windowSyncInitialized = true;
+
+    PlatformWindowManager.addListener(this);
+    await _syncFullscreenFromWindow();
+
+    _windowFullscreenPollTimer?.cancel();
+    _windowFullscreenPollTimer = Timer.periodic(
+      _windowFullscreenPollInterval,
+      (_) {
+        unawaited(_syncFullscreenFromWindow());
+      },
+    );
+  }
+
+  Future<void> _syncFullscreenFromWindow() async {
+    if (!_isInitialized || _projectName == null) {
+      return;
+    }
+    final fullScreen = await PlatformWindowManager.isFullScreen();
+    if (fullScreen == null) {
+      return;
+    }
+    await _applyFullscreenStateFromWindow(fullScreen);
+  }
+
+  Future<void> _applyFullscreenStateFromWindow(bool isFullscreen) async {
+    if (!_isInitialized || _projectName == null) {
+      return;
+    }
+    if (_dataManager.isFullscreen == isFullscreen) {
+      return;
+    }
+    if (_isApplyingWindowFullscreenState) {
+      return;
+    }
+
+    _isApplyingWindowFullscreenState = true;
+    try {
+      await _dataManager.setIsFullscreen(isFullscreen, _projectName!);
+      notifyListeners();
+    } finally {
+      _isApplyingWindowFullscreenState = false;
+    }
   }
 
   // 对话框不透明度
@@ -88,6 +149,44 @@ class SettingsManager extends ChangeNotifier {
     }
 
     notifyListeners();
+  }
+
+  @override
+  Future<void> onWindowClose() async {}
+
+  @override
+  void onWindowEnterFullScreen() {
+    unawaited(_applyFullscreenStateFromWindow(true));
+  }
+
+  @override
+  void onWindowLeaveFullScreen() {
+    unawaited(_applyFullscreenStateFromWindow(false));
+  }
+
+  @override
+  void onWindowResize() {
+    unawaited(_syncFullscreenFromWindow());
+  }
+
+  @override
+  void onWindowResized() {
+    unawaited(_syncFullscreenFromWindow());
+  }
+
+  @override
+  void onWindowMaximize() {
+    unawaited(_syncFullscreenFromWindow());
+  }
+
+  @override
+  void onWindowUnmaximize() {
+    unawaited(_syncFullscreenFromWindow());
+  }
+
+  @override
+  void onWindowRestore() {
+    unawaited(_syncFullscreenFromWindow());
   }
 
   // 深色模式

@@ -1,4 +1,5 @@
 //config// SakiEngine 配置文件
+script_default_language: zhs // 可选: zhs / zhc / en / jp
 theme: color=rgb(19, 123, 139)
 base_textbutton: size=40
 base_dialogue: size=24

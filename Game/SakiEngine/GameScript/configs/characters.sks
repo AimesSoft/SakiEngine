@@ -1,7 +1,7 @@
 //chara// SakiEngine 角色定义文件
 //格式: 别名 : "显示名称" : 资源ID
 
-yk : "刘雪慕心" : yuki at pose
-x : "夏悠" : xiayo at pose
-nr : "旁白" : narrator //假设旁白也有立绘或特殊处理 
-n : "空白" : narrator
+yk : "/zhs 刘雪慕心/ /zhc 劉雪慕心/ /en Yuki/ /jp ユキ/" : yuki at pose
+x : "/zhs 夏悠/ /zhc 夏悠/ /en Xia You/ /jp シャヨウ/" : xiayo at pose
+nr : "/zhs 旁白/ /zhc 旁白/ /en Narrator/ /jp ナレーター/" : narrator //假设旁白也有立绘或特殊处理 
+n : "/zhs 空白/ /zhc 空白/ /en Blank/ /jp 空白/" : narrator

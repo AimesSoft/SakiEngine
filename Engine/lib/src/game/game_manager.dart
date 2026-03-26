@@ -9,6 +9,7 @@ import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 import 'package:sakiengine/src/game/script_merger.dart';
 import 'package:sakiengine/src/game/save_load_manager.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
+import 'package:sakiengine/src/localization/script_text_localizer.dart';
 import 'package:sakiengine/src/widgets/common/black_screen_transition.dart';
 import 'package:sakiengine/src/effects/scene_filter.dart';
 import 'package:sakiengine/src/effects/scene_transition_effects.dart';
@@ -980,6 +981,22 @@ class GameManager {
     });
   }
 
+  String _resolveScriptText(String text) {
+    return ScriptTextLocalizer.resolve(text, language: _activeLanguage);
+  }
+
+  MenuNode _localizeMenuNode(MenuNode node) {
+    final localizedChoices = node.choices
+        .map(
+          (choice) => ChoiceOptionNode(
+            _resolveScriptText(choice.text),
+            choice.targetLabel,
+          ),
+        )
+        .toList();
+    return MenuNode(localizedChoices);
+  }
+
   /// 设置BuildContext用于转场效果
   void setContext(BuildContext context, [TickerProvider? tickerProvider]) {
     //////print('[GameManager] 设置上下文用于转场效果');
@@ -1033,8 +1050,7 @@ class GameManager {
         final normalizedMusicFile = _normalizeMusicFileName(node.musicFile);
         if (normalizedMusicFile.isEmpty) {
           if (kEngineDebugMode && _musicRegionVerboseLogs) {
-            print(
-                '[MusicRegion] 忽略空音乐名: raw="${node.musicFile}" at index $i');
+            print('[MusicRegion] 忽略空音乐名: raw="${node.musicFile}" at index $i');
           }
           continue;
         }
@@ -1820,6 +1836,7 @@ class GameManager {
       }
 
       if (node is ConditionalSayNode) {
+        final resolvedDialogue = _resolveScriptText(node.dialogue);
         // 检查条件是否满足
         final currentValue = GlobalVariableManager()
             .getBoolVariableSync(node.conditionVariable, defaultValue: false);
@@ -1945,7 +1962,7 @@ class GameManager {
           final newNvlDialogue = NvlDialogue(
             speaker: characterConfig?.name,
             speakerAlias: node.character, // 新增：传递角色简写
-            dialogue: node.dialogue,
+            dialogue: resolvedDialogue,
             timestamp: DateTime.now(),
           );
 
@@ -1963,7 +1980,7 @@ class GameManager {
           // 也添加到对话历史
           _addToDialogueHistory(
             speaker: characterConfig?.name,
-            dialogue: node.dialogue,
+            dialogue: resolvedDialogue,
             timestamp: DateTime.now(),
             currentNodeIndex: currentNodeIndex,
           );
@@ -1992,7 +2009,7 @@ class GameManager {
         } else {
           // 普通对话模式
           _currentState = _currentState.copyWith(
-            dialogue: node.dialogue,
+            dialogue: resolvedDialogue,
             speaker: characterConfig?.name,
             speakerAlias: node.character, // 传入角色简写
             currentNode: null,
@@ -2003,7 +2020,7 @@ class GameManager {
 
           _addToDialogueHistory(
             speaker: characterConfig?.name,
-            dialogue: node.dialogue,
+            dialogue: resolvedDialogue,
             timestamp: DateTime.now(),
             currentNodeIndex: currentNodeIndex,
           );
@@ -2017,6 +2034,7 @@ class GameManager {
 
       if (node is SayNode) {
         ////print('[GameManager] 处理SayNode: character=${node.character}, pose=${node.pose}, expression=${node.expression}, animation=${node.animation}');
+        final resolvedDialogue = _resolveScriptText(node.dialogue);
         final characterConfig = _characterConfigs[node.character];
         ////print('[GameManager] 角色配置: $characterConfig');
         CharacterState? currentCharacterState;
@@ -2029,7 +2047,7 @@ class GameManager {
             _currentState = _currentState.copyWith(
               speaker: characterConfig?.name ?? node.character,
               speakerAlias: node.character, // 传入角色简写
-              dialogue: node.dialogue,
+              dialogue: resolvedDialogue,
               everShownCharacters: _everShownCharacters,
             );
           } else {
@@ -2191,7 +2209,7 @@ class GameManager {
           final newNvlDialogue = NvlDialogue(
             speaker: characterConfig?.name,
             speakerAlias: node.character, // 新增：传递角色简写
-            dialogue: node.dialogue,
+            dialogue: resolvedDialogue,
             timestamp: DateTime.now(),
           );
 
@@ -2209,7 +2227,7 @@ class GameManager {
           // 也添加到对话历史
           _addToDialogueHistory(
             speaker: characterConfig?.name,
-            dialogue: node.dialogue,
+            dialogue: resolvedDialogue,
             timestamp: DateTime.now(),
             currentNodeIndex: currentNodeIndex,
           );
@@ -2242,7 +2260,7 @@ class GameManager {
           // 在CG背景下，如果之前已经设置了对话内容，就不要重复设置
           if (!(_isCurrentBackgroundCG() && node.character != null)) {
             _currentState = _currentState.copyWith(
-              dialogue: node.dialogue,
+              dialogue: resolvedDialogue,
               speaker: characterConfig?.name,
               speakerAlias: node.character, // 传入角色简写
               currentNode: null,
@@ -2254,7 +2272,7 @@ class GameManager {
 
           _addToDialogueHistory(
             speaker: characterConfig?.name,
-            dialogue: node.dialogue,
+            dialogue: resolvedDialogue,
             timestamp: DateTime.now(),
             currentNodeIndex: currentNodeIndex,
           );
@@ -2284,6 +2302,7 @@ class GameManager {
       }
 
       if (node is MenuNode) {
+        final localizedMenuNode = _localizeMenuNode(node);
         // 分支选择前创建运行时自动存档
         await _createRuntimeAutoSave(reason: '分支选择');
 
@@ -2291,7 +2310,7 @@ class GameManager {
         await _checkAndCreateAutoSave(_scriptIndex, reason: '分支选择');
 
         _currentState = _currentState.copyWith(
-            currentNode: node,
+            currentNode: localizedMenuNode,
             clearDialogueAndSpeaker: true,
             everShownCharacters: _everShownCharacters);
         _gameStateController.add(_currentState);
@@ -2745,7 +2764,7 @@ class GameManager {
 
       // 根据节点类型提取最新的对话文本（只处理SayNode）
       if (node is SayNode) {
-        newDialogue = node.dialogue;
+        newDialogue = _resolveScriptText(node.dialogue);
         if (node.character != null) {
           final characterConfig = _characterConfigs[node.character];
           newSpeaker = characterConfig?.name;
@@ -2785,7 +2804,7 @@ class GameManager {
 
     // 根据节点类型提取最新的对话文本（只处理SayNode）
     if (node is SayNode) {
-      newDialogue = node.dialogue;
+      newDialogue = _resolveScriptText(node.dialogue);
       if (node.character != null) {
         final characterConfig = _characterConfigs[node.character];
         newSpeaker = characterConfig?.name;

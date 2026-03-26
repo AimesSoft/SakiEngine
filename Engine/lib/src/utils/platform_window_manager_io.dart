@@ -8,6 +8,8 @@ class PlatformWindowManager {
     return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
   }
 
+  static bool get supportsWindowStateSync => _isDesktop;
+
   static Future<void> ensureInitialized() async {
     if (_isDesktop) {
       await windowManager.ensureInitialized();
@@ -60,5 +62,12 @@ class PlatformWindowManager {
     if (_isDesktop) {
       await windowManager.setFullScreen(fullScreen);
     }
+  }
+
+  static Future<bool?> isFullScreen() async {
+    if (_isDesktop) {
+      return windowManager.isFullScreen();
+    }
+    return null;
   }
 }

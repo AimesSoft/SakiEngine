@@ -1,5 +1,6 @@
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/config/config_models.dart';
+import 'package:sakiengine/src/localization/script_text_localizer.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 
 /// NVL模式状态管理器
@@ -74,7 +75,7 @@ class NvlStateManager {
 
     // 根据节点类型提取最新的对话文本（只处理SayNode）
     if (node is SayNode) {
-      newDialogue = node.dialogue;
+      newDialogue = ScriptTextLocalizer.resolve(node.dialogue);
       if (node.character != null) {
         final characterConfig = characterConfigs[node.character];
         newSpeaker = characterConfig?.name;
