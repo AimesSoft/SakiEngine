@@ -376,9 +376,19 @@ class SaveLoadManager {
     String currentScript,
     GameStateSnapshot snapshot, {
     String dialoguePreview = '',
+    Map<String, PoseConfig>? poseConfigs,
   }) async {
     final currentIndex = _readAutoSaveIndex();
     final now = DateTime.now();
+    Uint8List? screenshotData;
+    try {
+      screenshotData = await ScreenshotGenerator.generateScreenshotData(
+        snapshot.currentState,
+        poseConfigs ?? <String, PoseConfig>{},
+      );
+    } catch (_) {
+      // 自动存档截图失败不阻断存档
+    }
 
     final saveSlot = SaveSlot(
       id: int.parse(now.millisecondsSinceEpoch.toString().substring(0, 10)),
@@ -386,7 +396,7 @@ class SaveLoadManager {
       currentScript: currentScript,
       dialoguePreview: dialoguePreview,
       snapshot: snapshot,
-      screenshotData: null,
+      screenshotData: screenshotData,
       isLocked: false,
     );
 

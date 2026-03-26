@@ -208,6 +208,7 @@ class GameManager {
         currentScriptFile,
         saveStateSnapshot(),
         dialoguePreview: reason,
+        poseConfigs: _poseConfigs,
       );
     } catch (e) {
       if (kEngineDebugMode) {
