@@ -41,6 +41,8 @@ class SettingsManager extends ChangeNotifier with WindowListener {
   static const String _showFpsOverlayKey = 'sakiengine.showFpsOverlay';
   static const String _gameWindowResizeModeKey =
       'sakiengine.gameWindowResizeMode';
+  static const String _projectDefaultsAppliedKey =
+      'sakiengine.projectDefaultsApplied.v1';
 
   final _dataManager = UnifiedGameDataManager();
   String? _projectName;
@@ -69,10 +71,58 @@ class SettingsManager extends ChangeNotifier with WindowListener {
 
     // 初始化数据管理器
     await _dataManager.init(_projectName!);
+    await _applyProjectDefaultSettingsIfNeeded();
 
     _isInitialized = true;
     await _ensureWindowFullscreenSync();
     await _applyWindowAspectRatioConstraint();
+  }
+
+  String _projectDefaultMenuDisplayMode() {
+    final mode = SakiEngineConfig().defaultMenuDisplayMode;
+    if (mode == 'windowed' || mode == 'fullscreen') {
+      return mode;
+    }
+    return defaultMenuDisplayMode;
+  }
+
+  String _projectDefaultGameWindowResizeMode() {
+    return _normalizeGameWindowResizeMode(
+      SakiEngineConfig().defaultGameWindowResizeMode,
+    );
+  }
+
+  Future<void> _applyProjectDefaultSettingsIfNeeded() async {
+    final projectName = _projectName;
+    if (projectName == null) {
+      return;
+    }
+
+    final hasAppliedProjectDefaults = _dataManager.getBoolVariable(
+      _projectDefaultsAppliedKey,
+      defaultValue: false,
+    );
+    if (hasAppliedProjectDefaults) {
+      return;
+    }
+
+    if (!_dataManager.hasPersistedData) {
+      await _dataManager.setMenuDisplayMode(
+        _projectDefaultMenuDisplayMode(),
+        projectName,
+      );
+      await _dataManager.setStringVariable(
+        _gameWindowResizeModeKey,
+        _projectDefaultGameWindowResizeMode(),
+        projectName,
+      );
+    }
+
+    await _dataManager.setBoolVariable(
+      _projectDefaultsAppliedKey,
+      true,
+      projectName,
+    );
   }
 
   Future<void> _ensureWindowFullscreenSync() async {
@@ -238,7 +288,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
     final shouldKeepAspectRatio = _normalizeGameWindowResizeMode(
           _dataManager.getStringVariable(
             _gameWindowResizeModeKey,
-            defaultValue: defaultGameWindowResizeMode,
+            defaultValue: _projectDefaultGameWindowResizeMode(),
           ),
         ) ==
         'keep_aspect';
@@ -429,7 +479,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
     return _normalizeGameWindowResizeMode(
       _dataManager.getStringVariable(
         _gameWindowResizeModeKey,
-        defaultValue: defaultGameWindowResizeMode,
+        defaultValue: _projectDefaultGameWindowResizeMode(),
       ),
     );
   }
@@ -437,7 +487,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
   String get currentGameWindowResizeMode => _normalizeGameWindowResizeMode(
         _dataManager.getStringVariable(
           _gameWindowResizeModeKey,
-          defaultValue: defaultGameWindowResizeMode,
+          defaultValue: _projectDefaultGameWindowResizeMode(),
         ),
       );
 
@@ -499,8 +549,9 @@ class SettingsManager extends ChangeNotifier with WindowListener {
   Future<void> resetToDefault() async {
     await init();
 
-    final projectDefaultMenuDisplayMode =
-        SakiEngineConfig().defaultMenuDisplayMode;
+    final projectDefaultMenuDisplayMode = _projectDefaultMenuDisplayMode();
+    final projectDefaultGameWindowResizeMode =
+        _projectDefaultGameWindowResizeMode();
 
     await _dataManager.setDialogOpacity(defaultDialogOpacity, _projectName!);
     await _dataManager.setIsFullscreen(defaultIsFullscreen, _projectName!);
@@ -521,7 +572,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
         projectDefaultMenuDisplayMode, _projectName!);
     await _dataManager.setStringVariable(
       _gameWindowResizeModeKey,
-      defaultGameWindowResizeMode,
+      projectDefaultGameWindowResizeMode,
       _projectName!,
     );
     await _dataManager.setFastForwardMode(

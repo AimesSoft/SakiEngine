@@ -7,7 +7,8 @@ import 'package:path_provider/path_provider.dart';
 /// 将所有游戏数据（设置、变量、音量等）保存到存档目录
 /// 使用二进制格式，方便 Steam 云存档同步
 class UnifiedGameDataManager {
-  static final UnifiedGameDataManager _instance = UnifiedGameDataManager._internal();
+  static final UnifiedGameDataManager _instance =
+      UnifiedGameDataManager._internal();
   factory UnifiedGameDataManager() => _instance;
   UnifiedGameDataManager._internal();
 
@@ -43,11 +44,13 @@ class UnifiedGameDataManager {
   final Map<String, String> _stringVariables = {};
 
   bool _isInitialized = false;
+  bool _hasPersistedData = false;
 
   /// 获取数据文件路径
   Future<String> _getDataFilePath(String projectName) async {
     final directory = await getApplicationDocumentsDirectory();
-    final dataDir = Directory('${directory.path}/SakiEngine/Saves/$projectName');
+    final dataDir =
+        Directory('${directory.path}/SakiEngine/Saves/$projectName');
     if (!await dataDir.exists()) {
       await dataDir.create(recursive: true);
     }
@@ -63,6 +66,7 @@ class UnifiedGameDataManager {
       final file = File(filePath);
 
       if (await file.exists()) {
+        _hasPersistedData = true;
         final data = await file.readAsBytes();
         _deserialize(data);
       }
@@ -221,6 +225,8 @@ class UnifiedGameDataManager {
 
   // ============ 设置相关 Getters/Setters ============
 
+  bool get hasPersistedData => _hasPersistedData;
+
   double get dialogOpacity => _dialogOpacity;
   Future<void> setDialogOpacity(double value, String projectName) async {
     _dialogOpacity = value;
@@ -240,7 +246,8 @@ class UnifiedGameDataManager {
   }
 
   double get typewriterCharsPerSecond => _typewriterCharsPerSecond;
-  Future<void> setTypewriterCharsPerSecond(double value, String projectName) async {
+  Future<void> setTypewriterCharsPerSecond(
+      double value, String projectName) async {
     _typewriterCharsPerSecond = value;
     await save(projectName);
   }
@@ -282,7 +289,8 @@ class UnifiedGameDataManager {
   }
 
   String get mouseRollbackBehavior => _mouseRollbackBehavior;
-  Future<void> setMouseRollbackBehavior(String value, String projectName) async {
+  Future<void> setMouseRollbackBehavior(
+      String value, String projectName) async {
     _mouseRollbackBehavior = value;
     await save(projectName);
   }
@@ -325,7 +333,8 @@ class UnifiedGameDataManager {
     return _boolVariables[name] ?? defaultValue;
   }
 
-  Future<void> setBoolVariable(String name, bool value, String projectName) async {
+  Future<void> setBoolVariable(
+      String name, bool value, String projectName) async {
     _boolVariables[name] = value;
     await save(projectName);
   }
@@ -334,7 +343,8 @@ class UnifiedGameDataManager {
     return _intVariables[name] ?? defaultValue;
   }
 
-  Future<void> setIntVariable(String name, int value, String projectName) async {
+  Future<void> setIntVariable(
+      String name, int value, String projectName) async {
     _intVariables[name] = value;
     await save(projectName);
   }
@@ -343,7 +353,8 @@ class UnifiedGameDataManager {
     return _doubleVariables[name] ?? defaultValue;
   }
 
-  Future<void> setDoubleVariable(String name, double value, String projectName) async {
+  Future<void> setDoubleVariable(
+      String name, double value, String projectName) async {
     _doubleVariables[name] = value;
     await save(projectName);
   }
@@ -352,7 +363,8 @@ class UnifiedGameDataManager {
     return _stringVariables[name] ?? defaultValue;
   }
 
-  Future<void> setStringVariable(String name, String value, String projectName) async {
+  Future<void> setStringVariable(
+      String name, String value, String projectName) async {
     _stringVariables[name] = value;
     await save(projectName);
   }
@@ -400,13 +412,15 @@ class _BinaryReader {
   _BinaryReader(this._data);
 
   int readInt32() {
-    final value = ByteData.sublistView(_data, _offset, _offset + 4).getInt32(0, Endian.little);
+    final value = ByteData.sublistView(_data, _offset, _offset + 4)
+        .getInt32(0, Endian.little);
     _offset += 4;
     return value;
   }
 
   double readDouble() {
-    final value = ByteData.sublistView(_data, _offset, _offset + 8).getFloat64(0, Endian.little);
+    final value = ByteData.sublistView(_data, _offset, _offset + 8)
+        .getFloat64(0, Endian.little);
     _offset += 8;
     return value;
   }
