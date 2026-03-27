@@ -85,4 +85,10 @@ class PlatformWindowManager {
     }
     return null;
   }
+
+  static Future<void> setAspectRatio(double aspectRatio) async {
+    if (_isDesktop) {
+      await windowManager.setAspectRatio(aspectRatio);
+    }
+  }
 }

@@ -96,6 +96,8 @@ class PlatformWindowManager {
       return null;
     }
   }
+
+  static Future<void> setAspectRatio(double aspectRatio) async {}
 }
 
 mixin WindowListener {

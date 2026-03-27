@@ -5,7 +5,8 @@ import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
-import 'platform_window_manager_io.dart' if (dart.library.html) 'platform_window_manager_web.dart';
+import 'platform_window_manager_io.dart'
+    if (dart.library.html) 'platform_window_manager_web.dart';
 
 class SettingsManager extends ChangeNotifier with WindowListener {
   static final SettingsManager _instance = SettingsManager._internal();
@@ -28,11 +29,18 @@ class SettingsManager extends ChangeNotifier with WindowListener {
   static const bool defaultSkipPunctuationDelay = false;
   static const bool defaultSpeakerAnimation = true;
   static const bool defaultAutoHideQuickMenu = false;
-  static const String defaultMenuDisplayMode = 'windowed'; // 'windowed' or 'fullscreen'
-  static const String defaultFastForwardMode = 'read_only'; // 'read_only' or 'force'
-  static const String defaultMouseRollbackBehavior = 'rewind'; // 'rewind' or 'history'
+  static const String defaultMenuDisplayMode =
+      'windowed'; // 'windowed' or 'fullscreen'
+  static const String defaultGameWindowResizeMode =
+      'free'; // 'free' or 'keep_aspect'
+  static const String defaultFastForwardMode =
+      'read_only'; // 'read_only' or 'force'
+  static const String defaultMouseRollbackBehavior =
+      'rewind'; // 'rewind' or 'history'
   static const String defaultDialogueFontFamily = 'SourceHanSansCN'; // 对话文字字体
   static const String _showFpsOverlayKey = 'sakiengine.showFpsOverlay';
+  static const String _gameWindowResizeModeKey =
+      'sakiengine.gameWindowResizeMode';
 
   final _dataManager = UnifiedGameDataManager();
   String? _projectName;
@@ -64,6 +72,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
 
     _isInitialized = true;
     await _ensureWindowFullscreenSync();
+    await _applyWindowAspectRatioConstraint();
   }
 
   Future<void> _ensureWindowFullscreenSync() async {
@@ -118,6 +127,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
     _isApplyingWindowFullscreenState = true;
     try {
       await _dataManager.setIsFullscreen(isFullscreen, _projectName!);
+      await _applyWindowAspectRatioConstraint();
       notifyListeners();
     } finally {
       _isApplyingWindowFullscreenState = false;
@@ -155,6 +165,8 @@ class SettingsManager extends ChangeNotifier with WindowListener {
       await _applyPlatformFullscreen(isFullscreen);
     }
 
+    await _applyWindowAspectRatioConstraint();
+
     notifyListeners();
   }
 
@@ -167,8 +179,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
       }
 
       if (isFullscreen) {
-        final wasMaximized =
-            await PlatformWindowManager.isMaximized() ?? false;
+        final wasMaximized = await PlatformWindowManager.isMaximized() ?? false;
         _restoreMaximizedAfterFullscreen = wasMaximized;
 
         if (wasMaximized) {
@@ -201,6 +212,40 @@ class SettingsManager extends ChangeNotifier with WindowListener {
       }
       await Future<void>.delayed(_windowMaximizeTransitionPollInterval);
     }
+  }
+
+  String _normalizeGameWindowResizeMode(String mode) {
+    if (mode == 'keep_aspect' || mode == 'free') {
+      return mode;
+    }
+    return defaultGameWindowResizeMode;
+  }
+
+  double _resolveGameWindowAspectRatio() {
+    final logicalWidth = SakiEngineConfig().logicalWidth;
+    final logicalHeight = SakiEngineConfig().logicalHeight;
+    if (logicalWidth <= 0 || logicalHeight <= 0) {
+      return 16 / 9;
+    }
+    return logicalWidth / logicalHeight;
+  }
+
+  Future<void> _applyWindowAspectRatioConstraint() async {
+    if (kIsWeb || !PlatformWindowManager.supportsWindowStateSync) {
+      return;
+    }
+
+    final shouldKeepAspectRatio = _normalizeGameWindowResizeMode(
+          _dataManager.getStringVariable(
+            _gameWindowResizeModeKey,
+            defaultValue: defaultGameWindowResizeMode,
+          ),
+        ) ==
+        'keep_aspect';
+    final aspectRatio = (shouldKeepAspectRatio && !_dataManager.isFullscreen)
+        ? _resolveGameWindowAspectRatio()
+        : 0.0;
+    await PlatformWindowManager.setAspectRatio(aspectRatio);
   }
 
   Future<void> _restoreMaximizedWindowAfterFullscreenExit() async {
@@ -276,11 +321,13 @@ class SettingsManager extends ChangeNotifier with WindowListener {
     return _dataManager.typewriterCharsPerSecond;
   }
 
-  double get currentTypewriterCharsPerSecond => _dataManager.typewriterCharsPerSecond;
+  double get currentTypewriterCharsPerSecond =>
+      _dataManager.typewriterCharsPerSecond;
 
   Future<void> setTypewriterCharsPerSecond(double charsPerSecond) async {
     await init();
-    await _dataManager.setTypewriterCharsPerSecond(charsPerSecond, _projectName!);
+    await _dataManager.setTypewriterCharsPerSecond(
+        charsPerSecond, _projectName!);
     notifyListeners();
   }
 
@@ -376,6 +423,36 @@ class SettingsManager extends ChangeNotifier with WindowListener {
     notifyListeners();
   }
 
+  // 游戏窗口缩放方式设置（自由缩放/等比缩放）
+  Future<String> getGameWindowResizeMode() async {
+    await init();
+    return _normalizeGameWindowResizeMode(
+      _dataManager.getStringVariable(
+        _gameWindowResizeModeKey,
+        defaultValue: defaultGameWindowResizeMode,
+      ),
+    );
+  }
+
+  String get currentGameWindowResizeMode => _normalizeGameWindowResizeMode(
+        _dataManager.getStringVariable(
+          _gameWindowResizeModeKey,
+          defaultValue: defaultGameWindowResizeMode,
+        ),
+      );
+
+  Future<void> setGameWindowResizeMode(String mode) async {
+    await init();
+    final normalized = _normalizeGameWindowResizeMode(mode);
+    await _dataManager.setStringVariable(
+      _gameWindowResizeModeKey,
+      normalized,
+      _projectName!,
+    );
+    await _applyWindowAspectRatioConstraint();
+    notifyListeners();
+  }
+
   // 快进模式设置
   Future<String> getFastForwardMode() async {
     await init();
@@ -428,16 +505,31 @@ class SettingsManager extends ChangeNotifier with WindowListener {
     await _dataManager.setDialogOpacity(defaultDialogOpacity, _projectName!);
     await _dataManager.setIsFullscreen(defaultIsFullscreen, _projectName!);
     await _dataManager.setDarkMode(defaultDarkMode, _projectName!);
-    await _dataManager.setTypewriterCharsPerSecond(defaultTypewriterCharsPerSecond, _projectName!);
-    await _dataManager.setSkipPunctuationDelay(defaultSkipPunctuationDelay, _projectName!);
-    await _dataManager.setSpeakerAnimation(defaultSpeakerAnimation, _projectName!);
-    await _dataManager.setAutoHideQuickMenu(defaultAutoHideQuickMenu, _projectName!);
-    await _dataManager.setMouseParallaxEnabled(defaultMouseParallaxEnabled, _projectName!);
-    await _dataManager.setBoolVariable(_showFpsOverlayKey, defaultShowFpsOverlay, _projectName!);
-    await _dataManager.setMenuDisplayMode(projectDefaultMenuDisplayMode, _projectName!);
-    await _dataManager.setFastForwardMode(defaultFastForwardMode, _projectName!);
-    await _dataManager.setMouseRollbackBehavior(defaultMouseRollbackBehavior, _projectName!);
-    await _dataManager.setDialogueFontFamily(defaultDialogueFontFamily, _projectName!);
+    await _dataManager.setTypewriterCharsPerSecond(
+        defaultTypewriterCharsPerSecond, _projectName!);
+    await _dataManager.setSkipPunctuationDelay(
+        defaultSkipPunctuationDelay, _projectName!);
+    await _dataManager.setSpeakerAnimation(
+        defaultSpeakerAnimation, _projectName!);
+    await _dataManager.setAutoHideQuickMenu(
+        defaultAutoHideQuickMenu, _projectName!);
+    await _dataManager.setMouseParallaxEnabled(
+        defaultMouseParallaxEnabled, _projectName!);
+    await _dataManager.setBoolVariable(
+        _showFpsOverlayKey, defaultShowFpsOverlay, _projectName!);
+    await _dataManager.setMenuDisplayMode(
+        projectDefaultMenuDisplayMode, _projectName!);
+    await _dataManager.setStringVariable(
+      _gameWindowResizeModeKey,
+      defaultGameWindowResizeMode,
+      _projectName!,
+    );
+    await _dataManager.setFastForwardMode(
+        defaultFastForwardMode, _projectName!);
+    await _dataManager.setMouseRollbackBehavior(
+        defaultMouseRollbackBehavior, _projectName!);
+    await _dataManager.setDialogueFontFamily(
+        defaultDialogueFontFamily, _projectName!);
     await _dataManager.setMusicEnabled(defaultMusicEnabled, _projectName!);
     await _dataManager.setSoundEnabled(defaultSoundEnabled, _projectName!);
     await _dataManager.setMusicVolume(defaultMusicVolume, _projectName!);
@@ -447,6 +539,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
     if (!kIsWeb) {
       await _applyPlatformFullscreen(defaultIsFullscreen);
     }
+    await _applyWindowAspectRatioConstraint();
 
     notifyListeners();
   }
@@ -459,6 +552,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
       'typewriterCharsPerSecond': await getTypewriterCharsPerSecond(),
       'skipPunctuationDelay': await getSkipPunctuationDelay(),
       'showFpsOverlay': await getShowFpsOverlay(),
+      'gameWindowResizeMode': await getGameWindowResizeMode(),
     };
   }
 }
