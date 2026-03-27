@@ -716,6 +716,8 @@ dependency_overrides:
     path: ../../third_party/media_kit_hotfix
   media_kit_libs_windows_video:
     path: ../../third_party/media_kit_libs_windows_video_hotfix
+  flutter_steamworks:
+    path: ../../third_party/flutter_steamworks_hotfix
 
 dev_dependencies:
   flutter_test:
@@ -729,9 +731,6 @@ flutter:
     - default_game.txt
     - Assets/
     - GameScript/
-    - GameScript_en/
-    - GameScript_ja/
-    - GameScript_zh-Hant/
   fonts:
     - family: SourceHanSansCN
       fonts:

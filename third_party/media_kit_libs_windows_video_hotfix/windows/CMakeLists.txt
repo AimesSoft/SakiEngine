@@ -33,6 +33,59 @@ if(MEDIA_KIT_DOWNLOAD_RETRY_COUNT LESS 1)
   set(MEDIA_KIT_DOWNLOAD_RETRY_COUNT "1")
 endif()
 
+function(first_existing_path outputVar)
+  set(FOUND_PATH "")
+  foreach(candidatePath IN LISTS ARGN)
+    if(NOT "${candidatePath}" STREQUAL "" AND EXISTS "${candidatePath}")
+      set(FOUND_PATH "${candidatePath}")
+      break()
+    endif()
+  endforeach()
+  set(${outputVar} "${FOUND_PATH}" PARENT_SCOPE)
+endfunction()
+
+function(resolve_saki_media_kit_prebuilt_dir resultVar)
+  set(PREBUILT_DIR "")
+  if(DEFINED SAKI_MEDIA_KIT_WINDOWS_PREBUILT_DIR AND NOT "${SAKI_MEDIA_KIT_WINDOWS_PREBUILT_DIR}" STREQUAL "")
+    set(PREBUILT_DIR "${SAKI_MEDIA_KIT_WINDOWS_PREBUILT_DIR}")
+  elseif(DEFINED ENV{SAKI_MEDIA_KIT_WINDOWS_PREBUILT_DIR} AND NOT "$ENV{SAKI_MEDIA_KIT_WINDOWS_PREBUILT_DIR}" STREQUAL "")
+    set(PREBUILT_DIR "$ENV{SAKI_MEDIA_KIT_WINDOWS_PREBUILT_DIR}")
+  else()
+    get_filename_component(PACKAGE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+    set(PREBUILT_DIR "${PACKAGE_ROOT_DIR}/prebuilt")
+  endif()
+  set(${resultVar} "${PREBUILT_DIR}" PARENT_SCOPE)
+endfunction()
+
+function(find_archive_in_workspace_cache archiveFileName resultVar)
+  set(ARCHIVE_CANDIDATES "")
+
+  get_filename_component(REPO_ROOT_FROM_GAME_LAYOUT "${CMAKE_BINARY_DIR}/../../../../.." ABSOLUTE)
+  get_filename_component(REPO_ROOT_FROM_ENGINE_LAYOUT "${CMAKE_BINARY_DIR}/../../../.." ABSOLUTE)
+
+  file(
+    GLOB GAME_LAYOUT_ARCHIVES
+    "${REPO_ROOT_FROM_GAME_LAYOUT}/Game/*/build/windows/x64/${archiveFileName}"
+    "${REPO_ROOT_FROM_GAME_LAYOUT}/Engine/build/windows/x64/${archiveFileName}"
+  )
+  file(
+    GLOB ENGINE_LAYOUT_ARCHIVES
+    "${REPO_ROOT_FROM_ENGINE_LAYOUT}/Game/*/build/windows/x64/${archiveFileName}"
+    "${REPO_ROOT_FROM_ENGINE_LAYOUT}/Engine/build/windows/x64/${archiveFileName}"
+  )
+
+  list(APPEND ARCHIVE_CANDIDATES ${GAME_LAYOUT_ARCHIVES})
+  list(APPEND ARCHIVE_CANDIDATES ${ENGINE_LAYOUT_ARCHIVES})
+  list(REMOVE_DUPLICATES ARCHIVE_CANDIDATES)
+
+  if(ARCHIVE_CANDIDATES)
+    list(GET ARCHIVE_CANDIDATES 0 FIRST_ARCHIVE_CANDIDATE)
+    set(${resultVar} "${FIRST_ARCHIVE_CANDIDATE}" PARENT_SCOPE)
+  else()
+    set(${resultVar} "" PARENT_SCOPE)
+  endif()
+endfunction()
+
 # ------------------------------------------------------------------------------
 function(copy_archive_override_and_verify localArchivePath md5 locationForArchive archiveLabel)
   if(NOT "${localArchivePath}" STREQUAL "")
@@ -152,8 +205,19 @@ set(LIBMPV_MD5 "a832ef24b3a6ff97cd2560b5b9d04cd8")
 set(LIBMPV_ARCHIVE "${CMAKE_BINARY_DIR}/${LIBMPV}")
 set(LIBMPV_SRC "${CMAKE_BINARY_DIR}/libmpv")
 set(LIBMPV_ARCHIVE_OVERRIDE "")
+resolve_saki_media_kit_prebuilt_dir(SAKI_MEDIA_KIT_WINDOWS_PREBUILT_DIR_RESOLVED)
 if(DEFINED ENV{MEDIA_KIT_LIBS_WINDOWS_VIDEO_LIBMPV_ARCHIVE} AND NOT "$ENV{MEDIA_KIT_LIBS_WINDOWS_VIDEO_LIBMPV_ARCHIVE}" STREQUAL "")
   set(LIBMPV_ARCHIVE_OVERRIDE "$ENV{MEDIA_KIT_LIBS_WINDOWS_VIDEO_LIBMPV_ARCHIVE}")
+endif()
+set(LIBMPV_PREBUILT_ARCHIVE "${SAKI_MEDIA_KIT_WINDOWS_PREBUILT_DIR_RESOLVED}/${LIBMPV}")
+set(LIBMPV_WORKSPACE_CACHE_ARCHIVE "")
+find_archive_in_workspace_cache("${LIBMPV}" LIBMPV_WORKSPACE_CACHE_ARCHIVE)
+if("${LIBMPV_ARCHIVE_OVERRIDE}" STREQUAL "")
+  first_existing_path(
+    LIBMPV_ARCHIVE_OVERRIDE
+    "${LIBMPV_PREBUILT_ARCHIVE}"
+    "${LIBMPV_WORKSPACE_CACHE_ARCHIVE}"
+  )
 endif()
 
 copy_archive_override_and_verify(
@@ -207,8 +271,18 @@ set(ANGLE_ARCHIVE "${CMAKE_BINARY_DIR}/${ANGLE}")
 set(ANGLE_SRC "${CMAKE_BINARY_DIR}/ANGLE")
 set(ANGLE_ARCHIVE_OVERRIDE "")
 set(ANGLE_REPO_LOCAL_ARCHIVE "${CMAKE_CURRENT_SOURCE_DIR}/ANGLE.7z")
+set(ANGLE_PREBUILT_ARCHIVE "${SAKI_MEDIA_KIT_WINDOWS_PREBUILT_DIR_RESOLVED}/${ANGLE}")
+set(ANGLE_WORKSPACE_CACHE_ARCHIVE "")
+find_archive_in_workspace_cache("${ANGLE}" ANGLE_WORKSPACE_CACHE_ARCHIVE)
 if(EXISTS "${ANGLE_REPO_LOCAL_ARCHIVE}")
   set(ANGLE_ARCHIVE_OVERRIDE "${ANGLE_REPO_LOCAL_ARCHIVE}")
+endif()
+if("${ANGLE_ARCHIVE_OVERRIDE}" STREQUAL "")
+  first_existing_path(
+    ANGLE_ARCHIVE_OVERRIDE
+    "${ANGLE_PREBUILT_ARCHIVE}"
+    "${ANGLE_WORKSPACE_CACHE_ARCHIVE}"
+  )
 endif()
 if(DEFINED ENV{MEDIA_KIT_LIBS_WINDOWS_VIDEO_ANGLE_ARCHIVE} AND NOT "$ENV{MEDIA_KIT_LIBS_WINDOWS_VIDEO_ANGLE_ARCHIVE}" STREQUAL "")
   set(ANGLE_ARCHIVE_OVERRIDE "$ENV{MEDIA_KIT_LIBS_WINDOWS_VIDEO_ANGLE_ARCHIVE}")

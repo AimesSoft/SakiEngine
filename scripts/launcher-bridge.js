@@ -60,6 +60,7 @@ async function handlePrepareProject(args) {
     }
 
     assetUtils.ensureProjectIcon(gameDir, projectRoot);
+    assetUtils.fixWindowsInstallPrefixCache(gameDir);
 
     if (args['generate-icons']) {
         assetUtils.generateAppIcons(gameDir);

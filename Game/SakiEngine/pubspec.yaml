@@ -32,9 +32,6 @@ flutter:
     - default_game.txt
     - Assets/
     - GameScript/
-    - GameScript_en/
-    - GameScript_ja/
-    - GameScript_zh-Hant/
   fonts:
     - family: SourceHanSansCN
       fonts:

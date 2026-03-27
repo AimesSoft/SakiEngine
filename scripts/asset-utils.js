@@ -300,12 +300,61 @@ function generateAppIcons(projectDir) {
     }
 }
 
+function readWindowsBinaryName(projectDir) {
+    const windowsCmakePath = path.join(projectDir, 'windows', 'CMakeLists.txt');
+    if (!fs.existsSync(windowsCmakePath)) {
+        return null;
+    }
+    const content = fs.readFileSync(windowsCmakePath, 'utf8');
+    const match = content.match(/set\(BINARY_NAME\s+"([^"]+)"\)/);
+    if (!match || !match[1]) {
+        return null;
+    }
+    return match[1].trim();
+}
+
+function fixWindowsInstallPrefixCache(projectDir) {
+    const cachePath = path.join(projectDir, 'build', 'windows', 'x64', 'CMakeCache.txt');
+    if (!fs.existsSync(cachePath)) {
+        return false;
+    }
+
+    const lines = fs.readFileSync(cachePath, 'utf8').split(/\r?\n/);
+    const installPrefixLineIndex = lines.findIndex((line) => line.startsWith('CMAKE_INSTALL_PREFIX:PATH='));
+    if (installPrefixLineIndex < 0) {
+        return false;
+    }
+
+    const currentLine = lines[installPrefixLineIndex];
+    const currentValue = currentLine.slice('CMAKE_INSTALL_PREFIX:PATH='.length);
+    if (!/program files/i.test(currentValue)) {
+        return false;
+    }
+
+    const binaryName = readWindowsBinaryName(projectDir);
+    if (!binaryName) {
+        return false;
+    }
+
+    const desiredPrefix = `$<TARGET_FILE_DIR:${binaryName}>`;
+    const desiredLine = `CMAKE_INSTALL_PREFIX:PATH=${desiredPrefix}`;
+    if (currentLine === desiredLine) {
+        return false;
+    }
+
+    lines[installPrefixLineIndex] = desiredLine;
+    fs.writeFileSync(cachePath, `${lines.join('\n')}\n`);
+    colorLog(`修复 Windows CMake 安装前缀缓存: ${currentValue} -> ${desiredPrefix}`, 'yellow');
+    return true;
+}
+
 module.exports = {
     readDefaultGame,
     validateGameDir,
     readGameConfig,
     setAppIdentity,
     ensureProjectIcon,
+    fixWindowsInstallPrefixCache,
     generateAppIcons,
     writeDefaultGame,
     getGameDirectories,
