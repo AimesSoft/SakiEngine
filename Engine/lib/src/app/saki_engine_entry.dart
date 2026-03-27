@@ -49,9 +49,11 @@ bool _isMpvVerboseLoggingEnabled() {
     return _isTruthyFlag(fromDefine);
   }
 
-  final fromEnv = Platform.environment['SAKI_MPV_VERBOSE'];
-  if (fromEnv != null && fromEnv.isNotEmpty) {
-    return _isTruthyFlag(fromEnv);
+  if (!kIsWeb) {
+    final fromEnv = Platform.environment['SAKI_MPV_VERBOSE'];
+    if (fromEnv != null && fromEnv.isNotEmpty) {
+      return _isTruthyFlag(fromEnv);
+    }
   }
 
   return false;

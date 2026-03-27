@@ -43,7 +43,7 @@ class GamePathResolver {
       return fromDefine;
     }
 
-    final fromEnv = Platform.environment['SAKI_GAME_PATH'];
+    final fromEnv = _readEnvironment('SAKI_GAME_PATH');
     if (_isNotEmpty(fromEnv)) {
       return fromEnv!.trim();
     }
@@ -72,7 +72,7 @@ class GamePathResolver {
     addCandidate(runtimeConfig.projectName);
     addCandidate(_basenameSafe(runtimeConfig.gamePath));
     addCandidate(_basenameSafe(const String.fromEnvironment('SAKI_GAME_PATH')));
-    addCandidate(_basenameSafe(Platform.environment['SAKI_GAME_PATH']));
+    addCandidate(_basenameSafe(_readEnvironment('SAKI_GAME_PATH')));
 
     final localDefault = await _resolveLocalDefaultGameName();
     addCandidate(localDefault);
@@ -132,7 +132,7 @@ class GamePathResolver {
 
     addSeed(RuntimeProjectConfigStore().config.gamePath);
     addSeed(const String.fromEnvironment('SAKI_GAME_PATH', defaultValue: ''));
-    addSeed(Platform.environment['SAKI_GAME_PATH']);
+    addSeed(_readEnvironment('SAKI_GAME_PATH'));
     for (final base in seedPaths) {
       addSeed(base);
     }
@@ -255,6 +255,13 @@ class GamePathResolver {
     }
 
     return null;
+  }
+
+  static String? _readEnvironment(String key) {
+    if (kIsWeb) {
+      return null;
+    }
+    return Platform.environment[key];
   }
 
   static Future<String?> _findGameRootInDirectory(
