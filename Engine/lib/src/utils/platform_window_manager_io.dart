@@ -8,6 +8,8 @@ class PlatformWindowManager {
     return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
   }
 
+  static bool get isWindows => Platform.isWindows;
+
   static bool get supportsWindowStateSync => _isDesktop;
 
   static Future<void> ensureInitialized() async {
@@ -26,6 +28,19 @@ class PlatformWindowManager {
     if (_isDesktop) {
       await windowManager.maximize();
     }
+  }
+
+  static Future<void> unmaximize() async {
+    if (_isDesktop) {
+      await windowManager.unmaximize();
+    }
+  }
+
+  static Future<bool?> isMaximized() async {
+    if (_isDesktop) {
+      return windowManager.isMaximized();
+    }
+    return null;
   }
 
   static void addListener(WindowListener listener) {

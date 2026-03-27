@@ -39,10 +39,15 @@ class SettingsManager extends ChangeNotifier with WindowListener {
   bool _isInitialized = false;
   bool _windowSyncInitialized = false;
   bool _isApplyingWindowFullscreenState = false;
+  bool _isApplyingPlatformFullscreenTransition = false;
+  bool _restoreMaximizedAfterFullscreen = false;
   Timer? _windowFullscreenPollTimer;
 
   static const Duration _windowFullscreenPollInterval =
       Duration(milliseconds: 400);
+  static const Duration _windowMaximizeTransitionPollInterval =
+      Duration(milliseconds: 16);
+  static const int _windowMaximizeTransitionMaxAttempts = 30;
 
   Future<void> init() async {
     if (_isInitialized) return;
@@ -86,6 +91,9 @@ class SettingsManager extends ChangeNotifier with WindowListener {
     if (!_isInitialized || _projectName == null) {
       return;
     }
+    if (_isApplyingPlatformFullscreenTransition) {
+      return;
+    }
     final fullScreen = await PlatformWindowManager.isFullScreen();
     if (fullScreen == null) {
       return;
@@ -101,6 +109,9 @@ class SettingsManager extends ChangeNotifier with WindowListener {
       return;
     }
     if (_isApplyingWindowFullscreenState) {
+      return;
+    }
+    if (_isApplyingPlatformFullscreenTransition) {
       return;
     }
 
@@ -141,14 +152,65 @@ class SettingsManager extends ChangeNotifier with WindowListener {
 
     // 应用全屏设置（非Web平台）
     if (!kIsWeb) {
-      if (isFullscreen) {
-        await PlatformWindowManager.setFullScreen(true);
-      } else {
-        await PlatformWindowManager.setFullScreen(false);
-      }
+      await _applyPlatformFullscreen(isFullscreen);
     }
 
     notifyListeners();
+  }
+
+  Future<void> _applyPlatformFullscreen(bool isFullscreen) async {
+    _isApplyingPlatformFullscreenTransition = true;
+    try {
+      if (!PlatformWindowManager.isWindows) {
+        await PlatformWindowManager.setFullScreen(isFullscreen);
+        return;
+      }
+
+      if (isFullscreen) {
+        final wasMaximized =
+            await PlatformWindowManager.isMaximized() ?? false;
+        _restoreMaximizedAfterFullscreen = wasMaximized;
+
+        if (wasMaximized) {
+          await PlatformWindowManager.unmaximize();
+          await _waitForMaximizedState(false);
+        }
+
+        await PlatformWindowManager.setFullScreen(true);
+        return;
+      }
+
+      await PlatformWindowManager.setFullScreen(false);
+
+      if (_restoreMaximizedAfterFullscreen) {
+        _restoreMaximizedAfterFullscreen = false;
+        await PlatformWindowManager.maximize();
+      }
+    } finally {
+      _isApplyingPlatformFullscreenTransition = false;
+    }
+  }
+
+  Future<void> _waitForMaximizedState(bool isMaximized) async {
+    for (var attempt = 0;
+        attempt < _windowMaximizeTransitionMaxAttempts;
+        attempt++) {
+      final currentState = await PlatformWindowManager.isMaximized();
+      if (currentState == null || currentState == isMaximized) {
+        return;
+      }
+      await Future<void>.delayed(_windowMaximizeTransitionPollInterval);
+    }
+  }
+
+  Future<void> _restoreMaximizedWindowAfterFullscreenExit() async {
+    if (!_restoreMaximizedAfterFullscreen ||
+        _isApplyingPlatformFullscreenTransition) {
+      return;
+    }
+
+    _restoreMaximizedAfterFullscreen = false;
+    await PlatformWindowManager.maximize();
   }
 
   @override
@@ -161,6 +223,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
 
   @override
   void onWindowLeaveFullScreen() {
+    unawaited(_restoreMaximizedWindowAfterFullscreenExit());
     unawaited(_applyFullscreenStateFromWindow(false));
   }
 
@@ -382,7 +445,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
 
     // 应用默认全屏设置（非Web平台）
     if (!kIsWeb) {
-      await PlatformWindowManager.setFullScreen(defaultIsFullscreen);
+      await _applyPlatformFullscreen(defaultIsFullscreen);
     }
 
     notifyListeners();

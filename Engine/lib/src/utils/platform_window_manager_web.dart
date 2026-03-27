@@ -2,6 +2,8 @@
 import 'dart:html' as html;
 
 class PlatformWindowManager {
+  static bool get isWindows => false;
+
   static bool get supportsWindowStateSync => true;
 
   static final Map<WindowListener, List<StreamSubscription<html.Event>>>
@@ -12,6 +14,10 @@ class PlatformWindowManager {
   static Future<void> setPreventClose(bool prevent) async {}
 
   static Future<void> maximize() async {}
+
+  static Future<void> unmaximize() async {}
+
+  static Future<bool?> isMaximized() async => false;
 
   static void addListener(WindowListener listener) {
     removeListener(listener);
