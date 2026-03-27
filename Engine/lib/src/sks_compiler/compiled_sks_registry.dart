@@ -22,7 +22,10 @@ class CompiledSksRegistry {
   }
 
   CompiledSksBundle? get activeBundle {
-    if (kEngineDebugMode) {
+    // Web debug 模式也需要使用预编译脚本：
+    // - Web 无法走桌面文件系统直读
+    // - 发布版已使用预编译脚本，debug 保持同路径可避免资源缺失
+    if (kEngineDebugMode && !kIsWeb) {
       return null;
     }
 

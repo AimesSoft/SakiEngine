@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/widgets.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
@@ -69,6 +70,12 @@ class LocalizationManager extends ChangeNotifier {
   LocalizationManager._internal();
 
   static const String _translationsAsset = 'assets/i18n/strings.json';
+  static const List<String> _translationBundleCandidates = <String>[
+    'packages/sakiengine/assets/i18n/strings.json',
+    'assets/packages/sakiengine/assets/i18n/strings.json',
+    _translationsAsset,
+    'i18n/strings.json',
+  ];
 
   final Map<SupportedLanguage, Map<String, String>> _translations = {};
   final _dataManager = UnifiedGameDataManager();
@@ -192,32 +199,80 @@ class LocalizationManager extends ChangeNotifier {
   }
 
   Future<void> _loadTranslations() async {
-    try {
-      final raw = await EngineAssetLoader.loadString(_translationsAsset);
-      final data = jsonDecode(raw) as Map<String, dynamic>;
+    Object? lastError;
 
-      for (final entry in data.entries) {
-        final language = supportedLanguageFromCode(entry.key);
-        if (language == null) {
-          continue;
+    for (final candidate in _translationBundleCandidates) {
+      try {
+        final raw = await rootBundle.loadString(candidate, cache: false);
+        if (_tryLoadTranslationsFromRaw(raw)) {
+          _updateFallbackLanguage();
+          return;
         }
-
-        final value = entry.value;
-        if (value is Map<String, dynamic>) {
-          _translations[language] = value.map(
-            (key, dynamic v) => MapEntry(key, v.toString()),
-          );
-        }
+      } catch (error) {
+        lastError = error;
       }
+    }
 
-      if (_translations.containsKey(SupportedLanguage.en)) {
-        _fallbackLanguage = SupportedLanguage.en;
-      } else if (_translations.isNotEmpty) {
-        _fallbackLanguage = _translations.keys.first;
+    try {
+      final raw =
+          await EngineAssetLoader.loadString(_translationsAsset, cache: false);
+      if (_tryLoadTranslationsFromRaw(raw)) {
+        _updateFallbackLanguage();
+        return;
       }
     } catch (error) {
-      // 如果加载失败，保持空映射，返回原始key
-      _translations.clear();
+      lastError = error;
+    }
+
+    if (kEngineDebugMode) {
+      print('[LocalizationManager] 加载多语言失败，最后错误: $lastError');
+    }
+    _translations.clear();
+  }
+
+  bool _tryLoadTranslationsFromRaw(String raw) {
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } catch (_) {
+      return false;
+    }
+
+    if (decoded is! Map) {
+      return false;
+    }
+
+    final parsed = <SupportedLanguage, Map<String, String>>{};
+    for (final entry in decoded.entries) {
+      final key = entry.key?.toString();
+      final language = supportedLanguageFromCode(key);
+      if (language == null) {
+        continue;
+      }
+
+      final value = entry.value;
+      if (value is Map) {
+        parsed[language] = value.map(
+          (k, dynamic v) => MapEntry(k.toString(), v.toString()),
+        );
+      }
+    }
+
+    if (parsed.isEmpty) {
+      return false;
+    }
+
+    _translations
+      ..clear()
+      ..addAll(parsed);
+    return true;
+  }
+
+  void _updateFallbackLanguage() {
+    if (_translations.containsKey(SupportedLanguage.en)) {
+      _fallbackLanguage = SupportedLanguage.en;
+    } else if (_translations.isNotEmpty) {
+      _fallbackLanguage = _translations.keys.first;
     }
   }
 

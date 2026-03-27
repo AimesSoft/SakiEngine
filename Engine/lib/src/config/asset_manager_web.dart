@@ -139,11 +139,15 @@ class AssetManager {
   }
 
   List<String> _bundleCandidates(String path) {
-    final values = <String>[path];
     if (path.startsWith('assets/')) {
-      values.add(path.substring('assets/'.length));
+      final stripped = path.substring('assets/'.length);
+      if (stripped == path) {
+        return <String>[path];
+      }
+      // Web 上 rootBundle 通常会再加一层 assets/ 前缀，优先 stripped 可避免 assets/assets/* 404
+      return <String>[stripped, path];
     }
-    return values;
+    return <String>[path];
   }
 
   Iterable<String> _bundleAssetKeysByPriority() sync* {
@@ -194,7 +198,8 @@ class AssetManager {
     final targetFileName = name.split('/').last;
     final targetFileNameLower = targetFileName.toLowerCase();
     final targetFileNameWithoutExt = p.basenameWithoutExtension(targetFileName);
-    final targetFileNameWithoutExtLower = targetFileNameWithoutExt.toLowerCase();
+    final targetFileNameWithoutExtLower =
+        targetFileNameWithoutExt.toLowerCase();
 
     // 提取路径部分，例如 "backgrounds/sky" -> "backgrounds"
     final pathParts = name.split('/');
@@ -219,9 +224,9 @@ class AssetManager {
         }
         final keyFileNameWithoutExtLower =
             p.basenameWithoutExtension(keyFileName).toLowerCase();
-        final fileNameMatched = keyFileNameWithoutExtLower ==
-                targetFileNameWithoutExtLower ||
-            keyFileNameLower == targetFileNameLower;
+        final fileNameMatched =
+            keyFileNameWithoutExtLower == targetFileNameWithoutExtLower ||
+                keyFileNameLower == targetFileNameLower;
 
         // 检查文件名是否匹配且路径包含cg（支持cg的任意子文件夹）
         if (fileNameMatched) {
@@ -247,9 +252,9 @@ class AssetManager {
       }
       final keyFileNameWithoutExtLower =
           p.basenameWithoutExtension(keyFileName).toLowerCase();
-      final fileNameMatched = keyFileNameWithoutExtLower ==
-              targetFileNameWithoutExtLower ||
-          keyFileNameLower == targetFileNameLower;
+      final fileNameMatched =
+          keyFileNameWithoutExtLower == targetFileNameWithoutExtLower ||
+              keyFileNameLower == targetFileNameLower;
 
       // 检查文件名是否匹配
       if (fileNameMatched) {
@@ -281,9 +286,9 @@ class AssetManager {
       }
       final keyFileNameWithoutExtLower =
           p.basenameWithoutExtension(keyFileName).toLowerCase();
-      final fileNameMatched = keyFileNameWithoutExtLower ==
-              targetFileNameWithoutExtLower ||
-          keyFileNameLower == targetFileNameLower;
+      final fileNameMatched =
+          keyFileNameWithoutExtLower == targetFileNameWithoutExtLower ||
+              keyFileNameLower == targetFileNameLower;
 
       if (fileNameMatched) {
         _imageCache[name] = key;

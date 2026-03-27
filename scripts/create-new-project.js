@@ -730,7 +730,12 @@ flutter:
   assets:
     - default_game.txt
     - Assets/
+    - Assets/fonts/
+    - Assets/images/backgrounds/
+    - Assets/images/characters/
     - GameScript/
+    - GameScript/configs/
+    - GameScript/labels/
   fonts:
     - family: SourceHanSansCN
       fonts:

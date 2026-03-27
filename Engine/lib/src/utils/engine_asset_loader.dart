@@ -12,6 +12,14 @@ class EngineAssetLoader {
     return '$_packagePrefix$assetPath';
   }
 
+  static String _toWebHostedPackageAssetPath(String assetPath) {
+    final packagePath = _toPackageAssetPath(assetPath);
+    if (packagePath.startsWith('assets/')) {
+      return packagePath;
+    }
+    return 'assets/$packagePath';
+  }
+
   static String _stripAssetsPrefix(String assetPath) {
     if (assetPath.startsWith('assets/')) {
       return assetPath.substring('assets/'.length);
@@ -34,6 +42,8 @@ class EngineAssetLoader {
     add(stripped);
     add(_toPackageAssetPath(assetPath));
     add(_toPackageAssetPath(stripped));
+    add(_toWebHostedPackageAssetPath(assetPath));
+    add(_toWebHostedPackageAssetPath(stripped));
     return candidates;
   }
 

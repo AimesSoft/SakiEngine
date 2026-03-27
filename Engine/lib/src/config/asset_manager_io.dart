@@ -261,11 +261,16 @@ class AssetManager {
   }
 
   List<String> _bundleCandidates(String path) {
-    final values = <String>[path];
     if (path.startsWith('assets/')) {
-      values.add(path.substring('assets/'.length));
+      final stripped = path.substring('assets/'.length);
+      if (stripped == path) {
+        return <String>[path];
+      }
+      // rootBundle.loadString 在部分平台会自动追加 assets/ 前缀，
+      // 优先 stripped 可以避免 assets/assets/* 的无效请求。
+      return <String>[stripped, path];
     }
-    return values;
+    return <String>[path];
   }
 
   Iterable<String> _bundleAssetKeysByPriority() sync* {
