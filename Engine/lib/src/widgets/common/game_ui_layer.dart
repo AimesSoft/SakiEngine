@@ -147,20 +147,9 @@ class GameUILayerState extends State<GameUILayer> {
         100.0 * uiScale + (isMobile ? mediaPadding.left : 0.0);
     final shouldShowNormalDialogue =
         widget.gameState.dialogue != null && !widget.gameState.isNvlMode;
-    final dialogueAttachment = widget.gameModule.createDialogueAttachment(
-      context: context,
-      gameState: widget.gameState,
-      scriptIndex: widget.gameManager.currentScriptIndex,
-    );
 
     final stackContent = Stack(
       children: [
-        // 对话框挂件层（可选）
-        if (shouldShowNormalDialogue && dialogueAttachment != null)
-          HideableUI(
-            child: dialogueAttachment,
-          ),
-
         // 对话框 - 使用 AnimatedSwitcher 为对话框切换添加过渡动画
         HideableUI(
           child: AnimatedSwitcher(

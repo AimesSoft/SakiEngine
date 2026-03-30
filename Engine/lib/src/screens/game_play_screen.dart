@@ -582,6 +582,11 @@ class _GamePlayScreenState extends State<GamePlayScreen>
       context: context,
       gameState: gameState,
     );
+    final sceneAttachmentLayer = module.createDialogueAttachment(
+      context: context,
+      gameState: gameState,
+      scriptIndex: _gameManager.currentScriptIndex,
+    );
     final shouldRenderDefaultSceneBackground =
         module.shouldRenderDefaultSceneBackground(gameState);
 
@@ -614,6 +619,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
             )
           else
             const SizedBox.shrink(),
+
+          // scene 挂件层（位于背景之上、角色之下，避免遮挡角色）
+          if (sceneAttachmentLayer != null) sceneAttachmentLayer,
 
           // 角色和CG层 - 只有在没有视频时才显示
           if (gameState.movieFile == null) ...[

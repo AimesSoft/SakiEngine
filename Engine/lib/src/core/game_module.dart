@@ -85,7 +85,8 @@ abstract class GameModule {
   /// 返回 `false` 可在模块中完全接管 scene 背景表现。
   bool shouldRenderDefaultSceneBackground(GameState gameState);
 
-  /// 创建与对话框同层的 scene 挂件层。
+  /// 创建 scene 挂件层。
+  /// 渲染位置：背景层之上、角色层之下。
   /// 返回 `null` 时表示不渲染挂件。
   Widget? createDialogueAttachment({
     required BuildContext context,
