@@ -472,7 +472,8 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                             key: _gameUILayerKey,
                             gameState: gameState,
                             gameManager: _gameManager,
-                            gameModule: widget.gameModule ?? DefaultGameModule(),
+                            gameModule:
+                                widget.gameModule ?? DefaultGameModule(),
                             dialogueProgressionManager:
                                 _dialogueProgressionManager,
                             currentScript: _currentScript,
@@ -531,7 +532,8 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                             },
                             onProgressDialogue: () =>
                                 _dialogueProgressionManager.progressDialogue(),
-                            expressionSelectorManager: _expressionSelectorManager,
+                            expressionSelectorManager:
+                                _expressionSelectorManager,
                             createDialogueBox: _createDialogueBox,
                           ),
                           // 加载淡出覆盖层 - 不会被隐藏
@@ -567,6 +569,14 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   }
 
   Widget _buildSceneWithFilter(GameState gameState) {
+    final module = widget.gameModule ?? DefaultGameModule();
+    final customSceneBaseLayer = module.createSceneBaseLayer(
+      context: context,
+      gameState: gameState,
+    );
+    final shouldRenderDefaultSceneBackground =
+        module.shouldRenderDefaultSceneBackground(gameState);
+
     return SimpleShakeWrapper(
       trigger: gameState.isShaking &&
           (gameState.shakeTarget == 'background' ||
@@ -577,8 +587,12 @@ class _GamePlayScreenState extends State<GamePlayScreen>
       ),
       child: Stack(
         children: [
-          // 背景层 - 总是渲染背景（如果有的话）
-          if (gameState.background != null)
+          // 模块自定义 scene 基础层（可选）
+          if (customSceneBaseLayer != null) customSceneBaseLayer,
+
+          // 引擎默认背景层（可由模块关闭）
+          if (shouldRenderDefaultSceneBackground &&
+              gameState.background != null)
             Builder(
               builder: (context) {
                 //print('[GamePlayScreen] 正在渲染背景: ${gameState.background}');

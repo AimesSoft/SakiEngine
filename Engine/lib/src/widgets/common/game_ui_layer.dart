@@ -145,9 +145,22 @@ class GameUILayerState extends State<GameUILayer> {
     final mediaPadding = MediaQuery.of(context).padding;
     final quickMenuAreaWidth =
         100.0 * uiScale + (isMobile ? mediaPadding.left : 0.0);
+    final shouldShowNormalDialogue =
+        widget.gameState.dialogue != null && !widget.gameState.isNvlMode;
+    final dialogueAttachment = widget.gameModule.createDialogueAttachment(
+      context: context,
+      gameState: widget.gameState,
+      scriptIndex: widget.gameManager.currentScriptIndex,
+    );
 
     final stackContent = Stack(
       children: [
+        // 对话框挂件层（可选）
+        if (shouldShowNormalDialogue && dialogueAttachment != null)
+          HideableUI(
+            child: dialogueAttachment,
+          ),
+
         // 对话框 - 使用 AnimatedSwitcher 为对话框切换添加过渡动画
         HideableUI(
           child: AnimatedSwitcher(
@@ -174,19 +187,18 @@ class GameUILayerState extends State<GameUILayer> {
                 ),
               );
             },
-            child:
-                widget.gameState.dialogue != null && !widget.gameState.isNvlMode
-                    ? widget.createDialogueBox(
-                        key: const ValueKey('normal_dialogue'),
-                        speaker: widget.gameState.speaker,
-                        speakerAlias: widget.gameState.speakerAlias, // 传递角色简写
-                        dialogue: widget.gameState.dialogue!,
-                        isFastForwarding:
-                            widget.gameState.isFastForwarding, // 传递快进状态
-                        scriptIndex:
-                            widget.gameManager.currentScriptIndex, // 传递脚本索引
-                      )
-                    : const SizedBox.shrink(key: ValueKey('no_dialogue')),
+            child: shouldShowNormalDialogue
+                ? widget.createDialogueBox(
+                    key: const ValueKey('normal_dialogue'),
+                    speaker: widget.gameState.speaker,
+                    speakerAlias: widget.gameState.speakerAlias, // 传递角色简写
+                    dialogue: widget.gameState.dialogue!,
+                    isFastForwarding:
+                        widget.gameState.isFastForwarding, // 传递快进状态
+                    scriptIndex:
+                        widget.gameManager.currentScriptIndex, // 传递脚本索引
+                  )
+                : const SizedBox.shrink(key: ValueKey('no_dialogue')),
           ),
         ),
 

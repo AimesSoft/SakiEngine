@@ -74,6 +74,25 @@ abstract class GameModule {
     required int scriptIndex, // 新增：脚本索引参数
   });
 
+  /// 创建自定义场景基础层（位于角色层下方）。
+  /// 返回 `null` 时表示不插入自定义层。
+  Widget? createSceneBaseLayer({
+    required BuildContext context,
+    required GameState gameState,
+  });
+
+  /// 是否继续使用引擎默认的 scene 背景绘制。
+  /// 返回 `false` 可在模块中完全接管 scene 背景表现。
+  bool shouldRenderDefaultSceneBackground(GameState gameState);
+
+  /// 创建与对话框同层的 scene 挂件层。
+  /// 返回 `null` 时表示不渲染挂件。
+  Widget? createDialogueAttachment({
+    required BuildContext context,
+    required GameState gameState,
+    required int scriptIndex,
+  });
+
   /// 自定义配置（可选）
   SakiEngineConfig? createCustomConfig() => null;
 
@@ -222,6 +241,28 @@ class DefaultGameModule implements GameModule {
       isFastForwarding: isFastForwarding,
       scriptIndex: scriptIndex, // 传递脚本索引
     );
+  }
+
+  @override
+  Widget? createSceneBaseLayer({
+    required BuildContext context,
+    required GameState gameState,
+  }) {
+    return null;
+  }
+
+  @override
+  bool shouldRenderDefaultSceneBackground(GameState gameState) {
+    return true;
+  }
+
+  @override
+  Widget? createDialogueAttachment({
+    required BuildContext context,
+    required GameState gameState,
+    required int scriptIndex,
+  }) {
+    return null;
   }
 
   @override
