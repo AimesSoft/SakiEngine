@@ -119,6 +119,15 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
         Positioned.fill(
           child: Listener(
             onPointerDown: (event) {
+              // 触屏点击推进逻辑由 MobileTouchController 负责，这里只处理鼠标输入。
+              final isMouseInput = event.kind == PointerDeviceKind.mouse;
+              if (!isMouseInput) {
+                if (_isUIHidden && event.buttons == 1) {
+                  _setUIVisible();
+                }
+                return;
+              }
+
               if (event.buttons == 2) {
                 // 右键按下
                 if (_isUIHidden) {

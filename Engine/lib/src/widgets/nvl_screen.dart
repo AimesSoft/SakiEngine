@@ -283,56 +283,50 @@ class _NvlScreenState extends State<NvlScreen> with TickerProviderStateMixin imp
     final textScale = context.scaleFor(ComponentType.text);
     final uiScale = context.scaleFor(ComponentType.ui);
 
-    return GestureDetector(
-      onTap: () {
-        // 使用推进管理器统一处理对话推进
-        widget.progressionManager?.progressDialogue();
-      },
-      child: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Stack(
-          children: [
-            // 背景遮罩（仅在非无遮罩模式下显示）
-            if (!widget.isNoMask)
-              IgnorePointer(
-                child: Container(
-                  width: double.infinity,
-                  height: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
-                  ),
-                ),
-              ),
-            
-            // 如果是电影模式且允许显示黑边，添加上下黑边
-            if (widget.isMovieMode && _showCinematicBars) ..._buildCinematicBars(context),
-            
-            // 内容区域
-            _buildContent(config, textScale, uiScale),
-            
-            // 右键检测层 - 覆盖整个区域，只处理右键事件
-            Positioned.fill(
-              child: Listener(
-                behavior: HitTestBehavior.translucent,
-                onPointerDown: (event) {
-                  if (event.buttons == 2) {
-                    // 右键：切换UI显示状态
-                    // 通过GlobalRightClickUIManager触发
-                    final globalManager = GlobalRightClickUIManager();
-                    globalManager.setUIHidden(!globalManager.isUIHidden);
-                    if (globalManager.isUIHidden) {
-                      HapticFeedback.lightImpact();
-                    }
-                  }
-                  // 左键事件不处理，让它穿透到下层组件
-                },
-                child: Container(
-                  color: Colors.transparent,
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Stack(
+        children: [
+          // 背景遮罩（仅在非无遮罩模式下显示）
+          if (!widget.isNoMask)
+            IgnorePointer(
+              child: Container(
+                width: double.infinity,
+                height: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
                 ),
               ),
             ),
-          ],
-        ),
+          
+          // 如果是电影模式且允许显示黑边，添加上下黑边
+          if (widget.isMovieMode && _showCinematicBars) ..._buildCinematicBars(context),
+          
+          // 内容区域
+          _buildContent(config, textScale, uiScale),
+          
+          // 右键检测层 - 覆盖整个区域，只处理右键事件
+          Positioned.fill(
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (event) {
+                if (event.buttons == 2) {
+                  // 右键：切换UI显示状态
+                  // 通过GlobalRightClickUIManager触发
+                  final globalManager = GlobalRightClickUIManager();
+                  globalManager.setUIHidden(!globalManager.isUIHidden);
+                  if (globalManager.isUIHidden) {
+                    HapticFeedback.lightImpact();
+                  }
+                }
+                // 左键事件不处理，让它穿透到下层组件
+              },
+              child: Container(
+                color: Colors.transparent,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

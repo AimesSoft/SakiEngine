@@ -190,10 +190,6 @@ class _DialogueBoxState extends State<DialogueBox>
     }
   }
 
-  void _handleTap() {
-    widget.progressionManager?.progressDialogue();
-  }
-
   @override
   Widget build(BuildContext context) {
     final config = SakiEngineConfig();
@@ -207,57 +203,54 @@ class _DialogueBoxState extends State<DialogueBox>
       letterSpacing: 0.3,
     );
 
-    return GestureDetector(
-      onTap: _handleTap,
-      child: DialogueShakeEffect(
-        dialogue: widget.dialogue,
-        displayedText: _typewriterController.displayedText, // 传递当前显示的文本
-        enabled: true,
-        intensity: 4.0 * uiScale,
-        duration: const Duration(milliseconds: 600),
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: MouseRegion(
-            onEnter: (_) => setState(() => _isHovered = true),
-            onExit: (_) => setState(() => _isHovered = false),
-            child: Stack(
-              clipBehavior: Clip.none, // 允许子组件超出边界
-              children: [
-                Container(
-                  child: DialogueBackground(
-                    isHovered: _isHovered,
-                    dialogOpacity: _dialogOpacity,
-                    uiScale: uiScale,
-                    overlay: null, // 移除原来的已读标签
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        DialogueSpeakerHeader(
-                          speaker: widget.speaker,
-                          uiScale: uiScale,
-                          textScale: textScale,
-                        ),
-                        DialogueContent(
-                          dialogue: widget.dialogue,
-                          speaker: widget.speaker,
-                          speakerAlias: widget.speakerAlias, // 新增：传递角色简写
-                          dialogueStyle: dialogueStyle,
-                          typewriterController: _typewriterController,
-                          textFadeAnimation: _textFadeAnimation,
-                          enableTypewriter: _enableTypewriter,
-                          isDialogueComplete: _isDialogueComplete,
-                          uiScale: uiScale,
-                          isRead: _isRead,
-                        ),
-                      ],
-                    ),
+    return DialogueShakeEffect(
+      dialogue: widget.dialogue,
+      displayedText: _typewriterController.displayedText, // 传递当前显示的文本
+      enabled: true,
+      intensity: 4.0 * uiScale,
+      duration: const Duration(milliseconds: 600),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: MouseRegion(
+          onEnter: (_) => setState(() => _isHovered = true),
+          onExit: (_) => setState(() => _isHovered = false),
+          child: Stack(
+            clipBehavior: Clip.none, // 允许子组件超出边界
+            children: [
+              Container(
+                child: DialogueBackground(
+                  isHovered: _isHovered,
+                  dialogOpacity: _dialogOpacity,
+                  uiScale: uiScale,
+                  overlay: null, // 移除原来的已读标签
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DialogueSpeakerHeader(
+                        speaker: widget.speaker,
+                        uiScale: uiScale,
+                        textScale: textScale,
+                      ),
+                      DialogueContent(
+                        dialogue: widget.dialogue,
+                        speaker: widget.speaker,
+                        speakerAlias: widget.speakerAlias, // 新增：传递角色简写
+                        dialogueStyle: dialogueStyle,
+                        typewriterController: _typewriterController,
+                        textFadeAnimation: _textFadeAnimation,
+                        enableTypewriter: _enableTypewriter,
+                        isDialogueComplete: _isDialogueComplete,
+                        uiScale: uiScale,
+                        isRead: _isRead,
+                      ),
+                    ],
                   ),
                 ),
-                // 已读标签 - 使用坐标计算
-                if (_isRead) _buildReadStatusTag(),
-              ],
-            ),
+              ),
+              // 已读标签 - 使用坐标计算
+              if (_isRead) _buildReadStatusTag(),
+            ],
           ),
         ),
       ),

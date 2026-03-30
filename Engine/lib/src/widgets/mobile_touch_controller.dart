@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
+import 'package:sakiengine/src/widgets/common/right_click_ui_manager.dart';
 import 'package:sakiengine/src/widgets/mobile_quick_menu.dart';
 
 /// 移动端触屏控制器
@@ -75,6 +76,14 @@ class _MobileTouchControllerState extends State<MobileTouchController> {
     // 如果是长按，不处理点击事件
     if (_isLongPressing) {
       _isLongPressing = false;
+      _pressStartPosition = null;
+      return;
+    }
+
+    // UI隐藏状态下，单击只恢复UI，不推进剧情。
+    final globalManager = GlobalRightClickUIManager();
+    if (globalManager.isUIHidden) {
+      globalManager.setUIHidden(false);
       _pressStartPosition = null;
       return;
     }

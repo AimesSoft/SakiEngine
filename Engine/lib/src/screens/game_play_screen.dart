@@ -363,7 +363,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   event.logicalKey == LogicalKeyboardKey.space) {
                 // 检查是否正在播放视频，如果是则不推进剧情
                 if (_gameManager.currentState.movieFile == null) {
-                  _gameManager.next();
+                  _dialogueProgressionManager.progressDialogue();
                   // 通知自动播放管理器有手动推进
                   _autoPlayManager?.onManualProgress();
                 }
