@@ -379,6 +379,14 @@ class _GamePlayScreenState extends State<GamePlayScreen>
               stream: _gameManager.gameStateStream,
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
+                  final module = widget.gameModule ?? DefaultGameModule();
+                  final fallbackSceneBaseLayer = module.createSceneBaseLayer(
+                    context: context,
+                    gameState: GameState.initial(),
+                  );
+                  if (fallbackSceneBaseLayer != null) {
+                    return Stack(children: [fallbackSceneBaseLayer]);
+                  }
                   return const ColoredBox(color: Colors.black);
                 }
                 final gameState = snapshot.data!;
