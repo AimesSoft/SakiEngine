@@ -79,6 +79,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     required bool isFastForwarding, // 新增快进状态参数
     required int scriptIndex, // 新增脚本索引参数
     VoidCallback? onToggleSettings,
+    VoidCallback? onToggleReview,
   }) {
     // 不在这里标记为已读！应该在用户推进对话时才标记
     final module = widget.gameModule ?? DefaultGameModule();
@@ -91,6 +92,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       isFastForwarding: isFastForwarding,
       scriptIndex: scriptIndex,
       onToggleSettings: onToggleSettings,
+      onToggleReview: onToggleReview,
     );
   }
 

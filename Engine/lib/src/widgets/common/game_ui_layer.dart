@@ -78,7 +78,8 @@ class GameUILayer extends StatefulWidget {
       required String dialogue,
       required bool isFastForwarding,
       required int scriptIndex,
-      VoidCallback? onToggleSettings}) createDialogueBox;
+      VoidCallback? onToggleSettings,
+      VoidCallback? onToggleReview}) createDialogueBox;
 
   const GameUILayer({
     super.key,
@@ -194,6 +195,11 @@ class GameUILayerState extends State<GameUILayer> {
                     onToggleSettings: () {
                       if (!widget.showSettings) {
                         widget.onToggleSettings();
+                      }
+                    },
+                    onToggleReview: () {
+                      if (!widget.showReviewOverlay) {
+                        widget.onToggleReview(false);
                       }
                     },
                   )

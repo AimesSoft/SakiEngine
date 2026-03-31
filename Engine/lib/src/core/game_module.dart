@@ -73,6 +73,7 @@ abstract class GameModule {
     required bool isFastForwarding,
     required int scriptIndex, // 新增：脚本索引参数
     VoidCallback? onToggleSettings,
+    VoidCallback? onToggleReview,
   });
 
   /// 创建自定义场景基础层（位于角色层下方）。
@@ -237,6 +238,7 @@ class DefaultGameModule implements GameModule {
     required bool isFastForwarding,
     required int scriptIndex, // 新增：脚本索引参数
     VoidCallback? onToggleSettings,
+    VoidCallback? onToggleReview,
   }) {
     return DialogueBox(
       key: key,
