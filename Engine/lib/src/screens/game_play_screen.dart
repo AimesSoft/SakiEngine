@@ -177,7 +177,12 @@ class _GamePlayScreenState extends State<GamePlayScreen>
 
   Future<Uint8List?> _captureCurrentGameFrameForSaveThumbnail() async {
     if (_hasThumbnailBlockingOverlayOpen) {
-      return _frozenSaveThumbnailFrame;
+      // 存档可能从 Save/Load/Settings 三种覆盖层中触发（例如 Menhera 的设置页切 Tab 到 SAVE）。
+      // 这三种场景都应复用“打开覆盖层前”冻结的游戏画面，确保缩略图包含游戏UI且不拍到菜单覆盖层。
+      if (_showSaveOverlay || _showLoadOverlay || _showSettings) {
+        return _frozenSaveThumbnailFrame;
+      }
+      return null;
     }
 
     final bytes = await _captureSaveThumbnailFromBoundary();
@@ -196,6 +201,8 @@ class _GamePlayScreenState extends State<GamePlayScreen>
       return;
     }
 
+    // 每次打开存档面板前先清空旧冻结帧，避免捕获失败时误复用历史截图。
+    _frozenSaveThumbnailFrame = null;
     final frozenFrame = await _captureSaveThumbnailFromBoundary();
     if (frozenFrame != null && frozenFrame.isNotEmpty) {
       _frozenSaveThumbnailFrame = frozenFrame;
@@ -207,6 +214,54 @@ class _GamePlayScreenState extends State<GamePlayScreen>
 
     setState(() {
       _showSaveOverlay = true;
+    });
+  }
+
+  Future<void> _toggleLoadOverlayForCapture() async {
+    if (_showLoadOverlay) {
+      _setStateIfMounted(() {
+        _showLoadOverlay = false;
+      });
+      _frozenSaveThumbnailFrame = null;
+      return;
+    }
+
+    _frozenSaveThumbnailFrame = null;
+    final frozenFrame = await _captureSaveThumbnailFromBoundary();
+    if (frozenFrame != null && frozenFrame.isNotEmpty) {
+      _frozenSaveThumbnailFrame = frozenFrame;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _showLoadOverlay = true;
+    });
+  }
+
+  Future<void> _toggleSettingsOverlayForCapture() async {
+    if (_showSettings) {
+      _setStateIfMounted(() {
+        _showSettings = false;
+      });
+      _frozenSaveThumbnailFrame = null;
+      return;
+    }
+
+    _frozenSaveThumbnailFrame = null;
+    final frozenFrame = await _captureSaveThumbnailFromBoundary();
+    if (frozenFrame != null && frozenFrame.isNotEmpty) {
+      _frozenSaveThumbnailFrame = frozenFrame;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _showSettings = true;
     });
   }
 
@@ -503,12 +558,13 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                             isShowingMenu: _isShowingMenu,
                             onToggleReview: _toggleReviewOverlay,
                             onToggleSave: _toggleSaveOverlayForCapture,
-                            onToggleLoad: () => setState(
-                              () => _showLoadOverlay = !_showLoadOverlay,
-                            ),
+                            onToggleLoad: () {
+                              _toggleLoadOverlayForCapture();
+                            },
                             onQuickSave: _handleQuickSave, // 新增：快速存档回调
-                            onToggleSettings: () =>
-                                setState(() => _showSettings = !_showSettings),
+                            onToggleSettings: () {
+                              _toggleSettingsOverlayForCapture();
+                            },
                             onToggleDeveloperPanel: () => setState(
                               () => _showDeveloperPanel = !_showDeveloperPanel,
                             ),
