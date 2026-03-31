@@ -34,6 +34,8 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
   
   /// UI是否被隐藏
   bool _isUIHidden = false;
+  int? _activePrimaryPointerId;
+  bool _shouldProgressOnPrimaryUp = false;
 
   late final GlobalRightClickUIManager _globalManager;
   
@@ -108,6 +110,11 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
     }
   }
 
+  void _clearPrimaryClickTracking() {
+    _activePrimaryPointerId = null;
+    _shouldProgressOnPrimaryUp = false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -130,19 +137,39 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
 
               if (event.buttons == 2) {
                 // 右键按下
+                _clearPrimaryClickTracking();
                 if (_isUIHidden) {
                   _setUIVisible();
                 } else {
                   _setUIHidden();
                 }
               } else if (event.buttons == 1) {
-                // 左键按下
+                // 左键按下：仅记录，等抬起后再推进，避免一次点击触发多次推进
+                _activePrimaryPointerId = event.pointer;
                 if (_isUIHidden) {
                   _setUIVisible();
+                  _shouldProgressOnPrimaryUp = false;
                 } else {
-                  // UI显示状态下，左键推进剧情
-                  widget.onLeftClick?.call();
+                  _shouldProgressOnPrimaryUp = true;
                 }
+              }
+            },
+            onPointerUp: (event) {
+              if (event.kind != PointerDeviceKind.mouse) {
+                return;
+              }
+              if (_activePrimaryPointerId != event.pointer) {
+                return;
+              }
+              final shouldProgress = _shouldProgressOnPrimaryUp;
+              _clearPrimaryClickTracking();
+              if (shouldProgress) {
+                widget.onLeftClick?.call();
+              }
+            },
+            onPointerCancel: (event) {
+              if (_activePrimaryPointerId == event.pointer) {
+                _clearPrimaryClickTracking();
               }
             },
             behavior: HitTestBehavior.opaque,

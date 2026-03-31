@@ -138,7 +138,7 @@ class AutoPlayManager {
 
     // 推进对话
     try {
-      dialogueProgressionManager.progressDialogue();
+      dialogueProgressionManager.progressDialogue(isAutomated: true);
       
       // 推进后，等待一帧再检查下一个状态
       Future.delayed(Duration(milliseconds: 50), () {

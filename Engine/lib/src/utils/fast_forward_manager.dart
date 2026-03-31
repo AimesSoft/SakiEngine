@@ -142,7 +142,7 @@ class FastForwardManager {
     
     // 推进对话
     try {
-      dialogueProgressionManager.progressDialogue();
+      dialogueProgressionManager.progressDialogue(isAutomated: true);
     } catch (e) {
       print('快进推进对话时发生错误: $e');
       // 出错时停止快进

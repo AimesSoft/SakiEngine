@@ -72,6 +72,7 @@ abstract class GameModule {
     DialogueProgressionManager? progressionManager,
     required bool isFastForwarding,
     required int scriptIndex, // 新增：脚本索引参数
+    VoidCallback? onToggleSettings,
   });
 
   /// 创建自定义场景基础层（位于角色层下方）。
@@ -145,6 +146,9 @@ abstract class GameModule {
   /// 是否把下一句提示图标切换为下划线样式
   bool shouldUseUnderscoreNextArrow({String? speaker, String? speakerAlias}) =>
       false;
+
+  /// 是否显示快捷菜单
+  bool get showQuickMenu => true;
 }
 
 /// 默认游戏模块实现 - 使用src/下的默认组件
@@ -232,6 +236,7 @@ class DefaultGameModule implements GameModule {
     DialogueProgressionManager? progressionManager,
     required bool isFastForwarding,
     required int scriptIndex, // 新增：脚本索引参数
+    VoidCallback? onToggleSettings,
   }) {
     return DialogueBox(
       key: key,
@@ -326,6 +331,9 @@ class DefaultGameModule implements GameModule {
 
   @override
   bool get showBottomBar => true;
+
+  @override
+  bool get showQuickMenu => true;
 
   @override
   bool shouldUseUnderscoreNextArrow({String? speaker, String? speakerAlias}) {

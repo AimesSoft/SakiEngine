@@ -1,3 +1,4 @@
+import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/widgets/typewriter_animation_manager.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/utils/read_text_tracker.dart';
@@ -9,9 +10,13 @@ import 'package:sakiengine/src/utils/read_text_tracker.dart';
 /// - 如果打字机已完成，直接推进到下一句
 class DialogueProgressionManager {
   final GameManager gameManager;
+  final VoidCallback? onManualProgress;
   TypewriterAnimationManager? _currentTypewriter;
   
-  DialogueProgressionManager({required this.gameManager});
+  DialogueProgressionManager({
+    required this.gameManager,
+    this.onManualProgress,
+  });
   
   /// 注册当前活跃的打字机动画管理器
   void registerTypewriter(TypewriterAnimationManager? typewriter) {
@@ -21,7 +26,10 @@ class DialogueProgressionManager {
   /// 统一的对话推进方法
   /// 
   /// 所有推进对话的操作都应该调用这个方法，而不是直接调用 gameManager.next()
-  void progressDialogue() {
+  void progressDialogue({bool isAutomated = false}) {
+    if (!isAutomated) {
+      onManualProgress?.call();
+    }
     
     // 安全检查：如果当前打字机为null，这可能意味着注册丢失了
     if (_currentTypewriter == null) {

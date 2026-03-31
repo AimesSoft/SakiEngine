@@ -235,6 +235,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
     // 初始化对话推进管理器
     _dialogueProgressionManager = DialogueProgressionManager(
       gameManager: _gameManager,
+      onManualProgress: () {
+        _autoPlayManager?.onManualProgress();
+      },
     );
 
     // 注册系统级热键 Shift+R

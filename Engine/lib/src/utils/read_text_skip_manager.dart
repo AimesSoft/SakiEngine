@@ -150,7 +150,7 @@ class ReadTextSkipManager {
     // 推进对话（只有确认已读后才推进）
     ////print('📖 [DEBUG] 对话已读，准备推进');
     try {
-      dialogueProgressionManager.progressDialogue();
+      dialogueProgressionManager.progressDialogue(isAutomated: true);
     } catch (e) {
       print('跳过已读文本时发生错误: $e');
       stopSkipping();

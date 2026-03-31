@@ -77,7 +77,8 @@ class GameUILayer extends StatefulWidget {
       String? speakerAlias,
       required String dialogue,
       required bool isFastForwarding,
-      required int scriptIndex}) createDialogueBox;
+      required int scriptIndex,
+      VoidCallback? onToggleSettings}) createDialogueBox;
 
   const GameUILayer({
     super.key,
@@ -143,8 +144,12 @@ class GameUILayerState extends State<GameUILayer> {
     final isMobile = !kIsWeb && (Platform.isIOS || Platform.isAndroid);
     final uiScale = context.scaleFor(ComponentType.menu);
     final mediaPadding = MediaQuery.of(context).padding;
-    final quickMenuAreaWidth =
-        100.0 * uiScale + (isMobile ? mediaPadding.left : 0.0);
+    final shouldShowQuickMenu = widget.gameModule.showQuickMenu &&
+        widget.gameState.movieFile == null &&
+        !widget.gameManager.isCurrentSceneChapter;
+    final quickMenuAreaWidth = shouldShowQuickMenu
+        ? 100.0 * uiScale + (isMobile ? mediaPadding.left : 0.0)
+        : 0.0;
     final shouldShowNormalDialogue =
         widget.gameState.dialogue != null && !widget.gameState.isNvlMode;
 
@@ -186,6 +191,11 @@ class GameUILayerState extends State<GameUILayer> {
                         widget.gameState.isFastForwarding, // 传递快进状态
                     scriptIndex:
                         widget.gameManager.currentScriptIndex, // 传递脚本索引
+                    onToggleSettings: () {
+                      if (!widget.showSettings) {
+                        widget.onToggleSettings();
+                      }
+                    },
                   )
                 : const SizedBox.shrink(key: ValueKey('no_dialogue')),
           ),
@@ -236,8 +246,7 @@ class GameUILayerState extends State<GameUILayer> {
 
         // 快捷菜单 - 在播放视频或章节场景时隐藏
         // 手机端使用 MobileQuickMenu，桌面端使用 QuickMenu
-        if (widget.gameState.movieFile == null &&
-            !widget.gameManager.isCurrentSceneChapter)
+        if (shouldShowQuickMenu)
           isMobile
               ? Positioned(
                   left: 10 * uiScale + mediaPadding.left, // 左边距 + 刘海安全区
