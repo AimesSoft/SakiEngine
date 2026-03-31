@@ -153,7 +153,12 @@ class _GamePlayScreenState extends State<GamePlayScreen>
         return null;
       }
 
-      if (renderObject.debugNeedsPaint) {
+      var needsPaint = false;
+      assert(() {
+        needsPaint = renderObject.debugNeedsPaint;
+        return true;
+      }());
+      if (needsPaint) {
         await Future<void>.delayed(const Duration(milliseconds: 16));
       }
 
