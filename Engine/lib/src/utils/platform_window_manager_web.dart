@@ -71,6 +71,8 @@ class PlatformWindowManager {
     html.document.title = title;
   }
 
+  static Future<void> prepareForWindowsFullscreenTransition() async {}
+
   static Future<void> setFullScreen(bool fullScreen) async {
     if (fullScreen) {
       try {

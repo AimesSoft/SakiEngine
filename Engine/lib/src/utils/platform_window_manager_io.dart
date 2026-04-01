@@ -73,6 +73,15 @@ class PlatformWindowManager {
     }
   }
 
+  static Future<void> prepareForWindowsFullscreenTransition() async {
+    if (!isWindows) {
+      return;
+    }
+    // Reset internal frameless marker in window_manager so first fullscreen
+    // transition on Windows does not degrade to borderless-only mode.
+    await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+  }
+
   static Future<void> setFullScreen(bool fullScreen) async {
     if (_isDesktop) {
       await windowManager.setFullScreen(fullScreen);

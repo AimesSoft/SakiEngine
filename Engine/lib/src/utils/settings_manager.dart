@@ -237,6 +237,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
           await _waitForMaximizedState(false);
         }
 
+        await PlatformWindowManager.prepareForWindowsFullscreenTransition();
         await PlatformWindowManager.setFullScreen(true);
         return;
       }
