@@ -59,14 +59,6 @@ dependencies:
   just_audio_media_kit: ^2.1.0
   flutter_steamworks: ^0.0.1
 
-dependency_overrides:
-  media_kit:
-    path: ../third_party/media_kit_hotfix
-  media_kit_libs_windows_video:
-    path: ../third_party/media_kit_libs_windows_video_hotfix
-  flutter_steamworks:
-    path: ../third_party/flutter_steamworks_hotfix
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

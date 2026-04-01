@@ -710,14 +710,11 @@ dependencies:
     path: ../../Engine
   ${projectPackageName}:
     path: ./ProjectCode
-
-dependency_overrides:
-  media_kit:
-    path: ../../third_party/media_kit_hotfix
-  media_kit_libs_windows_video:
-    path: ../../third_party/media_kit_libs_windows_video_hotfix
-  flutter_steamworks:
-    path: ../../third_party/flutter_steamworks_hotfix
+  window_manager: ^0.5.1
+  flutter_avif_windows: ^3.1.0
+  hotkey_manager_windows: ^0.2.0
+  path_provider_windows: ^2.3.0
+  screen_retriever_windows: ^0.2.0
 
 dev_dependencies:
   flutter_test:

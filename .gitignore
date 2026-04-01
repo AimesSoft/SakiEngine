@@ -77,3 +77,4 @@ Engine/.flutter-plugins-dependencies
 /Launcher/.dart_tool
 /Launcher/build
 /Launcher/windows/flutter/ephemeral
+/Launcher/linux/flutter/ephemeral
