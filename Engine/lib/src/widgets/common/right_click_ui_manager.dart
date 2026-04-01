@@ -34,8 +34,6 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
   
   /// UI是否被隐藏
   bool _isUIHidden = false;
-  int? _activePrimaryPointerId;
-  bool _shouldProgressOnPrimaryUp = false;
 
   late final GlobalRightClickUIManager _globalManager;
   
@@ -110,11 +108,6 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
     }
   }
 
-  void _clearPrimaryClickTracking() {
-    _activePrimaryPointerId = null;
-    _shouldProgressOnPrimaryUp = false;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -122,72 +115,40 @@ class _RightClickUIManagerState extends State<RightClickUIManager>
         // 背景层 - 不会被隐藏
         widget.backgroundChild,
 
-        // 右键检测层 - 放在背景上面，UI下面
-        Positioned.fill(
-          child: Listener(
-            onPointerDown: (event) {
-              // 触屏点击推进逻辑由 MobileTouchController 负责，这里只处理鼠标输入。
-              final isMouseInput = event.kind == PointerDeviceKind.mouse;
-              if (!isMouseInput) {
-                if (_isUIHidden && event.buttons == 1) {
-                  _setUIVisible();
-                }
-                return;
-              }
-
-              if (event.buttons == 2) {
-                // 右键按下
-                _clearPrimaryClickTracking();
-                if (_isUIHidden) {
-                  _setUIVisible();
-                } else {
-                  _setUIHidden();
-                }
-              } else if (event.buttons == 1) {
-                // 左键按下：仅记录，等抬起后再推进，避免一次点击触发多次推进
-                _activePrimaryPointerId = event.pointer;
-                if (_isUIHidden) {
-                  _setUIVisible();
-                  _shouldProgressOnPrimaryUp = false;
-                } else {
-                  _shouldProgressOnPrimaryUp = true;
-                }
-              }
-            },
-            onPointerUp: (event) {
-              if (event.kind != PointerDeviceKind.mouse) {
-                return;
-              }
-              if (_activePrimaryPointerId != event.pointer) {
-                return;
-              }
-              final shouldProgress = _shouldProgressOnPrimaryUp;
-              _clearPrimaryClickTracking();
-              if (shouldProgress) {
-                widget.onLeftClick?.call();
-              }
-            },
-            onPointerCancel: (event) {
-              if (_activePrimaryPointerId == event.pointer) {
-                _clearPrimaryClickTracking();
-              }
-            },
-            behavior: HitTestBehavior.opaque,
-            child: Container(
-              color: Colors.transparent,
-            ),
-          ),
-        ),
-
         // UI层 - 可以被隐藏，在最上面
         AnimatedBuilder(
           animation: _fadeAnimation,
           builder: (context, child) {
             return Opacity(
               opacity: _fadeAnimation.value,
-              child: IgnorePointer(
-                ignoring: _isUIHidden,
-                child: widget.child,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTapUp: (details) {
+                  // 触屏点击推进逻辑由 MobileTouchController 负责，这里只处理鼠标输入。
+                  if (details.kind != PointerDeviceKind.mouse) {
+                    return;
+                  }
+                  if (_isUIHidden) {
+                    _setUIVisible();
+                    return;
+                  }
+                  widget.onLeftClick?.call();
+                },
+                onSecondaryTapUp: (details) {
+                  // 仅处理鼠标右键
+                  if (details.kind != PointerDeviceKind.mouse) {
+                    return;
+                  }
+                  if (_isUIHidden) {
+                    _setUIVisible();
+                  } else {
+                    _setUIHidden();
+                  }
+                },
+                child: IgnorePointer(
+                  ignoring: _isUIHidden,
+                  child: widget.child,
+                ),
               ),
             );
           },

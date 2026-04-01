@@ -225,8 +225,19 @@ class _GameContainerState extends State<GameContainer> with WindowListener {
   }
 
   Future<bool> _showExitConfirmation() async {
-    return ExitConfirmationDialog.showExitConfirmation(context,
-        hasProgress: true);
+    final hasProgress = _currentState == AppState.inGame;
+    try {
+      final gameModule = await moduleLoader.getCurrentModule();
+      return await gameModule.showWindowCloseConfirmation(
+        context,
+        hasProgress: hasProgress,
+      );
+    } catch (_) {
+      return ExitConfirmationDialog.showExitConfirmation(
+        context,
+        hasProgress: hasProgress,
+      );
+    }
   }
 
   bool get _shouldPrewarmMenuPages {

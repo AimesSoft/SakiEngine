@@ -12,6 +12,12 @@ class DialogueProgressionManager {
   final GameManager gameManager;
   final VoidCallback? onManualProgress;
   TypewriterAnimationManager? _currentTypewriter;
+  DateTime? _lastTypewriterSkipAt;
+
+  // 防止同一次点击在极短时间内触发两次推进（第一次跳字、第二次直接下一句）。
+  static const Duration _rapidProgressGuardDuration = Duration(
+    milliseconds: 40,
+  );
   
   DialogueProgressionManager({
     required this.gameManager,
@@ -30,9 +36,21 @@ class DialogueProgressionManager {
     if (!isAutomated) {
       onManualProgress?.call();
     }
+
+    final now = DateTime.now();
+    final typewriter = _currentTypewriter;
+    final recentlySkippedTypewriter =
+        _lastTypewriterSkipAt != null &&
+        now.difference(_lastTypewriterSkipAt!) <=
+            _rapidProgressGuardDuration &&
+        (typewriter == null || !typewriter.isTyping);
+    if (recentlySkippedTypewriter) {
+      return;
+    }
     
     // 安全检查：如果当前打字机为null，这可能意味着注册丢失了
-    if (_currentTypewriter == null) {
+    if (typewriter == null) {
+      _lastTypewriterSkipAt = null;
       // 直接推进到下一句对话，因为没有打字机需要处理
       _markCurrentDialogueAsRead();
       gameManager.next();
@@ -40,11 +58,14 @@ class DialogueProgressionManager {
     }
     
     // 检查是否有活跃的打字机动画
-    if (_currentTypewriter!.isTyping) {
+    if (typewriter.isTyping) {
       // 如果正在打字，先跳过动画显示完整文本，但不推进到下一句
-      _currentTypewriter!.skipToEnd();
+      typewriter.skipToEnd();
+      _lastTypewriterSkipAt = now;
       return; // 重要：这里直接返回，不继续执行
     }
+
+    _lastTypewriterSkipAt = null;
     
     // 在推进对话前，先标记当前对话为已读（如果有对话内容的话）
     _markCurrentDialogueAsRead();

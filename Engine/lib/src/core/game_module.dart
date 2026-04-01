@@ -13,6 +13,7 @@ import 'package:sakiengine/src/widgets/common/default_menu_buttons.dart';
 import 'package:sakiengine/src/widgets/dialogue_box.dart';
 import 'package:sakiengine/src/widgets/settings_screen.dart';
 import 'package:sakiengine/src/widgets/about_screen.dart';
+import 'package:sakiengine/src/widgets/common/exit_confirmation_dialog.dart';
 
 /// 游戏模块接口 - 定义项目可以覆盖的所有组件
 abstract class GameModule {
@@ -104,6 +105,18 @@ abstract class GameModule {
 
   /// 项目特定的主题配置
   ThemeData? createTheme() => null;
+
+  /// 窗口关闭时的退出确认弹窗。
+  /// 项目可覆写，以统一自定义弹窗样式。
+  Future<bool> showWindowCloseConfirmation(
+    BuildContext context, {
+    required bool hasProgress,
+  }) async {
+    return ExitConfirmationDialog.showExitConfirmation(
+      context,
+      hasProgress: hasProgress,
+    );
+  }
 
   /// 获取应用标题
   Future<String> getAppTitle() async {
@@ -281,6 +294,17 @@ class DefaultGameModule implements GameModule {
 
   @override
   ThemeData? createTheme() => null;
+
+  @override
+  Future<bool> showWindowCloseConfirmation(
+    BuildContext context, {
+    required bool hasProgress,
+  }) async {
+    return ExitConfirmationDialog.showExitConfirmation(
+      context,
+      hasProgress: hasProgress,
+    );
+  }
 
   @override
   Future<String> getAppTitle() async {
