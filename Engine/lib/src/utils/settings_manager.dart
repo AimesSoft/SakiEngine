@@ -237,6 +237,13 @@ class SettingsManager extends ChangeNotifier with WindowListener {
           await _waitForMaximizedState(false);
         }
 
+        // window_manager on Windows may only apply borderless state on the
+        // first fullscreen transition when starting from a frameless window.
+        // Prime with an explicit exit call first, then apply fullscreen.
+        await PlatformWindowManager.setFullScreen(false);
+        await Future<void>.delayed(
+          _windowMaximizeTransitionPollInterval,
+        );
         await PlatformWindowManager.prepareForWindowsFullscreenTransition();
         await PlatformWindowManager.setFullScreen(true);
         return;
