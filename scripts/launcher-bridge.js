@@ -62,6 +62,11 @@ async function handlePrepareProject(args) {
     assetUtils.ensureProjectIcon(gameDir, projectRoot);
     assetUtils.fixWindowsInstallPrefixCache(gameDir);
 
+    const assetsOk = assetUtils.ensurePubspecAssetsExist(gameDir);
+    if (!assetsOk) {
+        throw new Error('检测到无效资源声明，请先同步 pubspec.yaml 的 flutter.assets');
+    }
+
     if (args['generate-icons']) {
         assetUtils.generateAppIcons(gameDir);
     }
@@ -113,4 +118,3 @@ main().catch((error) => {
     assetUtils.colorLog(`launcher-bridge 失败: ${error.message}`, 'red');
     process.exit(1);
 });
-

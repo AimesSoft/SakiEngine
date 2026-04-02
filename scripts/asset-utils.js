@@ -268,6 +268,122 @@ function ensureWebIconConfig(pubspecPath) {
     return true;
 }
 
+function normalizePubspecAssetEntry(entry) {
+    const trimmed = entry.trim();
+    if (!trimmed) {
+        return '';
+    }
+    if (
+        (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+        (trimmed.startsWith('\'') && trimmed.endsWith('\''))
+    ) {
+        return trimmed.slice(1, -1).trim();
+    }
+    return trimmed;
+}
+
+function readPubspecAssetEntries(projectDir) {
+    const pubspecPath = path.join(projectDir, 'pubspec.yaml');
+    if (!fs.existsSync(pubspecPath)) {
+        return [];
+    }
+
+    const lines = fs.readFileSync(pubspecPath, 'utf8').split(/\r?\n/);
+    const entries = [];
+    let inFlutter = false;
+    let inAssets = false;
+
+    for (const line of lines) {
+        if (/^flutter:\s*$/.test(line)) {
+            inFlutter = true;
+            inAssets = false;
+            continue;
+        }
+
+        if (inFlutter && /^\S/.test(line)) {
+            inFlutter = false;
+            inAssets = false;
+        }
+        if (!inFlutter) {
+            continue;
+        }
+
+        if (/^  assets:\s*$/.test(line)) {
+            inAssets = true;
+            continue;
+        }
+
+        if (inAssets && /^  [^\s-]/.test(line)) {
+            inAssets = false;
+        }
+        if (!inAssets) {
+            continue;
+        }
+
+        const match = line.match(/^\s{4}-\s+(.+)$/);
+        if (!match) {
+            continue;
+        }
+
+        const rawEntry = match[1].replace(/\s+#.*$/, '');
+        const entry = normalizePubspecAssetEntry(rawEntry);
+        if (entry) {
+            entries.push(entry);
+        }
+    }
+
+    return entries;
+}
+
+function findMissingPubspecAssets(projectDir) {
+    const entries = readPubspecAssetEntries(projectDir);
+    const missing = [];
+
+    for (const entry of entries) {
+        if (entry.startsWith('packages/')) {
+            continue;
+        }
+
+        const normalizedEntry = entry.replace(/\\/g, '/').replace(/^\.\//, '');
+        const fullPath = path.join(projectDir, normalizedEntry);
+
+        if (!fs.existsSync(fullPath)) {
+            missing.push(normalizedEntry);
+            continue;
+        }
+
+        if (normalizedEntry.endsWith('/')) {
+            try {
+                if (!fs.statSync(fullPath).isDirectory()) {
+                    missing.push(normalizedEntry);
+                }
+            } catch (_) {
+                missing.push(normalizedEntry);
+            }
+        }
+    }
+
+    return missing;
+}
+
+function ensurePubspecAssetsExist(projectDir) {
+    const missing = findMissingPubspecAssets(projectDir);
+    if (missing.length === 0) {
+        return true;
+    }
+
+    colorLog(`检测到 pubspec.yaml 中有 ${missing.length} 个不存在的资源声明:`, 'red');
+    const preview = missing.slice(0, 20);
+    for (const entry of preview) {
+        colorLog(`  - ${entry}`, 'red');
+    }
+    if (missing.length > preview.length) {
+        colorLog(`  ... 其余 ${missing.length - preview.length} 项已省略`, 'red');
+    }
+    colorLog('请同步 flutter/assets 资源清单后重试。', 'yellow');
+    return false;
+}
+
 function generateAppIcons(projectDir) {
     const pubspecPath = path.join(projectDir, 'pubspec.yaml');
     const iconPath = path.join(projectDir, 'icon.png');
@@ -354,6 +470,7 @@ module.exports = {
     readGameConfig,
     setAppIdentity,
     ensureProjectIcon,
+    ensurePubspecAssetsExist,
     fixWindowsInstallPrefixCache,
     generateAppIcons,
     writeDefaultGame,
