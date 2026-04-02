@@ -282,6 +282,10 @@ function normalizePubspecAssetEntry(entry) {
     return trimmed;
 }
 
+function normalizeAssetPath(entry) {
+    return entry.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/{2,}/g, '/').trim();
+}
+
 function readPubspecAssetEntries(projectDir) {
     const pubspecPath = path.join(projectDir, 'pubspec.yaml');
     if (!fs.existsSync(pubspecPath)) {
@@ -335,6 +339,204 @@ function readPubspecAssetEntries(projectDir) {
     return entries;
 }
 
+function findPubspecAssetsBlock(lines) {
+    let inFlutter = false;
+
+    for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+
+        if (/^flutter:\s*$/.test(line)) {
+            inFlutter = true;
+            continue;
+        }
+
+        if (inFlutter && /^\S/.test(line)) {
+            inFlutter = false;
+        }
+        if (!inFlutter) {
+            continue;
+        }
+
+        if (!/^  assets:\s*$/.test(line)) {
+            continue;
+        }
+
+        let end = i;
+        while (end + 1 < lines.length) {
+            const next = lines[end + 1];
+            if (/^\s{4}-\s+/.test(next) || /^\s*$/.test(next)) {
+                end += 1;
+                continue;
+            }
+            break;
+        }
+
+        return { start: i, end };
+    }
+
+    return null;
+}
+
+function collectDirectoryAssetEntries(relativeRoot, absoluteRoot) {
+    if (!fs.existsSync(absoluteRoot)) {
+        return [];
+    }
+    try {
+        if (!fs.statSync(absoluteRoot).isDirectory()) {
+            return [];
+        }
+    } catch (_) {
+        return [];
+    }
+
+    const entries = [];
+
+    const walk = (currentAbs, relativeSuffix) => {
+        const joined = relativeSuffix ? `${relativeRoot}/${relativeSuffix}` : relativeRoot;
+        const normalized = normalizeAssetPath(joined).replace(/\/+$/, '');
+        entries.push(`${normalized}/`);
+
+        let children = [];
+        try {
+            children = fs.readdirSync(currentAbs, { withFileTypes: true });
+        } catch (_) {
+            return;
+        }
+
+        const childDirs = children
+            .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+            .map((entry) => entry.name)
+            .sort((a, b) => a.localeCompare(b));
+
+        for (const dirName of childDirs) {
+            const childAbs = path.join(currentAbs, dirName);
+            const childSuffix = relativeSuffix ? `${relativeSuffix}/${dirName}` : dirName;
+            walk(childAbs, childSuffix);
+        }
+    };
+
+    walk(absoluteRoot, '');
+    return entries;
+}
+
+function collectGameScriptAssetEntries(projectDir) {
+    let dirEntries = [];
+    try {
+        dirEntries = fs.readdirSync(projectDir, { withFileTypes: true });
+    } catch (_) {
+        return [];
+    }
+
+    const scriptRoots = dirEntries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .filter((name) => name === 'GameScript' || name.startsWith('GameScript_'))
+        .sort((a, b) => a.localeCompare(b));
+
+    const results = [];
+    for (const dirName of scriptRoots) {
+        const absoluteRoot = path.join(projectDir, dirName);
+        results.push(...collectDirectoryAssetEntries(dirName, absoluteRoot));
+    }
+    return results;
+}
+
+function buildAutoPubspecAssetEntries(projectDir) {
+    const entries = [];
+
+    const defaultGamePath = path.join(projectDir, 'default_game.txt');
+    if (fs.existsSync(defaultGamePath)) {
+        entries.push('default_game.txt');
+    }
+
+    entries.push(...collectDirectoryAssetEntries('Assets', path.join(projectDir, 'Assets')));
+    entries.push(...collectGameScriptAssetEntries(projectDir));
+
+    const existingEntries = readPubspecAssetEntries(projectDir);
+    for (const rawEntry of existingEntries) {
+        const entry = normalizeAssetPath(rawEntry);
+        if (!entry) {
+            continue;
+        }
+
+        if (entry === 'default_game.txt') {
+            continue;
+        }
+        if (/^Assets(?:\/|$)/.test(entry)) {
+            continue;
+        }
+        if (/^GameScript(?:\/|_|$)/.test(entry)) {
+            continue;
+        }
+
+        if (entry.startsWith('packages/')) {
+            entries.push(entry);
+            continue;
+        }
+
+        const fullPath = path.join(projectDir, entry.replace(/\/+$/, ''));
+        if (!fs.existsSync(fullPath)) {
+            continue;
+        }
+        entries.push(entry);
+    }
+
+    const uniqueEntries = [];
+    const seen = new Set();
+    for (const rawEntry of entries) {
+        const normalized = normalizeAssetPath(rawEntry);
+        if (!normalized || seen.has(normalized)) {
+            continue;
+        }
+        seen.add(normalized);
+        uniqueEntries.push(normalized);
+    }
+
+    return uniqueEntries;
+}
+
+function syncPubspecAssets(projectDir) {
+    const pubspecPath = path.join(projectDir, 'pubspec.yaml');
+    if (!fs.existsSync(pubspecPath)) {
+        colorLog('错误: 找不到 pubspec.yaml，无法同步 flutter.assets', 'red');
+        return { ok: false, changed: false, entryCount: 0 };
+    }
+
+    try {
+        const raw = fs.readFileSync(pubspecPath, 'utf8');
+        const lines = raw.split(/\r?\n/);
+        if (lines.length > 0 && lines[lines.length - 1] === '') {
+            lines.pop();
+        }
+        const assetsBlock = findPubspecAssetsBlock(lines);
+        if (!assetsBlock) {
+            colorLog('错误: pubspec.yaml 中未找到 flutter/assets 段，无法自动同步', 'red');
+            return { ok: false, changed: false, entryCount: 0 };
+        }
+
+        const entries = buildAutoPubspecAssetEntries(projectDir);
+        const generatedBlock = ['  assets:', ...entries.map((entry) => `    - ${entry}`)];
+        const newLines = [
+            ...lines.slice(0, assetsBlock.start),
+            ...generatedBlock,
+            ...lines.slice(assetsBlock.end + 1),
+        ];
+        const nextRaw = `${newLines.join('\n')}\n`;
+        const rawNormalized = raw.endsWith('\n') ? raw : `${raw}\n`;
+        const changed = rawNormalized !== nextRaw;
+
+        if (changed) {
+            fs.writeFileSync(pubspecPath, nextRaw);
+            colorLog(`已自动同步 pubspec.yaml 的 flutter.assets（${entries.length} 项）`, 'green');
+        }
+
+        return { ok: true, changed, entryCount: entries.length };
+    } catch (error) {
+        colorLog(`自动同步 flutter.assets 失败: ${error.message}`, 'red');
+        return { ok: false, changed: false, entryCount: 0 };
+    }
+}
+
 function findMissingPubspecAssets(projectDir) {
     const entries = readPubspecAssetEntries(projectDir);
     const missing = [];
@@ -367,8 +569,21 @@ function findMissingPubspecAssets(projectDir) {
 }
 
 function ensurePubspecAssetsExist(projectDir) {
+    const missingBeforeSync = findMissingPubspecAssets(projectDir);
+    if (missingBeforeSync.length > 0) {
+        colorLog(`检测到 pubspec.yaml 中有 ${missingBeforeSync.length} 个不存在的资源声明，正在自动同步 flutter.assets...`, 'yellow');
+    }
+
+    const syncResult = syncPubspecAssets(projectDir);
+    if (!syncResult.ok) {
+        return false;
+    }
+
     const missing = findMissingPubspecAssets(projectDir);
     if (missing.length === 0) {
+        if (missingBeforeSync.length > 0) {
+            colorLog('无效资源声明已自动修复。', 'green');
+        }
         return true;
     }
 
@@ -380,7 +595,7 @@ function ensurePubspecAssetsExist(projectDir) {
     if (missing.length > preview.length) {
         colorLog(`  ... 其余 ${missing.length - preview.length} 项已省略`, 'red');
     }
-    colorLog('请同步 flutter/assets 资源清单后重试。', 'yellow');
+    colorLog('自动同步后仍存在无效声明，请检查 pubspec.yaml 的 flutter.assets。', 'yellow');
     return false;
 }
 

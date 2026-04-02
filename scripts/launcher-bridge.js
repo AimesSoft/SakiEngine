@@ -64,7 +64,7 @@ async function handlePrepareProject(args) {
 
     const assetsOk = assetUtils.ensurePubspecAssetsExist(gameDir);
     if (!assetsOk) {
-        throw new Error('检测到无效资源声明，请先同步 pubspec.yaml 的 flutter.assets');
+        throw new Error('检测到无法自动修复的无效资源声明，请检查 pubspec.yaml 的 flutter.assets');
     }
 
     if (args['generate-icons']) {
