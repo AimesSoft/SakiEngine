@@ -1,108 +1,36 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 import 'package:sakiengine/src/utils/settings_manager.dart';
 
-class ConfiguredFrameRateLimiter extends StatefulWidget {
-  final Widget child;
+/// Engine-level hard frame limiter.
+///
+/// It throttles frame requests at SchedulerBinding level by gating
+/// [scheduleFrame], so frame timing/FPS overlay reflects the configured cap.
+class SakiEngineFrameRateBinding extends WidgetsFlutterBinding {
+  static SakiEngineFrameRateBinding? _instance;
 
-  const ConfiguredFrameRateLimiter({super.key, required this.child});
+  static SakiEngineFrameRateBinding ensureInitialized() {
+    if (_instance == null) {
+      SakiEngineFrameRateBinding();
+    }
+    return _instance!;
+  }
 
   @override
-  State<ConfiguredFrameRateLimiter> createState() =>
-      _ConfiguredFrameRateLimiterState();
-}
+  void initInstances() {
+    super.initInstances();
+    _instance = this;
+  }
 
-class _ConfiguredFrameRateLimiterState
-    extends State<ConfiguredFrameRateLimiter> {
   final SettingsManager _settingsManager = SettingsManager();
+
+  bool _settingsListenerAttached = false;
+  Timer? _deferredFrameTimer;
+  bool _hasDeferredFrameRequest = false;
   int _frameRateLimit = SettingsManager.defaultFrameRateLimit;
-
-  @override
-  void initState() {
-    super.initState();
-    _settingsManager.addListener(_handleSettingsChanged);
-    _loadInitialValue();
-  }
-
-  @override
-  void dispose() {
-    _settingsManager.removeListener(_handleSettingsChanged);
-    super.dispose();
-  }
-
-  Future<void> _loadInitialValue() async {
-    await _settingsManager.init();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _frameRateLimit = _settingsManager.currentFrameRateLimit;
-    });
-  }
-
-  void _handleSettingsChanged() {
-    if (!mounted) {
-      return;
-    }
-    final next = _settingsManager.currentFrameRateLimit;
-    if (next == _frameRateLimit) {
-      return;
-    }
-    setState(() {
-      _frameRateLimit = next;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FrameRateLimiter(
-      frameRateLimit: _frameRateLimit,
-      child: widget.child,
-    );
-  }
-}
-
-class FrameRateLimiter extends StatefulWidget {
-  final int frameRateLimit;
-  final Widget child;
-
-  const FrameRateLimiter({
-    super.key,
-    required this.frameRateLimit,
-    required this.child,
-  });
-
-  @override
-  State<FrameRateLimiter> createState() => _FrameRateLimiterState();
-}
-
-class _FrameRateLimiterState extends State<FrameRateLimiter> {
-  static const Duration _minimumInterval = Duration(milliseconds: 1);
-  Timer? _frameTimer;
-  int _activeFrameRateLimit = SettingsManager.defaultFrameRateLimit;
-  bool _tickerEnabled = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _applyFrameRateLimit(widget.frameRateLimit);
-  }
-
-  @override
-  void didUpdateWidget(covariant FrameRateLimiter oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.frameRateLimit != widget.frameRateLimit) {
-      _applyFrameRateLimit(widget.frameRateLimit);
-    }
-  }
-
-  @override
-  void dispose() {
-    _frameTimer?.cancel();
-    super.dispose();
-  }
+  int _nextAllowedFrameAtUs = 0;
+  final Stopwatch _clock = Stopwatch()..start();
 
   int _normalizeFrameRateLimit(int value) {
     switch (value) {
@@ -117,71 +45,95 @@ class _FrameRateLimiterState extends State<FrameRateLimiter> {
     }
   }
 
-  Duration _frameIntervalFor(int fps) {
-    final micros = (1000000 / fps).round();
-    final duration = Duration(microseconds: micros);
-    if (duration < _minimumInterval) {
-      return _minimumInterval;
+  int _frameIntervalUs(int fps) {
+    final interval = (1000000 / fps).round();
+    if (interval < 1000) {
+      return 1000;
     }
-    return duration;
+    return interval;
   }
 
-  void _applyFrameRateLimit(int rawLimit) {
-    final normalized = _normalizeFrameRateLimit(rawLimit);
-    if (_activeFrameRateLimit == normalized) {
+  int _nowUs() => _clock.elapsedMicroseconds;
+
+  void attachSettingsSync() {
+    if (_settingsListenerAttached) {
+      _applyFrameRateLimit(_settingsManager.currentFrameRateLimit);
       return;
     }
-    _activeFrameRateLimit = normalized;
-    _frameTimer?.cancel();
-    _frameTimer = null;
-
-    if (normalized <= 0) {
-      if (!_tickerEnabled && mounted) {
-        setState(() {
-          _tickerEnabled = true;
-        });
-      } else {
-        _tickerEnabled = true;
-      }
-      return;
-    }
-
-    if (_tickerEnabled && mounted) {
-      setState(() {
-        _tickerEnabled = false;
-      });
-    } else {
-      _tickerEnabled = false;
-    }
-
-    final interval = _frameIntervalFor(normalized);
-    _frameTimer = Timer.periodic(interval, (_) {
-      _unlockTickerForSingleFrame();
-    });
-    _unlockTickerForSingleFrame();
+    _settingsListenerAttached = true;
+    _settingsManager.addListener(_handleSettingsChanged);
+    _applyFrameRateLimit(_settingsManager.currentFrameRateLimit);
   }
 
-  void _unlockTickerForSingleFrame() {
-    if (!mounted || _activeFrameRateLimit <= 0 || _tickerEnabled) {
+  void _handleSettingsChanged() {
+    _applyFrameRateLimit(_settingsManager.currentFrameRateLimit);
+  }
+
+  void _applyFrameRateLimit(int value) {
+    final normalized = _normalizeFrameRateLimit(value);
+    if (_frameRateLimit == normalized) {
       return;
     }
-
-    setState(() {
-      _tickerEnabled = true;
-    });
-
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _activeFrameRateLimit <= 0 || !_tickerEnabled) {
-        return;
-      }
-      setState(() {
-        _tickerEnabled = false;
-      });
-    });
+    _frameRateLimit = normalized;
+    _nextAllowedFrameAtUs = 0;
+    _hasDeferredFrameRequest = false;
+    _deferredFrameTimer?.cancel();
+    _deferredFrameTimer = null;
+    super.scheduleFrame();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return TickerMode(enabled: _tickerEnabled, child: widget.child);
+  void scheduleFrame() {
+    if (_frameRateLimit <= 0) {
+      super.scheduleFrame();
+      return;
+    }
+
+    final nowUs = _nowUs();
+    if (nowUs >= _nextAllowedFrameAtUs) {
+      _nextAllowedFrameAtUs = nowUs + _frameIntervalUs(_frameRateLimit);
+      _hasDeferredFrameRequest = false;
+      _deferredFrameTimer?.cancel();
+      _deferredFrameTimer = null;
+      super.scheduleFrame();
+      return;
+    }
+
+    _hasDeferredFrameRequest = true;
+    _scheduleDeferredFrameAt(_nextAllowedFrameAtUs - nowUs);
+  }
+
+  void _scheduleDeferredFrameAt(int remainingUs) {
+    if (_deferredFrameTimer != null && _deferredFrameTimer!.isActive) {
+      return;
+    }
+
+    final delay = remainingUs <= 0
+        ? const Duration(milliseconds: 1)
+        : Duration(microseconds: remainingUs);
+    _deferredFrameTimer = Timer(delay, _flushDeferredFrame);
+  }
+
+  void _flushDeferredFrame() {
+    _deferredFrameTimer = null;
+    if (!_hasDeferredFrameRequest) {
+      return;
+    }
+
+    if (_frameRateLimit <= 0) {
+      _hasDeferredFrameRequest = false;
+      super.scheduleFrame();
+      return;
+    }
+
+    final nowUs = _nowUs();
+    if (nowUs < _nextAllowedFrameAtUs) {
+      _scheduleDeferredFrameAt(_nextAllowedFrameAtUs - nowUs);
+      return;
+    }
+
+    _hasDeferredFrameRequest = false;
+    _nextAllowedFrameAtUs = nowUs + _frameIntervalUs(_frameRateLimit);
+    super.scheduleFrame();
   }
 }

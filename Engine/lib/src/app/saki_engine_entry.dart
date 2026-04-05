@@ -470,7 +470,7 @@ Future<void> runSakiEngine({
 
   await runZoned(
     () async {
-      WidgetsFlutterBinding.ensureInitialized();
+      final frameRateBinding = SakiEngineFrameRateBinding.ensureInitialized();
 
       final previousFlutterErrorHandler = FlutterError.onError;
       FlutterError.onError = (FlutterErrorDetails details) {
@@ -541,6 +541,7 @@ Future<void> runSakiEngine({
 
       await SakiEngineConfig().loadConfig();
       await SettingsManager().init();
+      frameRateBinding.attachSettingsSync();
       await LocalizationManager().init();
       await UISoundManager().initialize();
 
@@ -760,39 +761,37 @@ class _StartupMaskWrapperState extends State<StartupMaskWrapper>
 
   @override
   Widget build(BuildContext context) {
-    return ConfiguredFrameRateLimiter(
-      child: Stack(
-        children: [
-          GameContainer(
-            onMenuWarmupFinished: _onMenuWarmupFinished,
-          ),
-          AnimatedBuilder(
-            animation: SettingsManager(),
-            builder: (context, child) {
-              if (!SettingsManager().currentShowFpsOverlay) {
-                return const SizedBox.shrink();
-              }
-              return const FpsOverlay();
-            },
-          ),
-          AnimatedBuilder(
-            animation: _fadeAnimation,
-            builder: (context, child) {
-              if (!_prewarmingComplete || _fadeAnimation.value > 0) {
-                return Material(
-                  color: Colors.black.withOpacity(
-                      _prewarmingComplete ? _fadeAnimation.value : 1.0),
-                  child: const SizedBox(
-                    width: double.infinity,
-                    height: double.infinity,
-                  ),
-                );
-              }
+    return Stack(
+      children: [
+        GameContainer(
+          onMenuWarmupFinished: _onMenuWarmupFinished,
+        ),
+        AnimatedBuilder(
+          animation: SettingsManager(),
+          builder: (context, child) {
+            if (!SettingsManager().currentShowFpsOverlay) {
               return const SizedBox.shrink();
-            },
-          ),
-        ],
-      ),
+            }
+            return const FpsOverlay();
+          },
+        ),
+        AnimatedBuilder(
+          animation: _fadeAnimation,
+          builder: (context, child) {
+            if (!_prewarmingComplete || _fadeAnimation.value > 0) {
+              return Material(
+                color: Colors.black.withOpacity(
+                    _prewarmingComplete ? _fadeAnimation.value : 1.0),
+                child: const SizedBox(
+                  width: double.infinity,
+                  height: double.infinity,
+                ),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
+      ],
     );
   }
 }
