@@ -2792,13 +2792,15 @@ class GameManager {
 
   /// 从新脚本中刷新当前状态的对话文本
   /// 用于修复剧本修改后读档时当前对话文本未更新的bug
-  void _refreshCurrentStateDialogue() {
+  void _refreshCurrentStateDialogue({int? dialogueScriptIndex}) {
+    final targetScriptIndex = dialogueScriptIndex ?? _scriptIndex;
+
     // 检查索引是否有效
-    if (_scriptIndex < 0 || _scriptIndex >= _script.children.length) {
+    if (targetScriptIndex < 0 || targetScriptIndex >= _script.children.length) {
       return;
     }
 
-    final node = _script.children[_scriptIndex];
+    final node = _script.children[targetScriptIndex];
     String? newDialogue;
     String? newSpeaker;
 

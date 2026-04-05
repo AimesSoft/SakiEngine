@@ -138,10 +138,14 @@ extension _GameManagerLifecycle on GameManager {
     );
 
     // 非NVL模式：刷新当前对话
+    // 注意：_scriptIndex 在大多数存档中已经指向“下一条指令”，
+    // 当前显示句应优先取历史记录最后一句对应的脚本索引。
+    final displayedDialogueScriptIndex = snapshot.dialogueHistory.isNotEmpty
+        ? snapshot.dialogueHistory.last.scriptIndex
+        : (_scriptIndex > 0 ? _scriptIndex - 1 : _scriptIndex);
+
     if (!snapshot.isNvlMode) {
-      final dialogueScriptIndex = snapshot.dialogueHistory.isNotEmpty
-          ? snapshot.dialogueHistory.last.scriptIndex
-          : _scriptIndex;
+      final dialogueScriptIndex = displayedDialogueScriptIndex;
 
       if (dialogueScriptIndex >= 0 &&
           dialogueScriptIndex < _script.children.length) {
@@ -204,7 +208,9 @@ extension _GameManagerLifecycle on GameManager {
     // 修复bug：同时更新当前状态的对话文本
     // 但NVL模式不需要刷新，因为nvlDialogues已经在上面正确恢复了
     if (!snapshot.isNvlMode) {
-      _refreshCurrentStateDialogue();
+      _refreshCurrentStateDialogue(
+        dialogueScriptIndex: displayedDialogueScriptIndex,
+      );
     }
 
     // 检查恢复位置的音乐区间（强制检查）
