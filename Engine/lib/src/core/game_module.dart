@@ -13,6 +13,7 @@ import 'package:sakiengine/src/widgets/common/default_menu_buttons.dart';
 import 'package:sakiengine/src/widgets/dialogue_box.dart';
 import 'package:sakiengine/src/widgets/settings_screen.dart';
 import 'package:sakiengine/src/widgets/about_screen.dart';
+import 'package:sakiengine/src/screens/review_screen.dart';
 import 'package:sakiengine/src/widgets/common/exit_confirmation_dialog.dart';
 
 /// 游戏模块接口 - 定义项目可以覆盖的所有组件
@@ -61,6 +62,21 @@ abstract class GameModule {
       useOverlayScaffold: useOverlayScaffold,
       showHeader: showHeader,
       showFooter: showFooter,
+    );
+  }
+
+  /// 回顾界面工厂（可选覆盖）
+  Widget createReviewOverlay({
+    required List<DialogueHistoryEntry> dialogueHistory,
+    required void Function(bool triggeredByOverscroll) onClose,
+    Function(DialogueHistoryEntry)? onJumpToEntry,
+    bool enableBottomScrollClose = false,
+  }) {
+    return ReviewOverlay(
+      dialogueHistory: dialogueHistory,
+      onClose: onClose,
+      onJumpToEntry: onJumpToEntry,
+      enableBottomScrollClose: enableBottomScrollClose,
     );
   }
 
@@ -238,6 +254,21 @@ class DefaultGameModule implements GameModule {
       useOverlayScaffold: useOverlayScaffold,
       showHeader: showHeader,
       showFooter: showFooter,
+    );
+  }
+
+  @override
+  Widget createReviewOverlay({
+    required List<DialogueHistoryEntry> dialogueHistory,
+    required void Function(bool triggeredByOverscroll) onClose,
+    Function(DialogueHistoryEntry)? onJumpToEntry,
+    bool enableBottomScrollClose = false,
+  }) {
+    return ReviewOverlay(
+      dialogueHistory: dialogueHistory,
+      onClose: onClose,
+      onJumpToEntry: onJumpToEntry,
+      enableBottomScrollClose: enableBottomScrollClose,
     );
   }
 

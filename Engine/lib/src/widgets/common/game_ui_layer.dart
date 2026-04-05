@@ -5,7 +5,6 @@ import 'package:sakiengine/src/config/config_models.dart';
 import 'package:sakiengine/src/core/game_module.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/screens/game_play_screen.dart';
-import 'package:sakiengine/src/screens/review_screen.dart';
 import 'package:sakiengine/src/screens/save_load_screen.dart';
 import 'package:sakiengine/src/screens/story_flowchart_screen.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
@@ -327,7 +326,7 @@ class GameUILayerState extends State<GameUILayer> {
         // 回顾界面
         if (widget.showReviewOverlay)
           HideableUI(
-            child: ReviewOverlay(
+            child: widget.gameModule.createReviewOverlay(
               dialogueHistory: widget.gameManager.getDialogueHistory(),
               onClose: (triggeredByOverscroll) =>
                   widget.onToggleReview(triggeredByOverscroll),
