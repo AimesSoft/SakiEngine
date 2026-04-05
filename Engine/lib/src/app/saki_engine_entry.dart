@@ -600,6 +600,9 @@ class _SakiEngineAppState extends State<SakiEngineApp> {
   @override
   Widget build(BuildContext context) {
     final localization = LocalizationManager();
+    final isDesktop =
+        !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+    final appBackgroundColor = isDesktop ? Colors.transparent : null;
 
     return AnimatedBuilder(
       animation: _settingsAppListenable,
@@ -610,6 +613,7 @@ class _SakiEngineAppState extends State<SakiEngineApp> {
             if (!snapshot.hasData) {
               return MaterialApp(
                 debugShowCheckedModeBanner: false,
+                color: appBackgroundColor,
                 locale: localization.currentLocale,
                 supportedLocales: localization.supportedLocales,
                 localizationsDelegates: const [
@@ -649,6 +653,7 @@ class _SakiEngineAppState extends State<SakiEngineApp> {
                 return MaterialApp(
                   title: appTitle,
                   debugShowCheckedModeBanner: false,
+                  color: appBackgroundColor,
                   locale: localization.currentLocale,
                   supportedLocales: localization.supportedLocales,
                   localizationsDelegates: const [
