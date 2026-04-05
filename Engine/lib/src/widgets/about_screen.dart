@@ -23,6 +23,7 @@ class AboutScreen extends StatefulWidget {
 }
 
 class _AboutScreenState extends State<AboutScreen> {
+  static const Color _aboutTextColor = Color(0xFFE7D1E6);
   late final Future<_AboutInfo> _aboutInfoFuture;
   late final Listenable _aboutListenable;
 
@@ -62,7 +63,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 info.appName,
                 style: titleStyle?.copyWith(
                   fontSize: (titleStyle.fontSize ?? 32.0) * textScale,
-                  color: Colors.white,
+                  color: _aboutTextColor,
                   letterSpacing: 1.6,
                   fontWeight: FontWeight.w600,
                 ),
@@ -72,7 +73,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 localization.t('about.poweredBy'),
                 style: bodyStyle?.copyWith(
                   fontSize: (bodyStyle.fontSize ?? 18.0) * textScale,
-                  color: Colors.white.withValues(alpha: 0.86),
+                  color: _aboutTextColor.withValues(alpha: 0.86),
                 ),
               ),
               SizedBox(height: 20.0 * uiScale),
@@ -80,7 +81,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 localization.t('about.description'),
                 style: bodyStyle?.copyWith(
                   fontSize: (bodyStyle.fontSize ?? 18.0) * textScale,
-                  color: Colors.white.withValues(alpha: 0.78),
+                  color: _aboutTextColor.withValues(alpha: 0.78),
                   height: 1.5,
                 ),
               ),
@@ -92,7 +93,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 ),
                 style: bodyStyle?.copyWith(
                   fontSize: (bodyStyle.fontSize ?? 16.0) * textScale,
-                  color: Colors.white.withValues(alpha: 0.72),
+                  color: _aboutTextColor.withValues(alpha: 0.72),
                 ),
               ),
               SizedBox(height: 6.0 * uiScale),
@@ -100,7 +101,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 localization.t('about.engineName'),
                 style: bodyStyle?.copyWith(
                   fontSize: (bodyStyle.fontSize ?? 16.0) * textScale,
-                  color: Colors.white.withValues(alpha: 0.72),
+                  color: _aboutTextColor.withValues(alpha: 0.72),
                 ),
               ),
             ],

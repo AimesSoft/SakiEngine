@@ -2707,6 +2707,11 @@ class GameManager {
     required DateTime timestamp,
     required int currentNodeIndex,
   }) {
+    // 历史快照索引应与常规存档语义一致：指向“下一条待执行节点”。
+    final nextScriptIndex = (currentNodeIndex + 1)
+        .clamp(0, _script.children.length)
+        .toInt();
+
     // 为历史条目创建快照时，使用正确的节点索引
     // 对于NVL模式，只保存当前单句对话而不是整个NVL列表，避免回退时重复显示
     final nvlDialoguesForSnapshot = _currentState.isNvlMode
@@ -2720,7 +2725,7 @@ class GameManager {
         : List.from(_currentState.nvlDialogues);
 
     final snapshot = GameStateSnapshot(
-      scriptIndex: currentNodeIndex,
+      scriptIndex: nextScriptIndex,
       currentState: _currentState,
       dialogueHistory: const [], // 避免循环引用
       isNvlMode: _currentState.isNvlMode,
@@ -2855,6 +2860,21 @@ class GameManager {
     final snapshot = entry.stateSnapshot;
     final currentBackground = _currentState.background;
     final targetBackground = snapshot.currentState.background;
+    final nextScriptIndex = (entry.scriptIndex + 1)
+        .clamp(0, _script.children.length)
+        .toInt();
+
+    Future<void> restoreAndAlignHistoryJumpState() async {
+      await restoreFromSnapshot(scriptName, snapshot, shouldReExecute: false);
+
+      // 兼容旧历史快照语义：确保跳转后立即显示选中句，并从下一句继续推进。
+      if (!snapshot.isNvlMode) {
+        _refreshCurrentStateDialogue(dialogueScriptIndex: entry.scriptIndex);
+        _gameStateController.add(_currentState);
+      }
+      _scriptIndex = nextScriptIndex;
+      await _checkMusicRegionAtCurrentIndex(forceCheck: true);
+    }
 
     if (_context != null && currentBackground != targetBackground) {
       // 需要场景转场，找出目标场景是用什么转场出现的
@@ -2878,38 +2898,14 @@ class GameManager {
         oldBackground: currentBackground,
         newBackground: targetBackground,
         onMidTransition: () async {
-          // 在转场中点恢复历史状态
-          await restoreFromSnapshot(scriptName, snapshot,
-              shouldReExecute: false);
-
-          // 修复NVL/NVLN模式回退bug：将脚本索引移动到下一个节点，避免重复执行当前节点
-          if (snapshot.isNvlMode &&
-              _scriptIndex < _script.children.length - 1) {
-            _scriptIndex++;
-          }
-          // 修复普通对话模式回退bug：对于普通对话也需要推进到下一个节点，避免重复执行
-          else if (!snapshot.isNvlMode &&
-              _scriptIndex < _script.children.length - 1) {
-            _scriptIndex++;
-          }
-
-          // 历史回退后强制检查音乐区间
-          await _checkMusicRegionAtCurrentIndex(forceCheck: true);
+          // 在转场中点恢复并对齐历史跳转状态
+          await restoreAndAlignHistoryJumpState();
         },
         duration: const Duration(milliseconds: 600), // 回退转场稍微快一些
       );
     } else {
-      // 不需要场景转场，直接恢复状态
-      await restoreFromSnapshot(scriptName, snapshot, shouldReExecute: false);
-
-      if (snapshot.isNvlMode && _scriptIndex < _script.children.length - 1) {
-        _scriptIndex++;
-      } else if (!snapshot.isNvlMode &&
-          _scriptIndex < _script.children.length - 1) {
-        _scriptIndex++;
-      }
-
-      await _checkMusicRegionAtCurrentIndex(forceCheck: true);
+      // 不需要场景转场，直接恢复并对齐状态
+      await restoreAndAlignHistoryJumpState();
     }
   }
 

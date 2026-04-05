@@ -27,6 +27,7 @@ import 'package:sakiengine/src/utils/transition_prewarming.dart';
 import 'package:sakiengine/src/utils/ui_sound_manager.dart';
 import 'package:sakiengine/src/widgets/common/black_screen_transition.dart';
 import 'package:sakiengine/src/widgets/common/exit_confirmation_dialog.dart';
+import 'package:sakiengine/src/widgets/common/frame_rate_limiter.dart';
 import 'package:sakiengine/src/widgets/common/fps_overlay.dart';
 import 'package:sakiengine/src/rendering/image_sampling.dart';
 
@@ -759,37 +760,39 @@ class _StartupMaskWrapperState extends State<StartupMaskWrapper>
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        GameContainer(
-          onMenuWarmupFinished: _onMenuWarmupFinished,
-        ),
-        AnimatedBuilder(
-          animation: SettingsManager(),
-          builder: (context, child) {
-            if (!SettingsManager().currentShowFpsOverlay) {
+    return ConfiguredFrameRateLimiter(
+      child: Stack(
+        children: [
+          GameContainer(
+            onMenuWarmupFinished: _onMenuWarmupFinished,
+          ),
+          AnimatedBuilder(
+            animation: SettingsManager(),
+            builder: (context, child) {
+              if (!SettingsManager().currentShowFpsOverlay) {
+                return const SizedBox.shrink();
+              }
+              return const FpsOverlay();
+            },
+          ),
+          AnimatedBuilder(
+            animation: _fadeAnimation,
+            builder: (context, child) {
+              if (!_prewarmingComplete || _fadeAnimation.value > 0) {
+                return Material(
+                  color: Colors.black.withOpacity(
+                      _prewarmingComplete ? _fadeAnimation.value : 1.0),
+                  child: const SizedBox(
+                    width: double.infinity,
+                    height: double.infinity,
+                  ),
+                );
+              }
               return const SizedBox.shrink();
-            }
-            return const FpsOverlay();
-          },
-        ),
-        AnimatedBuilder(
-          animation: _fadeAnimation,
-          builder: (context, child) {
-            if (!_prewarmingComplete || _fadeAnimation.value > 0) {
-              return Material(
-                color: Colors.black.withOpacity(
-                    _prewarmingComplete ? _fadeAnimation.value : 1.0),
-                child: const SizedBox(
-                  width: double.infinity,
-                  height: double.infinity,
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          },
-        ),
-      ],
+            },
+          ),
+        ],
+      ),
     );
   }
 }

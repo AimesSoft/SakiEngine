@@ -19,6 +19,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
   static const bool defaultDarkMode = false;
   static const bool defaultMouseParallaxEnabled = true;
   static const bool defaultShowFpsOverlay = false;
+  static const int defaultFrameRateLimit = 0; // 0 = unlimited
   static const bool defaultMusicEnabled = true;
   static const bool defaultSoundEnabled = true;
   static const double defaultMusicVolume = 0.8;
@@ -39,6 +40,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
       'rewind'; // 'rewind' or 'history'
   static const String defaultDialogueFontFamily = 'SourceHanSansCN'; // 对话文字字体
   static const String _showFpsOverlayKey = 'sakiengine.showFpsOverlay';
+  static const String _frameRateLimitKey = 'sakiengine.frameRateLimit';
   static const String _gameWindowResizeModeKey =
       'sakiengine.gameWindowResizeMode';
   static const String _projectDefaultsAppliedKey =
@@ -279,6 +281,19 @@ class SettingsManager extends ChangeNotifier with WindowListener {
     return defaultGameWindowResizeMode;
   }
 
+  int _normalizeFrameRateLimit(int value) {
+    switch (value) {
+      case 0:
+      case 10:
+      case 20:
+      case 30:
+      case 60:
+        return value;
+      default:
+        return defaultFrameRateLimit;
+    }
+  }
+
   double _resolveGameWindowAspectRatio() {
     final logicalWidth = SakiEngineConfig().logicalWidth;
     final logicalHeight = SakiEngineConfig().logicalHeight;
@@ -467,6 +482,34 @@ class SettingsManager extends ChangeNotifier with WindowListener {
     notifyListeners();
   }
 
+  Future<int> getFrameRateLimit() async {
+    await init();
+    return _normalizeFrameRateLimit(
+      _dataManager.getIntVariable(
+        _frameRateLimitKey,
+        defaultValue: defaultFrameRateLimit,
+      ),
+    );
+  }
+
+  int get currentFrameRateLimit => _normalizeFrameRateLimit(
+        _dataManager.getIntVariable(
+          _frameRateLimitKey,
+          defaultValue: defaultFrameRateLimit,
+        ),
+      );
+
+  Future<void> setFrameRateLimit(int frameRateLimit) async {
+    await init();
+    final normalized = _normalizeFrameRateLimit(frameRateLimit);
+    await _dataManager.setIntVariable(
+      _frameRateLimitKey,
+      normalized,
+      _projectName!,
+    );
+    notifyListeners();
+  }
+
   // 菜单页面显示模式设置
   Future<String> getMenuDisplayMode() async {
     await init();
@@ -576,6 +619,11 @@ class SettingsManager extends ChangeNotifier with WindowListener {
         defaultMouseParallaxEnabled, _projectName!);
     await _dataManager.setBoolVariable(
         _showFpsOverlayKey, defaultShowFpsOverlay, _projectName!);
+    await _dataManager.setIntVariable(
+      _frameRateLimitKey,
+      defaultFrameRateLimit,
+      _projectName!,
+    );
     await _dataManager.setMenuDisplayMode(
         projectDefaultMenuDisplayMode, _projectName!);
     await _dataManager.setStringVariable(
@@ -611,6 +659,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
       'typewriterCharsPerSecond': await getTypewriterCharsPerSecond(),
       'skipPunctuationDelay': await getSkipPunctuationDelay(),
       'showFpsOverlay': await getShowFpsOverlay(),
+      'frameRateLimit': await getFrameRateLimit(),
       'gameWindowResizeMode': await getGameWindowResizeMode(),
     };
   }
