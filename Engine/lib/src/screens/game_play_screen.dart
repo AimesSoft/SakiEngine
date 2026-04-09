@@ -425,31 +425,48 @@ class _GamePlayScreenState extends State<GamePlayScreen>
 
             // 处理回车和空格键推进剧情
             if (event is KeyDownEvent) {
+              final hasOverlayOpen = _isShowingMenu ||
+                  _showSaveOverlay ||
+                  _showLoadOverlay ||
+                  _showReviewOverlay ||
+                  _showSettings ||
+                  _showDeveloperPanel ||
+                  _showDebugPanel ||
+                  _showExpressionSelector;
+
               if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-                if (!_isShowingMenu &&
+                if (!hasOverlayOpen &&
                     _gameManager.currentState.movieFile == null) {
                   _dialogueProgressionManager.progressDialogue();
                   _autoPlayManager?.onManualProgress();
                 }
-                return KeyEventResult.handled;
+                return hasOverlayOpen
+                    ? KeyEventResult.ignored
+                    : KeyEventResult.handled;
               }
 
               if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                if (_gameManager.currentState.movieFile == null) {
+                if (!hasOverlayOpen &&
+                    _gameManager.currentState.movieFile == null) {
                   unawaited(_handleMouseRollbackAction());
                 }
-                return KeyEventResult.handled;
+                return hasOverlayOpen
+                    ? KeyEventResult.ignored
+                    : KeyEventResult.handled;
               }
 
               if (event.logicalKey == LogicalKeyboardKey.enter ||
                   event.logicalKey == LogicalKeyboardKey.space) {
                 // 检查是否正在播放视频，如果是则不推进剧情
-                if (_gameManager.currentState.movieFile == null) {
+                if (!hasOverlayOpen &&
+                    _gameManager.currentState.movieFile == null) {
                   _dialogueProgressionManager.progressDialogue();
                   // 通知自动播放管理器有手动推进
                   _autoPlayManager?.onManualProgress();
                 }
-                return KeyEventResult.handled;
+                return hasOverlayOpen
+                    ? KeyEventResult.ignored
+                    : KeyEventResult.handled;
               }
             }
 
