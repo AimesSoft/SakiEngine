@@ -399,6 +399,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
       onPointerSignal: (signal) {
         _mouseWheelHandler.handlePointerSignal(signal);
       },
+      onPointerPanZoomUpdate: (event) {
+        _mouseWheelHandler.handlePanZoomUpdate(event);
+      },
       child: PopScope(
         canPop: false,
         onPopInvokedWithResult: (bool didPop, dynamic result) async {
@@ -422,6 +425,22 @@ class _GamePlayScreenState extends State<GamePlayScreen>
 
             // 处理回车和空格键推进剧情
             if (event is KeyDownEvent) {
+              if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                if (!_isShowingMenu &&
+                    _gameManager.currentState.movieFile == null) {
+                  _dialogueProgressionManager.progressDialogue();
+                  _autoPlayManager?.onManualProgress();
+                }
+                return KeyEventResult.handled;
+              }
+
+              if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                if (_gameManager.currentState.movieFile == null) {
+                  unawaited(_handleMouseRollbackAction());
+                }
+                return KeyEventResult.handled;
+              }
+
               if (event.logicalKey == LogicalKeyboardKey.enter ||
                   event.logicalKey == LogicalKeyboardKey.space) {
                 // 检查是否正在播放视频，如果是则不推进剧情

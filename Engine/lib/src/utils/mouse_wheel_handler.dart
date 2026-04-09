@@ -22,28 +22,62 @@ class MouseWheelHandler {
     this.shouldHandleScroll,
   });
 
+  void _log(String message) {
+    if (kEngineDebugMode) {
+      debugPrint('[MouseWheelHandler] $message');
+    }
+  }
+
   /// 处理指针信号事件
   void handlePointerSignal(PointerSignalEvent pointerSignal) {
     // 检查是否允许处理滚轮事件
     if (shouldHandleScroll != null && !shouldHandleScroll!()) {
+      _log('ignored signal: ${pointerSignal.runtimeType}');
       return;
     }
 
     // 处理标准的PointerScrollEvent（鼠标滚轮）
     if (pointerSignal is PointerScrollEvent) {
+      _log('PointerScrollEvent dy=${pointerSignal.scrollDelta.dy}');
       // 向上滚动 (dy < 0): 前进剧情
       if (pointerSignal.scrollDelta.dy < 0) {
+        _log('branch=forward');
         onScrollForward?.call();
       }
       // 向下滚动 (dy > 0): 回滚剧情
       else if (pointerSignal.scrollDelta.dy > 0) {
+        _log('branch=backward');
         onScrollBackward?.call();
       }
     }
     // 处理macOS触控板事件
     else if (pointerSignal.toString().contains('Scroll')) {
-      // 触控板滚动事件，默认推进剧情
+      _log('fallback scroll signal type=${pointerSignal.runtimeType}');
+      // 无法读取方向时保持原行为，默认推进剧情
       onScrollForward?.call();
+    } else {
+      _log('unhandled signal type=${pointerSignal.runtimeType}');
+    }
+  }
+
+  /// 处理触控板平移缩放更新（macOS 常见）
+  void handlePanZoomUpdate(PointerPanZoomUpdateEvent event) {
+    if (shouldHandleScroll != null && !shouldHandleScroll!()) {
+      _log('ignored panZoom update');
+      return;
+    }
+
+    final dy = event.panDelta.dy;
+    if (dy == 0) {
+      return;
+    }
+    _log('PointerPanZoomUpdateEvent panDelta.dy=$dy');
+    if (dy < 0) {
+      _log('panZoom branch=forward');
+      onScrollForward?.call();
+    } else {
+      _log('panZoom branch=backward');
+      onScrollBackward?.call();
     }
   }
 }

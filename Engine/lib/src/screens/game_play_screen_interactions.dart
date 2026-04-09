@@ -109,18 +109,51 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     );
   }
 
-  void _handleMouseRollbackAction() {
-    if (_mouseRollbackBehavior == 'history') {
+  Future<void> _handleMouseRollbackAction() async {
+    var behavior = _mouseRollbackBehavior;
+    try {
+      behavior = await _settingsManager.getMouseRollbackBehavior();
+    } catch (_) {
+      behavior = _mouseRollbackBehavior;
+    }
+
+    if (!mounted) {
+      _mouseRollbackBehavior = behavior;
+      return;
+    }
+
+    if (_mouseRollbackBehavior != behavior) {
+      _setStateIfMounted(() {
+        _mouseRollbackBehavior = behavior;
+      });
+    }
+
+    if (kEngineDebugMode) {
+      debugPrint(
+        '[MouseRollback] action behavior=$behavior, '
+        'showReview=$_showReviewOverlay, history=${_gameManager.getDialogueHistory().length}',
+      );
+    }
+
+    if (behavior == 'history') {
       if (mounted && !_showReviewOverlay) {
         final now = DateTime.now();
         if (_reviewReopenSuppressedUntil != null &&
             now.isBefore(_reviewReopenSuppressedUntil!)) {
+          if (kEngineDebugMode) {
+            debugPrint(
+              '[MouseRollback] suppressed until $_reviewReopenSuppressedUntil',
+            );
+          }
           return;
         }
         _setStateIfMounted(() {
           _reviewOpenedByMouseRollback = true;
           _showReviewOverlay = true;
         });
+        if (kEngineDebugMode) {
+          debugPrint('[MouseRollback] opened review overlay');
+        }
       }
       return;
     }
@@ -245,44 +278,8 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       }
     }
 
-    // 添加箭头键支持（替代滚轮）
-    try {
-      final nextHotKey = HotKey(
-        key: PhysicalKeyboardKey.arrowDown,
-        scope: HotKeyScope.inapp,
-      );
-
-      final prevHotKey = HotKey(
-        key: PhysicalKeyboardKey.arrowUp,
-        scope: HotKeyScope.inapp,
-      );
-
-      await hotKeyManager.register(
-        nextHotKey,
-        keyDownHandler: (hotKey) {
-          //print('🎮 下箭头键 - 前进剧情');
-          if (mounted &&
-              !_isShowingMenu &&
-              _gameManager.currentState.movieFile == null) {
-            _dialogueProgressionManager.progressDialogue();
-          }
-        },
-      );
-
-      await hotKeyManager.register(
-        prevHotKey,
-        keyDownHandler: (hotKey) {
-          //print('🎮 上箭头键 - 回滚剧情');
-          if (mounted && _gameManager.currentState.movieFile == null) {
-            _handlePreviousDialogue();
-          }
-        },
-      );
-
-      print('箭头键快捷键注册成功');
-    } catch (e) {
-      print('箭头键快捷键注册失败: $e');
-    }
+    // 上下方向键改由 Focus.onKeyEvent 统一处理，避免平台热键差异。
+    print('箭头键输入由 Focus.onKeyEvent 处理');
   }
 
   // 设置表情选择器管理器（Debug模式下的表情选择功能）
@@ -436,7 +433,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       },
       onScrollBackward: () {
         // 向后滚动: 根据设置执行行为
-        _handleMouseRollbackAction();
+        unawaited(_handleMouseRollbackAction());
       },
       shouldHandleScroll: () {
         // 检查是否有弹窗或菜单显示
