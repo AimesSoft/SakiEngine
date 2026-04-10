@@ -13,7 +13,6 @@ import 'package:sakiengine/src/utils/dialogue_progression_manager.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
 import 'package:sakiengine/src/utils/expression_selector_manager.dart';
 import 'package:sakiengine/src/utils/scaling_manager.dart';
-import 'package:sakiengine/src/widgets/choice_menu.dart';
 import 'package:sakiengine/src/widgets/common/notification_overlay.dart';
 import 'package:sakiengine/src/widgets/common/right_click_ui_manager.dart';
 import 'package:sakiengine/src/widgets/debug_panel_dialog.dart';
@@ -152,6 +151,9 @@ class GameUILayerState extends State<GameUILayer> {
         : 0.0;
     final shouldShowNormalDialogue =
         widget.gameState.dialogue != null && !widget.gameState.isNvlMode;
+    final dialogueHistory = widget.gameManager.getDialogueHistory();
+    final leadingDialogueBeforeMenu =
+        dialogueHistory.isNotEmpty ? dialogueHistory.last.dialogue : null;
 
     final stackContent = Stack(
       children: [
@@ -209,12 +211,14 @@ class GameUILayerState extends State<GameUILayer> {
         // 选择菜单
         if (widget.gameState.currentNode is MenuNode)
           HideableUI(
-            child: ChoiceMenu(
+            child: widget.gameModule.createChoiceMenu(
+              key: const ValueKey('choice_menu'),
               menuNode: widget.gameState.currentNode as MenuNode,
-              onChoiceSelected: (String targetLabel) {
+              onChoiceSelected: (targetLabel) {
                 widget.gameManager.jumpToLabel(targetLabel);
               },
               isFastForwarding: widget.gameState.isFastForwarding, // 传递快进状态
+              leadingDialogue: leadingDialogueBeforeMenu,
             ),
           ),
 

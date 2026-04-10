@@ -2311,7 +2311,8 @@ class GameManager {
 
         _currentState = _currentState.copyWith(
             currentNode: localizedMenuNode,
-            clearDialogueAndSpeaker: true,
+            // 进入选项时保留上一句对话与说话人，避免对话框被隐藏。
+            clearDialogueAndSpeaker: false,
             everShownCharacters: _everShownCharacters);
         _gameStateController.add(_currentState);
         // 注意：不立即推进脚本索引，让存档能够保存到MenuNode的位置

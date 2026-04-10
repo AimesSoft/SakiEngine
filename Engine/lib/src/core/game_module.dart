@@ -6,8 +6,10 @@ import 'package:sakiengine/src/screens/save_load_screen.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
+import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
 import 'package:sakiengine/src/utils/dialogue_progression_manager.dart';
+import 'package:sakiengine/src/widgets/choice_menu.dart';
 import 'package:sakiengine/src/widgets/common/configurable_menu_button.dart';
 import 'package:sakiengine/src/widgets/common/default_menu_buttons.dart';
 import 'package:sakiengine/src/widgets/dialogue_box.dart';
@@ -92,6 +94,23 @@ abstract class GameModule {
     VoidCallback? onToggleSettings,
     VoidCallback? onToggleReview,
   });
+
+  /// 选项菜单组件工厂（可选覆盖）。
+  /// 默认使用引擎 ChoiceMenu；项目可返回自定义实现完全接管选项 UI。
+  Widget createChoiceMenu({
+    Key? key,
+    required MenuNode menuNode,
+    required ValueChanged<String> onChoiceSelected,
+    required bool isFastForwarding,
+    String? leadingDialogue,
+  }) {
+    return ChoiceMenu(
+      key: key,
+      menuNode: menuNode,
+      onChoiceSelected: onChoiceSelected,
+      isFastForwarding: isFastForwarding,
+    );
+  }
 
   /// 创建自定义场景基础层（位于角色层下方）。
   /// 返回 `null` 时表示不插入自定义层。
@@ -292,6 +311,22 @@ class DefaultGameModule implements GameModule {
       progressionManager: progressionManager,
       isFastForwarding: isFastForwarding,
       scriptIndex: scriptIndex, // 传递脚本索引
+    );
+  }
+
+  @override
+  Widget createChoiceMenu({
+    Key? key,
+    required MenuNode menuNode,
+    required ValueChanged<String> onChoiceSelected,
+    required bool isFastForwarding,
+    String? leadingDialogue,
+  }) {
+    return ChoiceMenu(
+      key: key,
+      menuNode: menuNode,
+      onChoiceSelected: onChoiceSelected,
+      isFastForwarding: isFastForwarding,
     );
   }
 
