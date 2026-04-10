@@ -433,6 +433,14 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   _showDeveloperPanel ||
                   _showDebugPanel ||
                   _showExpressionSelector;
+              // 选项界面允许“回滚->观看记录”，但仍视为推进输入的阻断态。
+              final hasOverlayOpenExceptMenu = _showSaveOverlay ||
+                  _showLoadOverlay ||
+                  _showReviewOverlay ||
+                  _showSettings ||
+                  _showDeveloperPanel ||
+                  _showDebugPanel ||
+                  _showExpressionSelector;
 
               if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
                 if (!hasOverlayOpen &&
@@ -446,11 +454,11 @@ class _GamePlayScreenState extends State<GamePlayScreen>
               }
 
               if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-                if (!hasOverlayOpen &&
+                if (!hasOverlayOpenExceptMenu &&
                     _gameManager.currentState.movieFile == null) {
                   unawaited(_handleMouseRollbackAction());
                 }
-                return hasOverlayOpen
+                return hasOverlayOpenExceptMenu
                     ? KeyEventResult.ignored
                     : KeyEventResult.handled;
               }

@@ -128,6 +128,30 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       });
     }
 
+    // 选项界面特例：回滚动作始终唤起观看记录，不受 mouseRollbackBehavior 影响。
+    if (_isShowingMenu) {
+      if (mounted && !_showReviewOverlay) {
+        final now = DateTime.now();
+        if (_reviewReopenSuppressedUntil != null &&
+            now.isBefore(_reviewReopenSuppressedUntil!)) {
+          if (kEngineDebugMode) {
+            debugPrint(
+              '[MouseRollback] (menu) suppressed until $_reviewReopenSuppressedUntil',
+            );
+          }
+          return;
+        }
+        _setStateIfMounted(() {
+          _reviewOpenedByMouseRollback = true;
+          _showReviewOverlay = true;
+        });
+        if (kEngineDebugMode) {
+          debugPrint('[MouseRollback] (menu) opened review overlay');
+        }
+      }
+      return;
+    }
+
     if (kEngineDebugMode) {
       debugPrint(
         '[MouseRollback] action behavior=$behavior, '
@@ -427,6 +451,20 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
   void _setupMouseWheelHandler() {
     _mouseWheelHandler = MouseWheelHandler(
       onScrollForward: () {
+        // 选项界面允许滚轮事件进入以支持“回滚->观看记录”，
+        // 但前滚推进剧情在选项界面仍需禁用。
+        final hasOverlayOpen = _isShowingMenu ||
+            _showSaveOverlay ||
+            _showLoadOverlay ||
+            _showReviewOverlay ||
+            _showSettings ||
+            _showDeveloperPanel ||
+            _showDebugPanel ||
+            _showExpressionSelector;
+        final isPlayingMovie = _gameManager.currentState.movieFile != null;
+        if (hasOverlayOpen || isPlayingMovie) {
+          return;
+        }
         // 向前滚动: 推进对话
         _dialogueProgressionManager.progressDialogue();
         _autoPlayManager?.onManualProgress();
@@ -436,9 +474,9 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         unawaited(_handleMouseRollbackAction());
       },
       shouldHandleScroll: () {
-        // 检查是否有弹窗或菜单显示
-        final hasOverlayOpen = _isShowingMenu ||
-            _showSaveOverlay ||
+        // 选项界面不再阻止滚轮回滚，以便唤起观看记录。
+        // 这里仍阻止其他弹窗，避免误触。
+        final hasOverlayOpen = _showSaveOverlay ||
             _showLoadOverlay ||
             _showReviewOverlay ||
             _showSettings ||
