@@ -128,26 +128,30 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       });
     }
 
-    // 选项界面特例：回滚动作始终唤起观看记录，不受 mouseRollbackBehavior 影响。
+    // 选项界面特例：允许通过回滚动作唤起观看记录，但仍遵循玩家设置。
     if (_isShowingMenu) {
-      if (mounted && !_showReviewOverlay) {
-        final now = DateTime.now();
-        if (_reviewReopenSuppressedUntil != null &&
-            now.isBefore(_reviewReopenSuppressedUntil!)) {
-          if (kEngineDebugMode) {
-            debugPrint(
-              '[MouseRollback] (menu) suppressed until $_reviewReopenSuppressedUntil',
-            );
+      if (behavior == 'history') {
+        if (mounted && !_showReviewOverlay) {
+          final now = DateTime.now();
+          if (_reviewReopenSuppressedUntil != null &&
+              now.isBefore(_reviewReopenSuppressedUntil!)) {
+            if (kEngineDebugMode) {
+              debugPrint(
+                '[MouseRollback] (menu) suppressed until $_reviewReopenSuppressedUntil',
+              );
+            }
+            return;
           }
-          return;
+          _setStateIfMounted(() {
+            _reviewOpenedByMouseRollback = true;
+            _showReviewOverlay = true;
+          });
+          if (kEngineDebugMode) {
+            debugPrint('[MouseRollback] (menu) opened review overlay');
+          }
         }
-        _setStateIfMounted(() {
-          _reviewOpenedByMouseRollback = true;
-          _showReviewOverlay = true;
-        });
-        if (kEngineDebugMode) {
-          debugPrint('[MouseRollback] (menu) opened review overlay');
-        }
+      } else {
+        _handlePreviousDialogue();
       }
       return;
     }
@@ -210,11 +214,15 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
   void _handlePreviousDialogue() {
     final history = _gameManager.getDialogueHistory();
 
-    // 如果当前显示选项，回到最后一句对话（选项出现前的对话）
+    // 菜单中“回退剧情”应真正回退一步：
+    // 当前菜单对应的是 history.last（选项上方展示句），
+    // 因此回退目标应是 history[-2]（若存在）。
     if (_isShowingMenu) {
-      if (history.isNotEmpty) {
-        final lastEntry = history.last;
-        _jumpToHistoryEntryQuiet(lastEntry);
+      if (history.length >= 2) {
+        final previousEntry = history[history.length - 2];
+        _jumpToHistoryEntryQuiet(previousEntry);
+      } else if (history.isNotEmpty) {
+        _jumpToHistoryEntryQuiet(history.first);
       }
     }
     // 如果没有选项，正常回到上一句
