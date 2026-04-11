@@ -149,11 +149,25 @@ class GameUILayerState extends State<GameUILayer> {
     final quickMenuAreaWidth = shouldShowQuickMenu
         ? 100.0 * uiScale + (isMobile ? mediaPadding.left : 0.0)
         : 0.0;
-    final shouldShowNormalDialogue =
-        widget.gameState.dialogue != null && !widget.gameState.isNvlMode;
     final dialogueHistory = widget.gameManager.getDialogueHistory();
+    final isMenuNode = widget.gameState.currentNode is MenuNode;
+    final latestDialogueEntry =
+        dialogueHistory.isNotEmpty ? dialogueHistory.last : null;
+    final menuPreviousDialogueEntry = isMenuNode && dialogueHistory.length >= 2
+        ? dialogueHistory[dialogueHistory.length - 2]
+        : null;
     final leadingDialogueBeforeMenu =
         dialogueHistory.isNotEmpty ? dialogueHistory.last.dialogue : null;
+    final dialogueForDialogueBox =
+        menuPreviousDialogueEntry?.dialogue ?? widget.gameState.dialogue;
+    final speakerForDialogueBox =
+        menuPreviousDialogueEntry?.speaker ?? widget.gameState.speaker;
+    final speakerAliasForDialogueBox = widget.gameState.speakerAlias;
+    final scriptIndexForDialogueBox = menuPreviousDialogueEntry?.scriptIndex ??
+        latestDialogueEntry?.scriptIndex ??
+        widget.gameManager.currentScriptIndex;
+    final shouldShowNormalDialogue =
+        dialogueForDialogueBox != null && !widget.gameState.isNvlMode;
 
     final stackContent = Stack(
       children: [
@@ -186,13 +200,12 @@ class GameUILayerState extends State<GameUILayer> {
             child: shouldShowNormalDialogue
                 ? widget.createDialogueBox(
                     key: const ValueKey('normal_dialogue'),
-                    speaker: widget.gameState.speaker,
-                    speakerAlias: widget.gameState.speakerAlias, // 传递角色简写
-                    dialogue: widget.gameState.dialogue!,
+                    speaker: speakerForDialogueBox,
+                    speakerAlias: speakerAliasForDialogueBox, // 传递角色简写
+                    dialogue: dialogueForDialogueBox!,
                     isFastForwarding:
                         widget.gameState.isFastForwarding, // 传递快进状态
-                    scriptIndex:
-                        widget.gameManager.currentScriptIndex, // 传递脚本索引
+                    scriptIndex: scriptIndexForDialogueBox, // 传递脚本索引
                     onToggleSettings: () {
                       if (!widget.showSettings) {
                         widget.onToggleSettings();
@@ -209,7 +222,7 @@ class GameUILayerState extends State<GameUILayer> {
         ),
 
         // 选择菜单
-        if (widget.gameState.currentNode is MenuNode)
+        if (isMenuNode)
           HideableUI(
             child: widget.gameModule.createChoiceMenu(
               key: const ValueKey('choice_menu'),

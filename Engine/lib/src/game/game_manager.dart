@@ -1187,6 +1187,19 @@ class GameManager {
     }
   }
 
+  int? _findFollowingMenuNodeIndex(int currentNodeIndex) {
+    var nextIndex = currentNodeIndex + 1;
+    while (nextIndex < _script.children.length) {
+      final nextNode = _script.children[nextIndex];
+      if (nextNode is CommentNode || nextNode is LabelNode) {
+        nextIndex++;
+        continue;
+      }
+      return nextNode is MenuNode ? nextIndex : null;
+    }
+    return null;
+  }
+
   Future<void> jumpToLabel(String label) async {
     // 在合并的脚本中查找标签
     if (_labelIndexMap.containsKey(label)) {
@@ -2008,15 +2021,19 @@ class GameManager {
           return;
         } else {
           // 普通对话模式
-          _currentState = _currentState.copyWith(
-            dialogue: resolvedDialogue,
-            speaker: characterConfig?.name,
-            speakerAlias: node.character, // 传入角色简写
-            currentNode: null,
-            clearDialogueAndSpeaker: false,
-            forceNullSpeaker: node.character == null,
-            everShownCharacters: _everShownCharacters,
-          );
+          final followingMenuNodeIndex =
+              _findFollowingMenuNodeIndex(currentNodeIndex);
+          if (followingMenuNodeIndex == null) {
+            _currentState = _currentState.copyWith(
+              dialogue: resolvedDialogue,
+              speaker: characterConfig?.name,
+              speakerAlias: node.character, // 传入角色简写
+              currentNode: null,
+              clearDialogueAndSpeaker: false,
+              forceNullSpeaker: node.character == null,
+              everShownCharacters: _everShownCharacters,
+            );
+          }
 
           _addToDialogueHistory(
             speaker: characterConfig?.name,
@@ -2025,8 +2042,34 @@ class GameManager {
             currentNodeIndex: currentNodeIndex,
           );
 
-          _gameStateController.add(_currentState);
-          _scriptIndex++;
+          if (followingMenuNodeIndex != null) {
+            final menuNode =
+                _script.children[followingMenuNodeIndex] as MenuNode;
+            final localizedMenuNode = _localizeMenuNode(menuNode);
+            final previousDialogueEntry = _dialogueHistory.length >= 2
+                ? _dialogueHistory[_dialogueHistory.length - 2]
+                : null;
+
+            // 分支选择前创建运行时自动存档
+            await _createRuntimeAutoSave(reason: '分支选择');
+            // 分支选择前创建自动存档
+            await _checkAndCreateAutoSave(followingMenuNodeIndex,
+                reason: '分支选择');
+
+            _currentState = _currentState.copyWith(
+              dialogue: previousDialogueEntry?.dialogue,
+              speaker: previousDialogueEntry?.speaker,
+              forceNullSpeaker: previousDialogueEntry?.speaker == null,
+              currentNode: localizedMenuNode,
+              clearDialogueAndSpeaker: false,
+              everShownCharacters: _everShownCharacters,
+            );
+            _gameStateController.add(_currentState);
+            _scriptIndex = followingMenuNodeIndex;
+          } else {
+            _gameStateController.add(_currentState);
+            _scriptIndex++;
+          }
           _isProcessing = false;
           return;
         }
@@ -2038,18 +2081,24 @@ class GameManager {
         final characterConfig = _characterConfigs[node.character];
         ////print('[GameManager] 角色配置: $characterConfig');
         CharacterState? currentCharacterState;
+        final followingMenuNodeIndex =
+            _findFollowingMenuNodeIndex(currentNodeIndex);
+        final shouldDirectToFollowingMenu = followingMenuNodeIndex != null &&
+            _activeNvlContext == _NvlContextMode.none;
 
         if (node.character != null) {
           // 检查当前背景是否为CG，如果是CG则不更新角色立绘
           if (_isCurrentBackgroundCG()) {
             ////print('[GameManager] 当前背景为CG，跳过角色立绘更新');
             // 直接更新对话内容，不处理角色状态
-            _currentState = _currentState.copyWith(
-              speaker: characterConfig?.name ?? node.character,
-              speakerAlias: node.character, // 传入角色简写
-              dialogue: resolvedDialogue,
-              everShownCharacters: _everShownCharacters,
-            );
+            if (!shouldDirectToFollowingMenu) {
+              _currentState = _currentState.copyWith(
+                speaker: characterConfig?.name ?? node.character,
+                speakerAlias: node.character, // 传入角色简写
+                dialogue: resolvedDialogue,
+                everShownCharacters: _everShownCharacters,
+              );
+            }
           } else {
             // 正常处理角色立绘逻辑
             // 确定最终的角色key
@@ -2258,7 +2307,8 @@ class GameManager {
         } else {
           // 普通对话模式
           // 在CG背景下，如果之前已经设置了对话内容，就不要重复设置
-          if (!(_isCurrentBackgroundCG() && node.character != null)) {
+          if (followingMenuNodeIndex == null &&
+              !(_isCurrentBackgroundCG() && node.character != null)) {
             _currentState = _currentState.copyWith(
               dialogue: resolvedDialogue,
               speaker: characterConfig?.name,
@@ -2277,8 +2327,6 @@ class GameManager {
             currentNodeIndex: currentNodeIndex,
           );
 
-          _gameStateController.add(_currentState);
-
           // 检查是否需要创建章节开头的自动存档（普通对话模式）
           try {
             await _chapterAutoSaveManager.onDialogueDisplayed(
@@ -2295,7 +2343,34 @@ class GameManager {
             }
           }
 
-          _scriptIndex++;
+          if (followingMenuNodeIndex != null) {
+            final menuNode =
+                _script.children[followingMenuNodeIndex] as MenuNode;
+            final localizedMenuNode = _localizeMenuNode(menuNode);
+            final previousDialogueEntry = _dialogueHistory.length >= 2
+                ? _dialogueHistory[_dialogueHistory.length - 2]
+                : null;
+
+            // 分支选择前创建运行时自动存档
+            await _createRuntimeAutoSave(reason: '分支选择');
+            // 分支选择前创建自动存档
+            await _checkAndCreateAutoSave(followingMenuNodeIndex,
+                reason: '分支选择');
+
+            _currentState = _currentState.copyWith(
+              dialogue: previousDialogueEntry?.dialogue,
+              speaker: previousDialogueEntry?.speaker,
+              forceNullSpeaker: previousDialogueEntry?.speaker == null,
+              currentNode: localizedMenuNode,
+              clearDialogueAndSpeaker: false,
+              everShownCharacters: _everShownCharacters,
+            );
+            _gameStateController.add(_currentState);
+            _scriptIndex = followingMenuNodeIndex;
+          } else {
+            _gameStateController.add(_currentState);
+            _scriptIndex++;
+          }
           _isProcessing = false;
           return;
         }
@@ -2709,9 +2784,8 @@ class GameManager {
     required int currentNodeIndex,
   }) {
     // 历史快照索引应与常规存档语义一致：指向“下一条待执行节点”。
-    final nextScriptIndex = (currentNodeIndex + 1)
-        .clamp(0, _script.children.length)
-        .toInt();
+    final nextScriptIndex =
+        (currentNodeIndex + 1).clamp(0, _script.children.length).toInt();
 
     // 为历史条目创建快照时，使用正确的节点索引
     // 对于NVL模式，只保存当前单句对话而不是整个NVL列表，避免回退时重复显示
@@ -2861,9 +2935,8 @@ class GameManager {
     final snapshot = entry.stateSnapshot;
     final currentBackground = _currentState.background;
     final targetBackground = snapshot.currentState.background;
-    final nextScriptIndex = (entry.scriptIndex + 1)
-        .clamp(0, _script.children.length)
-        .toInt();
+    final nextScriptIndex =
+        (entry.scriptIndex + 1).clamp(0, _script.children.length).toInt();
 
     Future<void> restoreAndAlignHistoryJumpState() async {
       await restoreFromSnapshot(scriptName, snapshot, shouldReExecute: false);
