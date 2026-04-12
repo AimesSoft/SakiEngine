@@ -34,6 +34,110 @@ class SksParser {
     return '「$dialogue」';
   }
 
+  int _findFirstWhitespaceOutsideQuotes(String input) {
+    String? quoteChar;
+    for (var i = 0; i < input.length; i++) {
+      final char = input[i];
+      if (quoteChar == null) {
+        if (char == '"' || char == "'") {
+          quoteChar = char;
+          continue;
+        }
+        if (char.trim().isEmpty) {
+          return i;
+        }
+      } else if (char == quoteChar) {
+        quoteChar = null;
+      }
+    }
+    return -1;
+  }
+
+  List<String> _splitByWhitespaceRespectingQuotes(String input) {
+    final tokens = <String>[];
+    final buffer = StringBuffer();
+    String? quoteChar;
+
+    void flush() {
+      if (buffer.isEmpty) {
+        return;
+      }
+      tokens.add(buffer.toString());
+      buffer.clear();
+    }
+
+    for (var i = 0; i < input.length; i++) {
+      final char = input[i];
+      if (quoteChar == null) {
+        if (char == '"' || char == "'") {
+          quoteChar = char;
+          buffer.write(char);
+          continue;
+        }
+        if (char.trim().isEmpty) {
+          flush();
+          continue;
+        }
+        buffer.write(char);
+      } else {
+        buffer.write(char);
+        if (char == quoteChar) {
+          quoteChar = null;
+        }
+      }
+    }
+
+    flush();
+    return tokens;
+  }
+
+  String _stripMatchingQuotes(String value) {
+    if (value.length < 2) {
+      return value;
+    }
+    final first = value[0];
+    final last = value[value.length - 1];
+    if ((first == '"' && last == '"') || (first == "'" && last == "'")) {
+      return value.substring(1, value.length - 1);
+    }
+    return value;
+  }
+
+  String _unescapeQuotedValue(String value) {
+    return value
+        .replaceAll(r'\"', '"')
+        .replaceAll(r"\'", "'")
+        .replaceAll(r'\\', '\\');
+  }
+
+  Map<String, String> _parseApiParameters(String rawParams) {
+    final params = <String, String>{};
+    if (rawParams.trim().isEmpty) {
+      return params;
+    }
+
+    final tokens = _splitByWhitespaceRespectingQuotes(rawParams);
+    for (final token in tokens) {
+      if (token.isEmpty) {
+        continue;
+      }
+      final eqIndex = token.indexOf('=');
+      if (eqIndex <= 0) {
+        params[token.trim()] = 'true';
+        continue;
+      }
+      final key = token.substring(0, eqIndex).trim();
+      if (key.isEmpty) {
+        continue;
+      }
+      final rawValue = token.substring(eqIndex + 1).trim();
+      final unquoted = _stripMatchingQuotes(rawValue);
+      params[key] = _unescapeQuotedValue(unquoted);
+    }
+
+    return params;
+  }
+
   ScriptNode parse(String content) {
     final lines = content.split('\n');
     final nodes = <SksNode>[];
@@ -659,6 +763,23 @@ class SksParser {
             final value = parts[2].toLowerCase() == 'true';
             nodes.add(BoolNode(variableName, value));
           }
+          break;
+        case 'api':
+          // 语法：
+          // api <apiName> key=value key2="value with spaces"
+          final payload = trimmedLine.substring(3).trim();
+          if (payload.isEmpty) {
+            break;
+          }
+          final splitIndex = _findFirstWhitespaceOutsideQuotes(payload);
+          final apiName =
+              splitIndex < 0 ? payload : payload.substring(0, splitIndex).trim();
+          final rawParams =
+              splitIndex < 0 ? '' : payload.substring(splitIndex + 1).trim();
+          if (apiName.isEmpty) {
+            break;
+          }
+          nodes.add(ApiCallNode(apiName, parameters: _parseApiParameters(rawParams)));
           break;
         case 'pause':
           // pause(1.5) - 暂停指定秒数

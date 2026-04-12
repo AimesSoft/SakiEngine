@@ -167,6 +167,14 @@ class StopSoundNode implements SksNode {
   StopSoundNode();
 }
 
+class ApiCallNode implements SksNode {
+  final String apiName;
+  final Map<String, String> parameters;
+
+  ApiCallNode(this.apiName, {Map<String, String>? parameters})
+      : parameters = Map.unmodifiable(parameters ?? const <String, String>{});
+}
+
 class BoolNode implements SksNode {
   final String variableName;
   final bool value;

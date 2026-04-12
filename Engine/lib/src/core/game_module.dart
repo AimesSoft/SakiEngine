@@ -132,6 +132,27 @@ abstract class GameModule {
     required int scriptIndex,
   });
 
+  /// 创建 scene 前景层（位于角色/CG/anime层之上、UI层之下）。
+  /// 返回 `null` 时表示不渲染前景层。
+  Widget? createSceneForegroundLayer({
+    required BuildContext context,
+    required GameState gameState,
+    required int scriptIndex,
+  }) {
+    return null;
+  }
+
+  /// 处理脚本 `api` 调用。
+  /// 默认返回未处理，由项目模块按需覆写。
+  Future<ScriptApiExecutionResult> handleScriptApiCall({
+    required String apiName,
+    required Map<String, String> params,
+    required GameState gameState,
+    required int scriptIndex,
+  }) async {
+    return const ScriptApiExecutionResult.unhandled();
+  }
+
   /// 自定义配置（可选）
   SakiEngineConfig? createCustomConfig() => null;
 
@@ -350,6 +371,25 @@ class DefaultGameModule implements GameModule {
     required int scriptIndex,
   }) {
     return null;
+  }
+
+  @override
+  Widget? createSceneForegroundLayer({
+    required BuildContext context,
+    required GameState gameState,
+    required int scriptIndex,
+  }) {
+    return null;
+  }
+
+  @override
+  Future<ScriptApiExecutionResult> handleScriptApiCall({
+    required String apiName,
+    required Map<String, String> params,
+    required GameState gameState,
+    required int scriptIndex,
+  }) async {
+    return const ScriptApiExecutionResult.unhandled();
   }
 
   @override

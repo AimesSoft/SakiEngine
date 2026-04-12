@@ -286,7 +286,23 @@ class _GamePlayScreenState extends State<GamePlayScreen>
       CurvedAnimation(parent: _loadingFadeController, curve: Curves.easeOut),
     );
 
-    _gameManager = GameManager(onReturn: _returnToMainMenu);
+    _gameManager = GameManager(
+      onReturn: _returnToMainMenu,
+      onScriptApiExecute: ({
+        required String apiName,
+        required Map<String, String> params,
+        required GameState gameState,
+        required int scriptIndex,
+      }) async {
+        final module = widget.gameModule ?? DefaultGameModule();
+        return module.handleScriptApiCall(
+          apiName: apiName,
+          params: params,
+          gameState: gameState,
+          scriptIndex: scriptIndex,
+        );
+      },
+    );
     ScreenshotGenerator.registerLiveGameViewCaptureProvider(
       owner: this,
       provider: _captureCurrentGameFrameForSaveThumbnail,
@@ -695,6 +711,11 @@ class _GamePlayScreenState extends State<GamePlayScreen>
       gameState: gameState,
       scriptIndex: _gameManager.currentScriptIndex,
     );
+    final sceneForegroundLayer = module.createSceneForegroundLayer(
+      context: context,
+      gameState: gameState,
+      scriptIndex: _gameManager.currentScriptIndex,
+    );
     final shouldRenderDefaultSceneBackground =
         module.shouldRenderDefaultSceneBackground(gameState);
 
@@ -775,6 +796,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
               gameState.animeLoop,
               keep: gameState.animeKeep,
             ),
+
+          // scene 前景层（位于场景元素之上，UI层之下）
+          if (sceneForegroundLayer != null) sceneForegroundLayer,
         ],
       ),
     );

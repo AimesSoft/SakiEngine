@@ -88,6 +88,46 @@ class MusicRegion {
   }
 }
 
+class ScriptApiExecutionResult {
+  final bool handled;
+  final GameState? nextState;
+  final Duration? waitDuration;
+  final GameState? stateAfterWait;
+
+  const ScriptApiExecutionResult({
+    required this.handled,
+    this.nextState,
+    this.waitDuration,
+    this.stateAfterWait,
+  });
+
+  const ScriptApiExecutionResult.unhandled()
+      : handled = false,
+        nextState = null,
+        waitDuration = null,
+        stateAfterWait = null;
+
+  factory ScriptApiExecutionResult.handled({
+    GameState? nextState,
+    Duration? waitDuration,
+    GameState? stateAfterWait,
+  }) {
+    return ScriptApiExecutionResult(
+      handled: true,
+      nextState: nextState,
+      waitDuration: waitDuration,
+      stateAfterWait: stateAfterWait,
+    );
+  }
+}
+
+typedef ScriptApiExecutor = Future<ScriptApiExecutionResult> Function({
+  required String apiName,
+  required Map<String, String> params,
+  required GameState gameState,
+  required int scriptIndex,
+});
+
 class GameManager {
   static const bool _musicRegionVerboseLogs = bool.fromEnvironment(
     'SAKI_MUSIC_REGION_LOG',
@@ -114,6 +154,7 @@ class GameManager {
   Map<String, CharacterConfig> _characterConfigs = {};
   Map<String, PoseConfig> _poseConfigs = {};
   VoidCallback? onReturn;
+  final ScriptApiExecutor? onScriptApiExecute;
   BuildContext? _context;
   TickerProvider? _tickerProvider;
   final Set<String> _everShownCharacters = {};
@@ -925,7 +966,7 @@ class GameManager {
     return false;
   }
 
-  GameManager({this.onReturn}) {
+  GameManager({this.onReturn, this.onScriptApiExecute}) {
     _currentState = GameState.initial(); // 提前初始化，避免late变量访问错误
     _activeLanguage = LocalizationManager().currentLanguage;
     _languageListener = _handleLanguageChange;
@@ -2625,6 +2666,56 @@ class GameManager {
         continue;
       }
 
+      if (node is ApiCallNode) {
+        final executor = onScriptApiExecute;
+        if (executor != null) {
+          final result = await executor(
+            apiName: node.apiName,
+            params: node.parameters,
+            gameState: _currentState,
+            scriptIndex: _scriptIndex,
+          );
+
+          if (result.handled) {
+            if (result.nextState != null) {
+              _currentState = result.nextState!;
+              _gameStateController.add(_currentState);
+            }
+
+            final waitDuration = result.waitDuration;
+            _scriptIndex++;
+
+            if (waitDuration != null && waitDuration > Duration.zero) {
+              _isWaitingForTimer = true;
+              _isProcessing = false;
+              _currentTimer?.cancel();
+              _currentTimer = Timer(waitDuration, () {
+                if (result.stateAfterWait != null) {
+                  _currentState = result.stateAfterWait!;
+                  _gameStateController.add(_currentState);
+                }
+                _isWaitingForTimer = false;
+                _executeScript();
+              });
+              return;
+            }
+
+            if (result.stateAfterWait != null) {
+              _currentState = result.stateAfterWait!;
+              _gameStateController.add(_currentState);
+            }
+
+            continue;
+          }
+        }
+
+        if (kEngineDebugMode) {
+          print('[GameManager] 未处理的api命令: ${node.apiName}');
+        }
+        _scriptIndex++;
+        continue;
+      }
+
       if (node is PauseNode) {
         // 处理暂停命令：pause(0.5)
         // 设置暂停等待标志
@@ -3865,6 +3956,15 @@ class GameState {
   final String? shakeTarget; // 新增：震动目标 (dialogue/background)
   final double? shakeDuration; // 新增：震动持续时间
   final double? shakeIntensity; // 新增：震动强度
+  final String? scriptOverlayText; // 脚本API驱动的覆盖层文本
+  final String? scriptOverlayBackgroundColor; // 覆盖层背景色（字符串）
+  final String? scriptOverlayTextColor; // 覆盖层文字颜色（字符串）
+  final String? scriptOverlayAnimation; // 覆盖层动画名称
+  final double scriptOverlayStretchX; // 覆盖层文字水平拉伸
+  final bool scriptOverlayPlainStyle; // 覆盖层是否使用纯色无修饰文本
+  final bool scriptOverlayFitScreen; // 覆盖层文本是否按屏幕约束最大化
+  final bool scriptOverlayFitCover; // 覆盖层文本是否使用cover策略（允许裁切）
+  final int scriptOverlayRevision; // 覆盖层版本号（用于触发重播动画）
 
   GameState({
     this.background,
@@ -3897,6 +3997,15 @@ class GameState {
     this.shakeTarget, // 新增：震动目标
     this.shakeDuration, // 新增：震动持续时间
     this.shakeIntensity, // 新增：震动强度
+    this.scriptOverlayText,
+    this.scriptOverlayBackgroundColor,
+    this.scriptOverlayTextColor,
+    this.scriptOverlayAnimation,
+    this.scriptOverlayStretchX = 1.0,
+    this.scriptOverlayPlainStyle = false,
+    this.scriptOverlayFitScreen = false,
+    this.scriptOverlayFitCover = false,
+    this.scriptOverlayRevision = 0,
   });
 
   factory GameState.initial() {
@@ -3945,6 +4054,16 @@ class GameState {
     String? shakeTarget, // 新增：震动目标
     double? shakeDuration, // 新增：震动持续时间
     double? shakeIntensity, // 新增：震动强度
+    String? scriptOverlayText,
+    String? scriptOverlayBackgroundColor,
+    String? scriptOverlayTextColor,
+    String? scriptOverlayAnimation,
+    double? scriptOverlayStretchX,
+    bool? scriptOverlayPlainStyle,
+    bool? scriptOverlayFitScreen,
+    bool? scriptOverlayFitCover,
+    int? scriptOverlayRevision,
+    bool clearScriptOverlay = false,
   }) {
     return GameState(
       background: clearBackground ? null : (background ?? this.background),
@@ -3999,6 +4118,32 @@ class GameState {
       shakeTarget: shakeTarget ?? this.shakeTarget, // 新增：震动目标
       shakeDuration: shakeDuration ?? this.shakeDuration, // 新增：震动持续时间
       shakeIntensity: shakeIntensity ?? this.shakeIntensity, // 新增：震动强度
+      scriptOverlayText: clearScriptOverlay
+          ? null
+          : (scriptOverlayText ?? this.scriptOverlayText),
+      scriptOverlayBackgroundColor: clearScriptOverlay
+          ? null
+          : (scriptOverlayBackgroundColor ?? this.scriptOverlayBackgroundColor),
+      scriptOverlayTextColor: clearScriptOverlay
+          ? null
+          : (scriptOverlayTextColor ?? this.scriptOverlayTextColor),
+      scriptOverlayAnimation: clearScriptOverlay
+          ? null
+          : (scriptOverlayAnimation ?? this.scriptOverlayAnimation),
+      scriptOverlayStretchX: clearScriptOverlay
+          ? 1.0
+          : (scriptOverlayStretchX ?? this.scriptOverlayStretchX),
+      scriptOverlayPlainStyle: clearScriptOverlay
+          ? false
+          : (scriptOverlayPlainStyle ?? this.scriptOverlayPlainStyle),
+      scriptOverlayFitScreen: clearScriptOverlay
+          ? false
+          : (scriptOverlayFitScreen ?? this.scriptOverlayFitScreen),
+      scriptOverlayFitCover: clearScriptOverlay
+          ? false
+          : (scriptOverlayFitCover ?? this.scriptOverlayFitCover),
+      scriptOverlayRevision:
+          scriptOverlayRevision ?? this.scriptOverlayRevision,
     );
   }
 }

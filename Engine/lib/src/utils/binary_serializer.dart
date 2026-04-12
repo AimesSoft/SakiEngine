@@ -7,7 +7,7 @@ import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 
 /// 二进制序列化工具类，用于将游戏数据序列化为二进制格式
 class BinarySerializer {
-  static const int _version = 7; // 增加版本号以支持 currentNode (MenuNode) 序列化
+  static const int _version = 10; // 增加版本号以支持脚本API覆盖层cover模式状态
   static const String _magicNumber = 'SAKI';
 
   /// 将SaveSlot序列化为二进制数据
@@ -27,7 +27,8 @@ class BinarySerializer {
     }
     // Web平台使用Int32存储时间戳（秒级精度），桌面平台使用Int64（毫秒级精度）
     if (kIsWeb) {
-      buffer.addAll(_writeInt32((saveSlot.saveTime.millisecondsSinceEpoch ~/ 1000)));
+      buffer.addAll(
+          _writeInt32((saveSlot.saveTime.millisecondsSinceEpoch ~/ 1000)));
     } else {
       buffer.addAll(_writeInt64(saveSlot.saveTime.millisecondsSinceEpoch));
     }
@@ -80,7 +81,7 @@ class BinarySerializer {
       // 桌面平台版本2及以上使用64位ID
       id = reader.readInt64();
     }
-    
+
     // 读取时间戳
     final DateTime saveTime;
     if (kIsWeb) {
@@ -230,6 +231,17 @@ class BinarySerializer {
     // 序列化 currentNode（版本7新增）
     buffer.addAll(_serializeCurrentNode(state.currentNode));
 
+    // 序列化脚本API覆盖层状态（版本8新增）
+    buffer.addAll(_writeNullableString(state.scriptOverlayText));
+    buffer.addAll(_writeNullableString(state.scriptOverlayBackgroundColor));
+    buffer.addAll(_writeNullableString(state.scriptOverlayTextColor));
+    buffer.addAll(_writeNullableString(state.scriptOverlayAnimation));
+    buffer.addAll(_writeNullableString(state.scriptOverlayStretchX.toString()));
+    buffer.add(state.scriptOverlayPlainStyle ? 1 : 0);
+    buffer.add(state.scriptOverlayFitScreen ? 1 : 0);
+    buffer.add(state.scriptOverlayFitCover ? 1 : 0);
+    buffer.addAll(_writeInt32(state.scriptOverlayRevision));
+
     return Uint8List.fromList(buffer);
   }
 
@@ -289,6 +301,32 @@ class BinarySerializer {
     // 反序列化 currentNode（版本7新增）
     final currentNode = _deserializeCurrentNode(reader, version);
 
+    String? scriptOverlayText;
+    String? scriptOverlayBackgroundColor;
+    String? scriptOverlayTextColor;
+    String? scriptOverlayAnimation;
+    double scriptOverlayStretchX = 1.0;
+    bool scriptOverlayPlainStyle = false;
+    bool scriptOverlayFitScreen = false;
+    bool scriptOverlayFitCover = false;
+    int scriptOverlayRevision = 0;
+    if (version != null && version >= 8) {
+      scriptOverlayText = reader.readNullableString();
+      scriptOverlayBackgroundColor = reader.readNullableString();
+      scriptOverlayTextColor = reader.readNullableString();
+      scriptOverlayAnimation = reader.readNullableString();
+      final stretchXRaw = reader.readNullableString();
+      scriptOverlayStretchX = double.tryParse(stretchXRaw ?? '') ?? 1.0;
+      if (version >= 9) {
+        scriptOverlayPlainStyle = reader.readByte() == 1;
+        scriptOverlayFitScreen = reader.readByte() == 1;
+        if (version >= 10) {
+          scriptOverlayFitCover = reader.readByte() == 1;
+        }
+      }
+      scriptOverlayRevision = reader.readInt32();
+    }
+
     return GameState(
       background: background,
       movieFile: movieFile, // 新增：视频文件参数
@@ -302,6 +340,15 @@ class BinarySerializer {
       isNvlOverlayVisible: isNvlOverlayVisible,
       nvlDialogues: nvlDialogues,
       currentNode: currentNode, // 添加 currentNode
+      scriptOverlayText: scriptOverlayText,
+      scriptOverlayBackgroundColor: scriptOverlayBackgroundColor,
+      scriptOverlayTextColor: scriptOverlayTextColor,
+      scriptOverlayAnimation: scriptOverlayAnimation,
+      scriptOverlayStretchX: scriptOverlayStretchX,
+      scriptOverlayPlainStyle: scriptOverlayPlainStyle,
+      scriptOverlayFitScreen: scriptOverlayFitScreen,
+      scriptOverlayFitCover: scriptOverlayFitCover,
+      scriptOverlayRevision: scriptOverlayRevision,
     );
   }
 
@@ -390,7 +437,8 @@ class BinarySerializer {
     buffer.addAll(_writeString(entry.dialogue));
     // Web平台使用Int32存储时间戳（秒级精度）
     if (kIsWeb) {
-      buffer.addAll(_writeInt32((entry.timestamp.millisecondsSinceEpoch ~/ 1000)));
+      buffer.addAll(
+          _writeInt32((entry.timestamp.millisecondsSinceEpoch ~/ 1000)));
     } else {
       buffer.addAll(_writeInt64(entry.timestamp.millisecondsSinceEpoch));
     }
@@ -476,7 +524,8 @@ class BinarySerializer {
     buffer.addAll(_writeString(nvlDialogue.dialogue));
     // Web平台使用Int32存储时间戳（秒级精度）
     if (kIsWeb) {
-      buffer.addAll(_writeInt32((nvlDialogue.timestamp.millisecondsSinceEpoch ~/ 1000)));
+      buffer.addAll(
+          _writeInt32((nvlDialogue.timestamp.millisecondsSinceEpoch ~/ 1000)));
     } else {
       buffer.addAll(_writeInt64(nvlDialogue.timestamp.millisecondsSinceEpoch));
     }
