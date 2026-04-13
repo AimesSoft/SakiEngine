@@ -3964,6 +3964,8 @@ class GameState {
   final bool scriptOverlayPlainStyle; // 覆盖层是否使用纯色无修饰文本
   final bool scriptOverlayFitScreen; // 覆盖层文本是否按屏幕约束最大化
   final bool scriptOverlayFitCover; // 覆盖层文本是否使用cover策略（允许裁切）
+  final String? scriptOverlayLineWidthRatios; // 覆盖层逐行目标宽度比例（CSV）
+  final bool scriptOverlayStretchEachLine; // 覆盖层逐行按目标宽度拉伸/压缩
   final int scriptOverlayRevision; // 覆盖层版本号（用于触发重播动画）
 
   GameState({
@@ -4005,6 +4007,8 @@ class GameState {
     this.scriptOverlayPlainStyle = false,
     this.scriptOverlayFitScreen = false,
     this.scriptOverlayFitCover = false,
+    this.scriptOverlayLineWidthRatios,
+    this.scriptOverlayStretchEachLine = false,
     this.scriptOverlayRevision = 0,
   });
 
@@ -4062,6 +4066,8 @@ class GameState {
     bool? scriptOverlayPlainStyle,
     bool? scriptOverlayFitScreen,
     bool? scriptOverlayFitCover,
+    String? scriptOverlayLineWidthRatios,
+    bool? scriptOverlayStretchEachLine,
     int? scriptOverlayRevision,
     bool clearScriptOverlay = false,
   }) {
@@ -4142,6 +4148,12 @@ class GameState {
       scriptOverlayFitCover: clearScriptOverlay
           ? false
           : (scriptOverlayFitCover ?? this.scriptOverlayFitCover),
+      scriptOverlayLineWidthRatios: clearScriptOverlay
+          ? null
+          : (scriptOverlayLineWidthRatios ?? this.scriptOverlayLineWidthRatios),
+      scriptOverlayStretchEachLine: clearScriptOverlay
+          ? false
+          : (scriptOverlayStretchEachLine ?? this.scriptOverlayStretchEachLine),
       scriptOverlayRevision:
           scriptOverlayRevision ?? this.scriptOverlayRevision,
     );

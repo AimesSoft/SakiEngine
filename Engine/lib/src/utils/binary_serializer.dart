@@ -7,7 +7,7 @@ import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 
 /// 二进制序列化工具类，用于将游戏数据序列化为二进制格式
 class BinarySerializer {
-  static const int _version = 10; // 增加版本号以支持脚本API覆盖层cover模式状态
+  static const int _version = 11; // 增加版本号以支持脚本API逐行布局状态
   static const String _magicNumber = 'SAKI';
 
   /// 将SaveSlot序列化为二进制数据
@@ -240,6 +240,8 @@ class BinarySerializer {
     buffer.add(state.scriptOverlayPlainStyle ? 1 : 0);
     buffer.add(state.scriptOverlayFitScreen ? 1 : 0);
     buffer.add(state.scriptOverlayFitCover ? 1 : 0);
+    buffer.addAll(_writeNullableString(state.scriptOverlayLineWidthRatios));
+    buffer.add(state.scriptOverlayStretchEachLine ? 1 : 0);
     buffer.addAll(_writeInt32(state.scriptOverlayRevision));
 
     return Uint8List.fromList(buffer);
@@ -309,6 +311,8 @@ class BinarySerializer {
     bool scriptOverlayPlainStyle = false;
     bool scriptOverlayFitScreen = false;
     bool scriptOverlayFitCover = false;
+    String? scriptOverlayLineWidthRatios;
+    bool scriptOverlayStretchEachLine = false;
     int scriptOverlayRevision = 0;
     if (version != null && version >= 8) {
       scriptOverlayText = reader.readNullableString();
@@ -322,6 +326,10 @@ class BinarySerializer {
         scriptOverlayFitScreen = reader.readByte() == 1;
         if (version >= 10) {
           scriptOverlayFitCover = reader.readByte() == 1;
+          if (version >= 11) {
+            scriptOverlayLineWidthRatios = reader.readNullableString();
+            scriptOverlayStretchEachLine = reader.readByte() == 1;
+          }
         }
       }
       scriptOverlayRevision = reader.readInt32();
@@ -348,6 +356,8 @@ class BinarySerializer {
       scriptOverlayPlainStyle: scriptOverlayPlainStyle,
       scriptOverlayFitScreen: scriptOverlayFitScreen,
       scriptOverlayFitCover: scriptOverlayFitCover,
+      scriptOverlayLineWidthRatios: scriptOverlayLineWidthRatios,
+      scriptOverlayStretchEachLine: scriptOverlayStretchEachLine,
       scriptOverlayRevision: scriptOverlayRevision,
     );
   }

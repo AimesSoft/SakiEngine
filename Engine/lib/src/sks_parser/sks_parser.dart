@@ -105,6 +105,9 @@ class SksParser {
 
   String _unescapeQuotedValue(String value) {
     return value
+        .replaceAll(r'\n', '\n')
+        .replaceAll(r'\r', '\r')
+        .replaceAll(r'\t', '\t')
         .replaceAll(r'\"', '"')
         .replaceAll(r"\'", "'")
         .replaceAll(r'\\', '\\');
@@ -772,14 +775,16 @@ class SksParser {
             break;
           }
           final splitIndex = _findFirstWhitespaceOutsideQuotes(payload);
-          final apiName =
-              splitIndex < 0 ? payload : payload.substring(0, splitIndex).trim();
+          final apiName = splitIndex < 0
+              ? payload
+              : payload.substring(0, splitIndex).trim();
           final rawParams =
               splitIndex < 0 ? '' : payload.substring(splitIndex + 1).trim();
           if (apiName.isEmpty) {
             break;
           }
-          nodes.add(ApiCallNode(apiName, parameters: _parseApiParameters(rawParams)));
+          nodes.add(
+              ApiCallNode(apiName, parameters: _parseApiParameters(rawParams)));
           break;
         case 'pause':
           // pause(1.5) - 暂停指定秒数
