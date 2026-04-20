@@ -839,6 +839,123 @@ class GameManager {
   String get currentDialogueText =>
       _dialogueHistory.isNotEmpty ? _dialogueHistory.last.dialogue : '';
 
+  /// 获取当前显示对话的精确来源行号（1-based）。
+  /// 该值由解析器在构建节点时写入，优先作为脚本修改定位依据。
+  int? get currentDialogueSourceLine =>
+      _dialogueHistory.isNotEmpty ? _dialogueHistory.last.sourceLine : null;
+
+  /// 获取当前显示对话的来源脚本名（不含扩展名）。
+  String? get currentDialogueSourceScriptFile => _dialogueHistory.isNotEmpty
+      ? _dialogueHistory.last.sourceScriptFile
+      : null;
+
+  /// 获取当前显示对话在当前脚本文件中的“同文案出现序号”（1-based）。
+  /// 用于在脚本存在重复台词时，精准定位当前句而不是总命中第一句。
+  int estimateCurrentDialogueOccurrenceInFile({
+    required String dialogue,
+    String? speakerName,
+    String? scriptCharacterKey,
+  }) {
+    if (_script.children.isEmpty) {
+      return 1;
+    }
+
+    final targetNodeIndex = _dialogueHistory.isNotEmpty
+        ? _dialogueHistory.last.scriptIndex
+        : (_scriptIndex > 0 ? _scriptIndex - 1 : _scriptIndex);
+    final safeTargetIndex =
+        targetNodeIndex.clamp(0, _script.children.length - 1).toInt();
+    final currentFile = currentScriptFile;
+    final fileStart = _scriptMerger.getFileStartIndex(currentFile) ?? 0;
+
+    var occurrence = 0;
+    for (int i = fileStart;
+        i <= safeTargetIndex && i < _script.children.length;
+        i++) {
+      final node = _script.children[i];
+      String? nodeDialogue;
+      String? nodeCharacterKey;
+
+      if (node is SayNode) {
+        nodeDialogue = _resolveScriptText(node.dialogue);
+        nodeCharacterKey = node.character;
+      } else if (node is ConditionalSayNode) {
+        nodeDialogue = _resolveScriptText(node.dialogue);
+        nodeCharacterKey = node.character;
+      } else {
+        continue;
+      }
+
+      if (!_isDialogueTextEquivalent(nodeDialogue, dialogue)) {
+        continue;
+      }
+      if (speakerName != null &&
+          speakerName.isNotEmpty &&
+          !_isSpeakerNameEquivalent(nodeCharacterKey, speakerName)) {
+        continue;
+      }
+      if (scriptCharacterKey != null &&
+          scriptCharacterKey.isNotEmpty &&
+          !_isScriptCharacterKeyCompatible(
+              nodeCharacterKey, scriptCharacterKey)) {
+        continue;
+      }
+
+      occurrence++;
+    }
+
+    if (kEngineDebugMode) {
+      print(
+          'GameManager: 当前对话出现序号估算 file=$currentFile, targetNodeIndex=$safeTargetIndex, occurrence=$occurrence, dialogue="$dialogue", speaker="$speakerName", scriptCharacterKey=$scriptCharacterKey');
+    }
+    return occurrence > 0 ? occurrence : 1;
+  }
+
+  bool _isDialogueTextEquivalent(String? a, String b) {
+    if (a == null) {
+      return false;
+    }
+    String normalize(String text) {
+      final localized = ScriptTextLocalizer.resolve(text);
+      return localized
+          .replaceAll('"', '')
+          .replaceAll('「', '')
+          .replaceAll('」', '')
+          .trim();
+    }
+
+    return normalize(a) == normalize(b);
+  }
+
+  bool _isSpeakerNameEquivalent(String? nodeCharacterKey, String speakerName) {
+    if (nodeCharacterKey == null) {
+      return false;
+    }
+    final cfg = _characterConfigs[nodeCharacterKey];
+    if (cfg != null && cfg.name == speakerName) {
+      return true;
+    }
+    return nodeCharacterKey == speakerName;
+  }
+
+  bool _isScriptCharacterKeyCompatible(
+      String? nodeCharacterKey, String expectedCharacterKey) {
+    if (nodeCharacterKey == null || expectedCharacterKey.isEmpty) {
+      return false;
+    }
+    if (nodeCharacterKey == expectedCharacterKey) {
+      return true;
+    }
+    if (!nodeCharacterKey.startsWith(expectedCharacterKey)) {
+      return false;
+    }
+    if (nodeCharacterKey.length == expectedCharacterKey.length) {
+      return true;
+    }
+    final nextChar = nodeCharacterKey[expectedCharacterKey.length];
+    return RegExp(r'[A-Za-z_]').hasMatch(nextChar);
+  }
+
   // 获取当前游戏状态（用于表情选择器）
   GameState get currentState => _currentState;
 
@@ -2066,6 +2183,8 @@ class GameManager {
             dialogueTag: node.dialogueTag,
             timestamp: DateTime.now(),
             currentNodeIndex: currentNodeIndex,
+            sourceScriptFile: node.sourceFile ?? currentScriptFile,
+            sourceLine: node.sourceLine,
           );
 
           _gameStateController.add(_currentState);
@@ -2112,6 +2231,8 @@ class GameManager {
             dialogueTag: node.dialogueTag,
             timestamp: DateTime.now(),
             currentNodeIndex: currentNodeIndex,
+            sourceScriptFile: node.sourceFile ?? currentScriptFile,
+            sourceLine: node.sourceLine,
           );
 
           if (followingMenuNodeIndex != null) {
@@ -2352,6 +2473,8 @@ class GameManager {
             dialogueTag: node.dialogueTag,
             timestamp: DateTime.now(),
             currentNodeIndex: currentNodeIndex,
+            sourceScriptFile: node.sourceFile ?? currentScriptFile,
+            sourceLine: node.sourceLine,
           );
 
           _gameStateController.add(_currentState);
@@ -2400,6 +2523,8 @@ class GameManager {
             dialogueTag: node.dialogueTag,
             timestamp: DateTime.now(),
             currentNodeIndex: currentNodeIndex,
+            sourceScriptFile: node.sourceFile ?? currentScriptFile,
+            sourceLine: node.sourceLine,
           );
 
           // 检查是否需要创建章节开头的自动存档（普通对话模式）
@@ -2909,6 +3034,8 @@ class GameManager {
     String? dialogueTag,
     required DateTime timestamp,
     required int currentNodeIndex,
+    String? sourceScriptFile,
+    int? sourceLine,
   }) {
     // 历史快照索引应与常规存档语义一致：指向“下一条待执行节点”。
     final nextScriptIndex =
@@ -2944,6 +3071,8 @@ class GameManager {
       dialogueTag: dialogueTag,
       timestamp: timestamp,
       scriptIndex: currentNodeIndex,
+      sourceScriptFile: sourceScriptFile,
+      sourceLine: sourceLine,
       stateSnapshot: snapshot,
     ));
 
@@ -2988,6 +3117,8 @@ class GameManager {
           dialogueTag: (node is SayNode) ? node.dialogueTag : entry.dialogueTag,
           timestamp: entry.timestamp,
           scriptIndex: entry.scriptIndex,
+          sourceScriptFile: entry.sourceScriptFile,
+          sourceLine: entry.sourceLine,
           stateSnapshot: entry.stateSnapshot,
         );
         updatedHistory.add(updatedEntry);
@@ -3027,7 +3158,8 @@ class GameManager {
     if (newDialogue != null) {
       _currentState = _currentState.copyWith(
         dialogue: newDialogue,
-        dialogueTag: (node is SayNode) ? node.dialogueTag : _currentState.dialogueTag,
+        dialogueTag:
+            (node is SayNode) ? node.dialogueTag : _currentState.dialogueTag,
         speaker: newSpeaker,
         everShownCharacters: _everShownCharacters,
       );
@@ -3041,7 +3173,8 @@ class GameManager {
           speaker: newSpeaker,
           speakerAlias: lastDialogue.speakerAlias,
           dialogue: newDialogue,
-          dialogueTag: (node is SayNode) ? node.dialogueTag : lastDialogue.dialogueTag,
+          dialogueTag:
+              (node is SayNode) ? node.dialogueTag : lastDialogue.dialogueTag,
           timestamp: lastDialogue.timestamp,
         );
         _currentState = _currentState.copyWith(
@@ -4290,6 +4423,8 @@ class DialogueHistoryEntry {
   final String? dialogueTag; // 对话行尾扩展 token（项目层可自定义）
   final DateTime timestamp;
   final int scriptIndex;
+  final String? sourceScriptFile; // 对话来源脚本名（不含扩展名）
+  final int? sourceLine; // 对话来源脚本行号（1-based）
   final GameStateSnapshot stateSnapshot;
 
   DialogueHistoryEntry({
@@ -4298,6 +4433,8 @@ class DialogueHistoryEntry {
     this.dialogueTag,
     required this.timestamp,
     required this.scriptIndex,
+    this.sourceScriptFile,
+    this.sourceLine,
     required this.stateSnapshot,
   });
 }

@@ -484,6 +484,7 @@ class ScriptContentModifier {
     required String characterId,
     String? newPose,
     String? newExpression,
+    int? targetLineNumber,
   }) async {
     try {
       if (kEngineDebugMode) {
@@ -493,6 +494,7 @@ class ScriptContentModifier {
         print('ScriptModifier: 角色ID: $characterId');
         print('ScriptModifier: 新pose: $newPose');
         print('ScriptModifier: 新expression: $newExpression');
+        print('ScriptModifier: 目标行号: $targetLineNumber');
       }
 
       final file = File(scriptFilePath);
@@ -511,40 +513,109 @@ class ScriptContentModifier {
         print('ScriptModifier: 读取到 ${lines.length} 行脚本');
       }
 
-      for (int i = 0; i < lines.length; i++) {
-        final originalLine = lines[i];
-        final line = originalLine.trim();
-
-        // 检查是否包含对话的关键部分（不含引号和特殊符号）
-        final dialogueCore = targetDialogue
-            .replaceAll('"', '')
-            .replaceAll('「', '')
-            .replaceAll('」', '');
-        if (kEngineDebugMode && line.contains(dialogueCore)) {
-          print('ScriptModifier: 找到包含关键词的行 $i: "$line"');
+      if (targetLineNumber != null && targetLineNumber > 0) {
+        final targetIndex = targetLineNumber - 1;
+        if (targetIndex >= 0 && targetIndex < lines.length) {
+          final originalLine = lines[targetIndex];
+          final line = originalLine.trim();
+          if (kEngineDebugMode) {
+            print('ScriptModifier: 尝试按精确行号匹配 line=$targetLineNumber: "$line"');
+          }
+          if (_isTargetDialogueLine(line, targetDialogue, characterId)) {
+            final modifiedLine =
+                _modifyDialogueLine(line, characterId, newPose, newExpression);
+            if (modifiedLine != line) {
+              lines[targetIndex] =
+                  originalLine.replaceFirst(line, modifiedLine);
+              modified = true;
+              if (kEngineDebugMode) {
+                print('ScriptModifier: 精确行号命中并修改成功');
+                print('ScriptModifier: 原始行: $line');
+                print('ScriptModifier: 修改后: $modifiedLine');
+              }
+            } else if (kEngineDebugMode) {
+              print('ScriptModifier: 精确行号命中，但内容无变化');
+            }
+          } else if (kEngineDebugMode) {
+            print('ScriptModifier: 精确行号未通过对话/角色校验，回退到全文匹配');
+          }
+        } else if (kEngineDebugMode) {
+          print('ScriptModifier: 精确行号越界，回退到全文匹配');
         }
 
-        // 检查是否是包含目标对话的行，同时验证角色ID
-        if (_isTargetDialogueLine(line, targetDialogue, characterId)) {
+        // 行号未命中时，优先在附近窗口内定位（行号漂移容错）
+        if (!modified) {
+          const nearbyWindow = 24;
+          final searchStart =
+              (targetIndex - nearbyWindow).clamp(0, lines.length - 1);
+          final searchEnd =
+              (targetIndex + nearbyWindow).clamp(0, lines.length - 1);
           if (kEngineDebugMode) {
-            print('ScriptModifier: 确认匹配行 $i: "$line"');
+            print('ScriptModifier: 尝试附近窗口定位 [$searchStart, $searchEnd]');
           }
-
-          final modifiedLine =
-              _modifyDialogueLine(line, characterId, newPose, newExpression);
-          if (modifiedLine != line) {
+          for (int i = searchStart; i <= searchEnd; i++) {
+            final originalLine = lines[i];
+            final line = originalLine.trim();
+            if (!_isTargetDialogueLine(line, targetDialogue, characterId)) {
+              continue;
+            }
+            final modifiedLine =
+                _modifyDialogueLine(line, characterId, newPose, newExpression);
+            if (modifiedLine == line) {
+              continue;
+            }
             lines[i] = originalLine.replaceFirst(line, modifiedLine);
             modified = true;
-
             if (kEngineDebugMode) {
-              print('ScriptModifier: 修改对话行（pose+expression）');
+              print('ScriptModifier: 附近窗口命中行 ${i + 1} 并修改成功');
               print('ScriptModifier: 原始行: $line');
               print('ScriptModifier: 修改后: $modifiedLine');
             }
-            break; // 只修改第一个匹配的行
-          } else {
+            break;
+          }
+        }
+      }
+
+      if (!modified) {
+        if (kEngineDebugMode) {
+          print('ScriptModifier: 开始回退全文匹配流程');
+        }
+
+        for (int i = 0; i < lines.length; i++) {
+          final originalLine = lines[i];
+          final line = originalLine.trim();
+
+          // 检查是否包含对话的关键部分（不含引号和特殊符号）
+          final dialogueCore = targetDialogue
+              .replaceAll('"', '')
+              .replaceAll('「', '')
+              .replaceAll('」', '');
+          if (kEngineDebugMode && line.contains(dialogueCore)) {
+            print('ScriptModifier: 找到包含关键词的行 $i: "$line"');
+          }
+
+          // 检查是否是包含目标对话的行，同时验证角色ID
+          if (_isTargetDialogueLine(line, targetDialogue, characterId)) {
             if (kEngineDebugMode) {
-              print('ScriptModifier: 修改后的行与原始行相同，无需更改');
+              print('ScriptModifier: 确认匹配行 $i: "$line"');
+            }
+
+            final modifiedLine =
+                _modifyDialogueLine(line, characterId, newPose, newExpression);
+            if (modifiedLine != line) {
+              lines[i] = originalLine.replaceFirst(line, modifiedLine);
+              modified = true;
+
+              if (kEngineDebugMode) {
+                print('ScriptModifier: 修改对话行（pose+expression）');
+                print('ScriptModifier: 原始行: $line');
+                print('ScriptModifier: 修改后: $modifiedLine');
+              }
+              break; // 只修改第一个匹配的行
+            } else {
+              if (kEngineDebugMode) {
+                print('ScriptModifier: 修改后的行与原始行相同，无需更改');
+              }
             }
           }
         }

@@ -11,7 +11,7 @@ class ScriptMerger {
   final Map<String, int> _fileStartIndices = {}; // 记录每个文件在合并脚本中的起始索引
   final Map<String, String> _globalLabelMap = {}; // label -> filename
   ScriptNode? _mergedScript;
-  
+
   /// 构建全局标签映射，扫描所有脚本文件
   Future<void> _buildGlobalLabelMap() async {
     _globalLabelMap.clear();
@@ -36,9 +36,12 @@ class ScriptMerger {
       for (final fileName in scriptFiles) {
         final fileNameWithoutExt = fileName.replaceAll('.sks', '');
         try {
-          final scriptContent =
-              await AssetManager().loadString('assets/GameScript/labels/$fileName');
-          final script = SksParser().parse(scriptContent);
+          final scriptContent = await AssetManager()
+              .loadString('assets/GameScript/labels/$fileName');
+          final script = SksParser().parse(
+            scriptContent,
+            sourceFile: fileNameWithoutExt,
+          );
           _loadedScripts[fileNameWithoutExt] = script;
           _collectLabels(fileNameWithoutExt, script);
         } catch (e) {
@@ -47,7 +50,7 @@ class ScriptMerger {
           }
         }
       }
-      
+
       if (kEngineDebugMode) {
         //print('[ScriptMerger] 全局标签映射构建完成，共 ${_globalLabelMap.length} 个标签');
       }
@@ -128,38 +131,40 @@ class ScriptMerger {
     }
 
     await _buildGlobalLabelMap();
-    
+
     final mergedChildren = <SksNode>[];
     _fileStartIndices.clear();
-    
+
     // 从 start 文件开始，按照 jump 顺序拼接
     final processedFiles = <String>{};
     await _mergeFileRecursively('start', mergedChildren, processedFiles);
-    
+
     _mergedScript = ScriptNode(mergedChildren);
     return _mergedScript!;
   }
 
   /// 递归合并文件，按照 jump 顺序
-  Future<void> _mergeFileRecursively(String fileName, List<SksNode> mergedChildren, Set<String> processedFiles) async {
-    if (processedFiles.contains(fileName) || !_loadedScripts.containsKey(fileName)) {
+  Future<void> _mergeFileRecursively(String fileName,
+      List<SksNode> mergedChildren, Set<String> processedFiles) async {
+    if (processedFiles.contains(fileName) ||
+        !_loadedScripts.containsKey(fileName)) {
       return;
     }
-    
+
     processedFiles.add(fileName);
     final script = _loadedScripts[fileName]!;
     _fileStartIndices[fileName] = mergedChildren.length;
-    
+
     // 添加文件开始标记
     mergedChildren.add(CommentNode('=== 文件: $fileName ==='));
-    
+
     // 收集当前文件中的所有 jump 目标
     final jumpTargets = <String>[];
-    
+
     for (final node in script.children) {
       // 先添加当前节点
       mergedChildren.add(_cloneNode(node));
-      
+
       // 如果是 jump 节点，记录目标但不立即处理
       if (node is JumpNode) {
         final targetLabel = node.targetLabel;
@@ -170,7 +175,7 @@ class ScriptMerger {
           }
         }
       }
-      
+
       // 如果是 menu 节点，也要处理选项中的目标标签
       if (node is MenuNode) {
         for (final choice in node.choices) {
@@ -184,10 +189,10 @@ class ScriptMerger {
         }
       }
     }
-    
+
     // 添加文件结束标记
     mergedChildren.add(CommentNode('=== 文件 $fileName 结束 ==='));
-    
+
     // 递归处理所有被 jump 的文件
     for (final targetFile in jumpTargets) {
       await _mergeFileRecursively(targetFile, mergedChildren, processedFiles);
@@ -261,14 +266,14 @@ class ScriptMerger {
   String? getFileNameByIndex(int index) {
     String? result;
     int maxStartIndex = -1;
-    
+
     for (final entry in _fileStartIndices.entries) {
       if (entry.value <= index && entry.value > maxStartIndex) {
         maxStartIndex = entry.value;
         result = entry.key;
       }
     }
-    
+
     return result;
   }
 

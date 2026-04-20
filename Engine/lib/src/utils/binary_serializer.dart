@@ -7,7 +7,7 @@ import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 
 /// 二进制序列化工具类，用于将游戏数据序列化为二进制格式
 class BinarySerializer {
-  static const int _version = 12; // 增加版本号以支持对话行尾扩展 token
+  static const int _version = 13; // 增加版本号以支持对话来源行号追踪
   static const String _magicNumber = 'SAKI';
 
   /// 将SaveSlot序列化为二进制数据
@@ -460,6 +460,8 @@ class BinarySerializer {
       buffer.addAll(_writeInt64(entry.timestamp.millisecondsSinceEpoch));
     }
     buffer.addAll(_writeInt32(entry.scriptIndex));
+    buffer.addAll(_writeNullableString(entry.sourceScriptFile));
+    buffer.addAll(_writeNullableString(entry.sourceLine?.toString()));
     buffer.addAll(_serializeGameStateSnapshot(entry.stateSnapshot));
 
     return Uint8List.fromList(buffer);
@@ -482,6 +484,11 @@ class BinarySerializer {
       timestamp = DateTime.fromMillisecondsSinceEpoch(reader.readInt64());
     }
     final scriptIndex = reader.readInt32();
+    final String? sourceScriptFile =
+        (version != null && version >= 13) ? reader.readNullableString() : null;
+    final int? sourceLine = (version != null && version >= 13)
+        ? int.tryParse(reader.readNullableString() ?? '')
+        : null;
     final stateSnapshot =
         _deserializeGameStateSnapshot(reader, version); // 传递版本号
 
@@ -491,6 +498,8 @@ class BinarySerializer {
       dialogueTag: dialogueTag,
       timestamp: timestamp,
       scriptIndex: scriptIndex,
+      sourceScriptFile: sourceScriptFile,
+      sourceLine: sourceLine,
       stateSnapshot: stateSnapshot,
     );
   }

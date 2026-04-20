@@ -34,6 +34,9 @@ class SksParser {
     return '「$dialogue」';
   }
 
+  String? _activeSourceFile;
+  int _activeSourceLine = -1;
+
   int _findFirstWhitespaceOutsideQuotes(String input) {
     String? quoteChar;
     for (var i = 0; i < input.length; i++) {
@@ -156,11 +159,13 @@ class SksParser {
     return params;
   }
 
-  ScriptNode parse(String content) {
+  ScriptNode parse(String content, {String? sourceFile}) {
+    _activeSourceFile = sourceFile;
     final lines = content.split('\n');
     final nodes = <SksNode>[];
     int i = 0;
     while (i < lines.length) {
+      _activeSourceLine = i + 1;
       final originalLine = lines[i];
       final lineWithoutComment =
           SksLineUtils.stripLineCommentOutsideQuotes(originalLine);
@@ -858,6 +863,8 @@ class SksParser {
       }
       i++;
     }
+    _activeSourceFile = null;
+    _activeSourceLine = -1;
     return ScriptNode(nodes);
   }
 
@@ -906,6 +913,8 @@ class SksParser {
         character: character,
         dialogue: _formatDialogueWithQuotes(dialogue, character),
         dialogueTag: dialogueTag,
+        sourceFile: _activeSourceFile,
+        sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
         startExpression: startExpression,
         switchDelay: switchDelay,
         endExpression: endExpression,
@@ -1015,6 +1024,8 @@ class SksParser {
         dialogue: _formatDialogueWithQuotes(dialogue, character),
         character: character,
         dialogueTag: dialogueTag,
+        sourceFile: _activeSourceFile,
+        sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
         conditionVariable: variableName,
         conditionValue: conditionValue,
         pose: pose,
@@ -1032,8 +1043,7 @@ class SksParser {
     // 1: 可选角色及属性
     // 2: 对话文本
     // 3: 可选行尾 tag
-    final sayRegex =
-        RegExp(r'^(.*?)\s*"([^"]*)"(?:\s+([A-Za-z0-9_-]+))?\s*$');
+    final sayRegex = RegExp(r'^(.*?)\s*"([^"]*)"(?:\s+([A-Za-z0-9_-]+))?\s*$');
     final match = sayRegex.firstMatch(processedLine);
 
     if (match == null) {
@@ -1046,6 +1056,8 @@ class SksParser {
         return SayNode(
           dialogue: _formatDialogueWithQuotes(simpleMatch.group(1)!, null),
           dialogueTag: dialogueTag,
+          sourceFile: _activeSourceFile,
+          sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
         );
       }
       return null;
@@ -1060,6 +1072,8 @@ class SksParser {
       return SayNode(
         dialogue: _formatDialogueWithQuotes(dialogue, null),
         dialogueTag: dialogueTag,
+        sourceFile: _activeSourceFile,
+        sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
       );
     }
 
@@ -1146,6 +1160,8 @@ class SksParser {
           character: character,
           dialogue: _formatDialogueWithQuotes(dialogue, character),
           dialogueTag: dialogueTag,
+          sourceFile: _activeSourceFile,
+          sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
           pose: pose,
           expression: expression,
           position: position,
@@ -1157,6 +1173,8 @@ class SksParser {
         character: character,
         dialogue: _formatDialogueWithQuotes(dialogue, character),
         dialogueTag: dialogueTag,
+        sourceFile: _activeSourceFile,
+        sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
         pose: pose,
         expression: expression,
         position: position);

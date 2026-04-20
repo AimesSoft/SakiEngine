@@ -11,7 +11,7 @@ class AnimeNode implements SksNode {
   final bool keep; // 新增：是否在播放完成后保留（阻止自动消失）
   final String? transitionType; // 可选的转场效果
   final double? timer; // 可选的计时器
-  
+
   AnimeNode(
     this.animeName, {
     this.loop = false, // 默认不循环
@@ -33,7 +33,12 @@ class ShowNode implements SksNode {
   final String? position;
   final String? animation;
   final int? repeatCount;
-  ShowNode(this.character, {this.pose, this.expression, this.position, this.animation, this.repeatCount});
+  ShowNode(this.character,
+      {this.pose,
+      this.expression,
+      this.position,
+      this.animation,
+      this.repeatCount});
 }
 
 class CgNode implements SksNode {
@@ -43,7 +48,12 @@ class CgNode implements SksNode {
   final String? position;
   final String? animation;
   final int? repeatCount;
-  CgNode(this.character, {this.pose, this.expression, this.position, this.animation, this.repeatCount});
+  CgNode(this.character,
+      {this.pose,
+      this.expression,
+      this.position,
+      this.animation,
+      this.repeatCount});
 }
 
 class HideNode implements SksNode {
@@ -58,7 +68,12 @@ class MovieNode implements SksNode {
   final String? transitionType;
   final String? animation;
   final int? repeatCount;
-  MovieNode(this.movieFile, {this.timer, this.layers, this.transitionType, this.animation, this.repeatCount});
+  MovieNode(this.movieFile,
+      {this.timer,
+      this.layers,
+      this.transitionType,
+      this.animation,
+      this.repeatCount});
 }
 
 class BackgroundNode implements SksNode {
@@ -68,13 +83,20 @@ class BackgroundNode implements SksNode {
   final String? transitionType; // 新增：转场类型支持 (with语法)
   final String? animation; // 新增：动画类型支持 (an语法)
   final int? repeatCount; // 新增：重复次数支持 (repeat语法)
-  BackgroundNode(this.background, {this.timer, this.layers, this.transitionType, this.animation, this.repeatCount});
+  BackgroundNode(this.background,
+      {this.timer,
+      this.layers,
+      this.transitionType,
+      this.animation,
+      this.repeatCount});
 }
 
 class SayNode implements SksNode {
   final String? character;
   final String dialogue;
   final String? dialogueTag; // 对话行尾的扩展 token（项目层可自定义语义）
+  final String? sourceFile; // 源脚本文件（不含扩展名）
+  final int? sourceLine; // 源脚本行号（1-based）
   final String? pose;
   final String? expression;
   final String? position;
@@ -83,23 +105,26 @@ class SayNode implements SksNode {
   final String? startExpression; // 时序切换的起始差分
   final double? switchDelay; // 切换延迟时间（秒）
   final String? endExpression; // 时序切换的目标差分
-  
+
   SayNode({
-    this.character, 
-    required this.dialogue, 
+    this.character,
+    required this.dialogue,
     this.dialogueTag,
-    this.pose, 
-    this.expression, 
-    this.position, 
-    this.animation, 
+    this.sourceFile,
+    this.sourceLine,
+    this.pose,
+    this.expression,
+    this.position,
+    this.animation,
     this.repeatCount,
     this.startExpression,
     this.switchDelay,
     this.endExpression,
   });
-  
+
   /// 检查是否为时序差分切换节点
-  bool get hasTimedExpression => startExpression != null && endExpression != null && switchDelay != null;
+  bool get hasTimedExpression =>
+      startExpression != null && endExpression != null && switchDelay != null;
 }
 
 class ChoiceOptionNode {
@@ -118,17 +143,17 @@ class LabelNode implements SksNode {
   LabelNode(this.name);
 }
 
-class ReturnNode implements SksNode {} 
+class ReturnNode implements SksNode {}
 
 class JumpNode implements SksNode {
   final String targetLabel;
   JumpNode(this.targetLabel);
-} 
+}
 
 class CommentNode implements SksNode {
   final String comment;
   CommentNode(this.comment);
-  
+
   @override
   String toString() => '// $comment';
 }
@@ -187,6 +212,8 @@ class ConditionalSayNode implements SksNode {
   final String dialogue;
   final String? character;
   final String? dialogueTag; // 对话行尾的扩展 token（项目层可自定义语义）
+  final String? sourceFile; // 源脚本文件（不含扩展名）
+  final int? sourceLine; // 源脚本行号（1-based）
   final String conditionVariable;
   final bool conditionValue;
   final String? pose;
@@ -194,11 +221,13 @@ class ConditionalSayNode implements SksNode {
   final String? position;
   final String? animation;
   final int? repeatCount;
-  
+
   ConditionalSayNode({
     required this.dialogue,
     this.character,
     this.dialogueTag,
+    this.sourceFile,
+    this.sourceLine,
     required this.conditionVariable,
     required this.conditionValue,
     this.pose,
@@ -213,13 +242,13 @@ class ShakeNode implements SksNode {
   final double? duration;
   final double? intensity;
   final String? target;
-  
+
   ShakeNode({
     this.duration,
     this.intensity,
     this.target,
   });
-  
+
   @override
   String toString() {
     return 'ShakeNode(duration: $duration, intensity: $intensity, target: $target)';
@@ -228,9 +257,9 @@ class ShakeNode implements SksNode {
 
 class PauseNode implements SksNode {
   final double duration; // 暂停时长（秒）
-  
+
   PauseNode(this.duration);
-  
+
   @override
   String toString() {
     return 'PauseNode(duration: $duration)';
