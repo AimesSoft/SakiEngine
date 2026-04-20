@@ -34,6 +34,16 @@ class FloatingScriptEditorOverlay extends StatefulWidget {
       _FloatingScriptEditorOverlayState();
 }
 
+class _VisualLineLayout {
+  final double top;
+  final double height;
+
+  const _VisualLineLayout({
+    required this.top,
+    required this.height,
+  });
+}
+
 class _FloatingScriptEditorOverlayState
     extends State<FloatingScriptEditorOverlay> {
   final TextEditingController _scriptController = TextEditingController();
@@ -50,7 +60,8 @@ class _FloatingScriptEditorOverlayState
 
   static const double _minWidth = 500;
   static const double _minHeight = 340;
-  static const double _lineHeight = 21.0;
+  static const double _lineHeightMultiplier = 1.5;
+  static const double _editorFontSize = 14.0;
 
   @override
   void initState() {
@@ -183,6 +194,59 @@ class _FloatingScriptEditorOverlayState
     return -1;
   }
 
+  List<_VisualLineLayout> _computeVisualLineLayouts({
+    required String text,
+    required TextStyle textStyle,
+    required double maxTextWidth,
+  }) {
+    final lines = text.split('\n');
+    if (lines.isEmpty || maxTextWidth <= 0) {
+      return const <_VisualLineLayout>[];
+    }
+
+    final layouts = <_VisualLineLayout>[];
+    var top = 0.0;
+    final painter = TextPainter(
+      textDirection: TextDirection.ltr,
+      maxLines: null,
+      textScaler: MediaQuery.textScalerOf(context),
+    );
+
+    for (final line in lines) {
+      final measurable = line.isEmpty ? ' ' : line;
+      painter.text = TextSpan(text: measurable, style: textStyle);
+      painter.layout(maxWidth: maxTextWidth);
+
+      final height = painter.height;
+      layouts.add(_VisualLineLayout(top: top, height: height));
+      top += height;
+    }
+
+    return layouts;
+  }
+
+  int _resolveTargetLine(List<String> lines, {bool verbose = false}) {
+    int targetLine = -1;
+    final sourceLine = widget.gameManager.currentDialogueSourceLine;
+    if (sourceLine != null && sourceLine >= 1 && sourceLine <= lines.length) {
+      targetLine = sourceLine - 1;
+      if (verbose && kEngineDebugMode) {
+        print('浮窗脚本编辑器: 使用sourceLine定位，line=$sourceLine');
+      }
+      return targetLine;
+    }
+
+    final currentDialogue = widget.gameManager.currentDialogueText;
+    targetLine = _findLineByDialogueText(lines, currentDialogue);
+    if (targetLine < 0) {
+      targetLine = _findLineByPartialText(lines, currentDialogue);
+    }
+    if (verbose && kEngineDebugMode) {
+      print('浮窗脚本编辑器: 回退文本定位，line=$targetLine');
+    }
+    return targetLine;
+  }
+
   void _centerCurrentDialogueInEditor() {
     if (!_scrollController.hasClients) {
       return;
@@ -191,32 +255,38 @@ class _FloatingScriptEditorOverlayState
     if (lines.isEmpty) {
       return;
     }
-
-    int targetLine = -1;
-    final sourceLine = widget.gameManager.currentDialogueSourceLine;
-    if (sourceLine != null && sourceLine >= 1 && sourceLine <= lines.length) {
-      targetLine = sourceLine - 1;
-      if (kEngineDebugMode) {
-        print('浮窗脚本编辑器: 使用sourceLine定位，line=$sourceLine');
-      }
-    } else {
-      final currentDialogue = widget.gameManager.currentDialogueText;
-      targetLine = _findLineByDialogueText(lines, currentDialogue);
-      if (targetLine < 0) {
-        targetLine = _findLineByPartialText(lines, currentDialogue);
-      }
-      if (kEngineDebugMode) {
-        print('浮窗脚本编辑器: 回退文本定位，line=$targetLine');
-      }
-    }
-
+    final targetLine = _resolveTargetLine(lines, verbose: true);
     if (targetLine < 0) {
       return;
     }
 
+    final textScale = context.scaleFor(ComponentType.text);
+    final uiScale = context.scaleFor(ComponentType.ui);
+    final textStyle = TextStyle(
+      fontSize: _editorFontSize * textScale,
+      fontFamily: 'Courier New',
+      height: _lineHeightMultiplier,
+      letterSpacing: 0.4,
+    );
+
+    final lineNumberWidth = 52 * uiScale;
+    final horizontalPadding = 12 * uiScale;
+    final availableWidth = (_windowWidth - lineNumberWidth - horizontalPadding * 2)
+        .clamp(120.0, double.infinity);
+
+    final layouts = _computeVisualLineLayouts(
+      text: _scriptController.text,
+      textStyle: textStyle,
+      maxTextWidth: availableWidth,
+    );
+    if (targetLine < 0 || targetLine >= layouts.length) {
+      return;
+    }
+
     final viewport = _scrollController.position.viewportDimension;
+    final targetLayout = layouts[targetLine];
     final centeredOffset =
-        targetLine * _lineHeight - (viewport - _lineHeight) / 2.0;
+        targetLayout.top + targetLayout.height / 2 - viewport / 2;
     final targetOffset = centeredOffset.clamp(
       0.0,
       _scrollController.position.maxScrollExtent,
@@ -290,8 +360,12 @@ class _FloatingScriptEditorOverlayState
     }
   }
 
-  Widget _buildLineNumbers(double uiScale, double textScale) {
-    final lineCount = _scriptController.text.split('\n').length;
+  Widget _buildLineNumbers(
+    double uiScale,
+    double textScale,
+    List<_VisualLineLayout> lineLayouts,
+    int highlightedLineIndex,
+  ) {
     return Container(
       width: 52 * uiScale,
       padding: EdgeInsets.symmetric(
@@ -307,16 +381,31 @@ class _FloatingScriptEditorOverlayState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          for (int i = 1; i <= lineCount; i++)
-            SizedBox(
-              height: _lineHeight * textScale,
+          for (int i = 0; i < lineLayouts.length; i++)
+            Container(
+              height: lineLayouts[i].height,
+              alignment: Alignment.centerRight,
+              padding: EdgeInsets.only(right: 2 * uiScale),
+              decoration: i == highlightedLineIndex
+                  ? BoxDecoration(
+                      color: const Color(0xFFAB20A1).withOpacity(0.16),
+                      border: const Border(
+                        left: BorderSide(
+                          color: Color(0xFFAB20A1),
+                          width: 2,
+                        ),
+                      ),
+                    )
+                  : null,
               child: Text(
-                '$i',
+                '${i + 1}',
                 style: TextStyle(
-                  color: const Color(0xFF858585),
+                  color: i == highlightedLineIndex
+                      ? const Color(0xFFE9A6E2)
+                      : const Color(0xFF858585),
                   fontSize: 12 * textScale,
                   fontFamily: 'Courier New',
-                  height: 1.5,
+                  height: _lineHeightMultiplier,
                 ),
               ),
             ),
@@ -331,11 +420,39 @@ class _FloatingScriptEditorOverlayState
     final config = SakiEngineConfig();
     final uiScale = context.scaleFor(ComponentType.ui);
     final textScale = context.scaleFor(ComponentType.text);
+    final editorTextStyle = TextStyle(
+      color: const Color(0xFFD4D4D4),
+      fontSize: _editorFontSize * textScale,
+      fontFamily: 'Courier New',
+      height: _lineHeightMultiplier,
+      letterSpacing: 0.4,
+    );
 
     _ensureInitialRect(screenSize);
     _windowWidth = _windowWidth.clamp(_minWidth, screenSize.width);
     _windowHeight = _windowHeight.clamp(_minHeight, screenSize.height);
     _clampRect(screenSize);
+
+    final lineNumberWidth = 52 * uiScale;
+    final editorPadding = 12 * uiScale;
+    final editorTextMaxWidth =
+        (_windowWidth - lineNumberWidth - editorPadding * 2).clamp(
+      120.0,
+      double.infinity,
+    );
+    final lineLayouts = _computeVisualLineLayouts(
+      text: _scriptController.text,
+      textStyle: editorTextStyle,
+      maxTextWidth: editorTextMaxWidth,
+    );
+    final highlightedLineIndex =
+        _resolveTargetLine(_scriptController.text.split('\n'));
+    final hasHighlight = highlightedLineIndex >= 0 &&
+        highlightedLineIndex < lineLayouts.length;
+    final highlightTop =
+        hasHighlight ? lineLayouts[highlightedLineIndex].top : 0.0;
+    final highlightHeight =
+        hasHighlight ? lineLayouts[highlightedLineIndex].height : 0.0;
 
     return Positioned(
       left: _windowLeft,
@@ -458,34 +575,60 @@ class _FloatingScriptEditorOverlayState
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    _buildLineNumbers(uiScale, textScale),
+                                    _buildLineNumbers(
+                                      uiScale,
+                                      textScale,
+                                      lineLayouts,
+                                      highlightedLineIndex,
+                                    ),
                                     Expanded(
-                                      child: TextField(
-                                        controller: _scriptController,
-                                        maxLines: null,
-                                        keyboardType: TextInputType.multiline,
-                                        style: TextStyle(
-                                          color: const Color(0xFFD4D4D4),
-                                          fontSize: 14 * textScale,
-                                          fontFamily: 'Courier New',
-                                          height: 1.5,
-                                          letterSpacing: 0.4,
-                                        ),
-                                        decoration: InputDecoration(
-                                          border: InputBorder.none,
-                                          contentPadding:
-                                              EdgeInsets.all(12 * uiScale),
-                                          hintText: '脚本内容...',
-                                          hintStyle: TextStyle(
-                                            color: const Color(0xFF6A9955),
-                                            fontSize: 14 * textScale,
-                                            fontFamily: 'Courier New',
+                                      child: Stack(
+                                        children: [
+                                          if (hasHighlight)
+                                            Positioned(
+                                              left: 0,
+                                              right: 0,
+                                              top: highlightTop + editorPadding,
+                                              height: highlightHeight,
+                                              child: IgnorePointer(
+                                                child: Container(
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(
+                                                      0xFFAB20A1,
+                                                    ).withOpacity(0.12),
+                                                    border: const Border(
+                                                      left: BorderSide(
+                                                        color: Color(0xFFAB20A1),
+                                                        width: 3,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          TextField(
+                                            controller: _scriptController,
+                                            maxLines: null,
+                                            keyboardType: TextInputType.multiline,
+                                            style: editorTextStyle,
+                                            decoration: InputDecoration(
+                                              border: InputBorder.none,
+                                              contentPadding:
+                                                  EdgeInsets.all(editorPadding),
+                                              hintText: '脚本内容...',
+                                              hintStyle: TextStyle(
+                                                color: const Color(0xFF6A9955),
+                                                fontSize:
+                                                    _editorFontSize * textScale,
+                                                fontFamily: 'Courier New',
+                                              ),
+                                              isDense: true,
+                                            ),
+                                            onChanged: (_) {
+                                              setState(() {});
+                                            },
                                           ),
-                                          isDense: true,
-                                        ),
-                                        onChanged: (_) {
-                                          setState(() {});
-                                        },
+                                        ],
                                       ),
                                     ),
                                   ],
