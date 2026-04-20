@@ -895,6 +895,27 @@ class GameManager {
     return character;
   }
 
+  /// 获取角色在立绘层里的唯一槽位 key。
+  /// - 配置了 `slot:` 的角色共用同一槽位（用于多套立绘自动互替）
+  /// - 未配置 `slot:` 时退回到现有行为（resourceId 或原始别名）
+  String _resolveCharacterRenderKey(
+    String? characterAlias, {
+    CharacterConfig? characterConfig,
+  }) {
+    if (characterAlias == null || characterAlias.isEmpty) {
+      return '';
+    }
+    final config = characterConfig ?? _characterConfigs[characterAlias];
+    final slotId = config?.slotId?.trim();
+    if (slotId != null && slotId.isNotEmpty) {
+      return 'slot:$slotId';
+    }
+    if (config != null) {
+      return config.resourceId;
+    }
+    return characterAlias;
+  }
+
   // 快进模式控制
   bool get isFastForwardMode => _isFastForwardMode;
   void setFastForwardMode(bool enabled) {
@@ -1656,7 +1677,10 @@ class GameManager {
           ////print('[GameManager] 使用角色配置: ${characterConfig.id}');
           resourceId = characterConfig.resourceId;
           positionId = characterConfig.defaultPoseId ?? 'pose';
-          finalCharacterKey = resourceId; // 使用resourceId作为key
+          finalCharacterKey = _resolveCharacterRenderKey(
+            node.character,
+            characterConfig: characterConfig,
+          );
         } else {
           ////print('[GameManager] 直接使用资源ID: ${node.character}');
           resourceId = node.character;
@@ -1872,11 +1896,16 @@ class GameManager {
 
       if (node is HideNode) {
         final newCharacters = Map.of(_currentState.characters);
-        final character = newCharacters[node.character];
+        final characterConfig = _characterConfigs[node.character];
+        final hideKey = _resolveCharacterRenderKey(
+          node.character,
+          characterConfig: characterConfig,
+        );
+        final character = newCharacters[hideKey];
 
         if (character != null) {
           // 不立即移除角色，而是标记为正在淡出
-          newCharacters[node.character] = character.copyWith(isFadingOut: true);
+          newCharacters[hideKey] = character.copyWith(isFadingOut: true);
 
           _currentState = _currentState.copyWith(
               characters: newCharacters,
@@ -1907,12 +1936,10 @@ class GameManager {
 
         if (node.character != null) {
           // 确定最终的角色key
-          String finalCharacterKey;
-          if (characterConfig != null) {
-            finalCharacterKey = characterConfig.resourceId; // 使用resourceId作为key
-          } else {
-            finalCharacterKey = node.character!; // 使用原始名称作为key
-          }
+          final finalCharacterKey = _resolveCharacterRenderKey(
+            node.character,
+            characterConfig: characterConfig,
+          );
 
           currentCharacterState = _currentState.characters[finalCharacterKey];
 
@@ -2017,6 +2044,7 @@ class GameManager {
             speaker: characterConfig?.name,
             speakerAlias: node.character, // 新增：传递角色简写
             dialogue: resolvedDialogue,
+            dialogueTag: node.dialogueTag,
             timestamp: DateTime.now(),
           );
 
@@ -2035,6 +2063,7 @@ class GameManager {
           _addToDialogueHistory(
             speaker: characterConfig?.name,
             dialogue: resolvedDialogue,
+            dialogueTag: node.dialogueTag,
             timestamp: DateTime.now(),
             currentNodeIndex: currentNodeIndex,
           );
@@ -2067,6 +2096,7 @@ class GameManager {
           if (followingMenuNodeIndex == null) {
             _currentState = _currentState.copyWith(
               dialogue: resolvedDialogue,
+              dialogueTag: node.dialogueTag,
               speaker: characterConfig?.name,
               speakerAlias: node.character, // 传入角色简写
               currentNode: null,
@@ -2079,6 +2109,7 @@ class GameManager {
           _addToDialogueHistory(
             speaker: characterConfig?.name,
             dialogue: resolvedDialogue,
+            dialogueTag: node.dialogueTag,
             timestamp: DateTime.now(),
             currentNodeIndex: currentNodeIndex,
           );
@@ -2099,6 +2130,7 @@ class GameManager {
 
             _currentState = _currentState.copyWith(
               dialogue: previousDialogueEntry?.dialogue,
+              dialogueTag: previousDialogueEntry?.dialogueTag,
               speaker: previousDialogueEntry?.speaker,
               forceNullSpeaker: previousDialogueEntry?.speaker == null,
               currentNode: localizedMenuNode,
@@ -2137,19 +2169,17 @@ class GameManager {
                 speaker: characterConfig?.name ?? node.character,
                 speakerAlias: node.character, // 传入角色简写
                 dialogue: resolvedDialogue,
+                dialogueTag: node.dialogueTag,
                 everShownCharacters: _everShownCharacters,
               );
             }
           } else {
             // 正常处理角色立绘逻辑
             // 确定最终的角色key
-            String finalCharacterKey;
-            if (characterConfig != null) {
-              finalCharacterKey =
-                  characterConfig.resourceId; // 使用resourceId作为key
-            } else {
-              finalCharacterKey = node.character!; // 使用原始名称作为key
-            }
+            final finalCharacterKey = _resolveCharacterRenderKey(
+              node.character,
+              characterConfig: characterConfig,
+            );
 
             currentCharacterState = _currentState.characters[finalCharacterKey];
             ////print('[GameManager] 查找角色 $finalCharacterKey: ${currentCharacterState != null ? "找到" : "未找到"}');
@@ -2300,6 +2330,7 @@ class GameManager {
             speaker: characterConfig?.name,
             speakerAlias: node.character, // 新增：传递角色简写
             dialogue: resolvedDialogue,
+            dialogueTag: node.dialogueTag,
             timestamp: DateTime.now(),
           );
 
@@ -2318,6 +2349,7 @@ class GameManager {
           _addToDialogueHistory(
             speaker: characterConfig?.name,
             dialogue: resolvedDialogue,
+            dialogueTag: node.dialogueTag,
             timestamp: DateTime.now(),
             currentNodeIndex: currentNodeIndex,
           );
@@ -2352,6 +2384,7 @@ class GameManager {
               !(_isCurrentBackgroundCG() && node.character != null)) {
             _currentState = _currentState.copyWith(
               dialogue: resolvedDialogue,
+              dialogueTag: node.dialogueTag,
               speaker: characterConfig?.name,
               speakerAlias: node.character, // 传入角色简写
               currentNode: null,
@@ -2364,6 +2397,7 @@ class GameManager {
           _addToDialogueHistory(
             speaker: characterConfig?.name,
             dialogue: resolvedDialogue,
+            dialogueTag: node.dialogueTag,
             timestamp: DateTime.now(),
             currentNodeIndex: currentNodeIndex,
           );
@@ -2400,6 +2434,7 @@ class GameManager {
 
             _currentState = _currentState.copyWith(
               dialogue: previousDialogueEntry?.dialogue,
+              dialogueTag: previousDialogueEntry?.dialogueTag,
               speaker: previousDialogueEntry?.speaker,
               forceNullSpeaker: previousDialogueEntry?.speaker == null,
               currentNode: localizedMenuNode,
@@ -2871,6 +2906,7 @@ class GameManager {
   void _addToDialogueHistory({
     String? speaker,
     required String dialogue,
+    String? dialogueTag,
     required DateTime timestamp,
     required int currentNodeIndex,
   }) {
@@ -2886,6 +2922,7 @@ class GameManager {
                 speaker: speaker,
                 speakerAlias: null,
                 dialogue: dialogue,
+                dialogueTag: dialogueTag,
                 timestamp: timestamp)
           ]
         : List.from(_currentState.nvlDialogues);
@@ -2904,6 +2941,7 @@ class GameManager {
     _dialogueHistory.add(DialogueHistoryEntry(
       speaker: speaker,
       dialogue: RichTextParser.cleanText(dialogue),
+      dialogueTag: dialogueTag,
       timestamp: timestamp,
       scriptIndex: currentNodeIndex,
       stateSnapshot: snapshot,
@@ -2947,6 +2985,7 @@ class GameManager {
         final updatedEntry = DialogueHistoryEntry(
           speaker: newSpeaker ?? entry.speaker,
           dialogue: RichTextParser.cleanText(newDialogue),
+          dialogueTag: (node is SayNode) ? node.dialogueTag : entry.dialogueTag,
           timestamp: entry.timestamp,
           scriptIndex: entry.scriptIndex,
           stateSnapshot: entry.stateSnapshot,
@@ -2988,6 +3027,7 @@ class GameManager {
     if (newDialogue != null) {
       _currentState = _currentState.copyWith(
         dialogue: newDialogue,
+        dialogueTag: (node is SayNode) ? node.dialogueTag : _currentState.dialogueTag,
         speaker: newSpeaker,
         everShownCharacters: _everShownCharacters,
       );
@@ -3001,6 +3041,7 @@ class GameManager {
           speaker: newSpeaker,
           speakerAlias: lastDialogue.speakerAlias,
           dialogue: newDialogue,
+          dialogueTag: (node is SayNode) ? node.dialogueTag : lastDialogue.dialogueTag,
           timestamp: lastDialogue.timestamp,
         );
         _currentState = _currentState.copyWith(
@@ -3931,6 +3972,7 @@ class GameState {
   final int? movieRepeatCount; // 新增：视频重复播放次数
   final Map<String, CharacterState> characters;
   final String? dialogue;
+  final String? dialogueTag; // 对话行尾扩展 token（项目层可自定义）
   final String? speaker;
   final String? speakerAlias; // 新增：角色简写
   final SksNode? currentNode;
@@ -3974,6 +4016,7 @@ class GameState {
     this.movieRepeatCount, // 新增：视频重复播放次数参数
     this.characters = const {},
     this.dialogue,
+    this.dialogueTag,
     this.speaker,
     this.speakerAlias, // 新增：角色简写
     this.currentNode,
@@ -4024,6 +4067,7 @@ class GameState {
     bool clearMovieFile = false, // 新增：清理视频文件标志
     Map<String, CharacterState>? characters,
     String? dialogue,
+    String? dialogueTag,
     String? speaker,
     String? speakerAlias, // 新增：角色简写参数
     SksNode? currentNode,
@@ -4083,6 +4127,8 @@ class GameState {
           ? <String, CharacterState>{}
           : (characters ?? this.characters),
       dialogue: clearDialogueAndSpeaker ? null : (dialogue ?? this.dialogue),
+      dialogueTag:
+          clearDialogueAndSpeaker ? null : (dialogueTag ?? this.dialogueTag),
       speaker: forceNullSpeaker
           ? null
           : (clearDialogueAndSpeaker ? null : (speaker ?? this.speaker)),
@@ -4164,12 +4210,14 @@ class NvlDialogue {
   final String? speaker;
   final String? speakerAlias; // 新增：角色简写
   final String dialogue;
+  final String? dialogueTag; // 对话行尾扩展 token（项目层可自定义）
   final DateTime timestamp;
 
   NvlDialogue({
     this.speaker,
     this.speakerAlias, // 新增：角色简写参数
     required this.dialogue,
+    this.dialogueTag,
     required this.timestamp,
   });
 }
@@ -4239,6 +4287,7 @@ class GameStateSnapshot {
 class DialogueHistoryEntry {
   final String? speaker;
   final String dialogue;
+  final String? dialogueTag; // 对话行尾扩展 token（项目层可自定义）
   final DateTime timestamp;
   final int scriptIndex;
   final GameStateSnapshot stateSnapshot;
@@ -4246,6 +4295,7 @@ class DialogueHistoryEntry {
   DialogueHistoryEntry({
     this.speaker,
     required this.dialogue,
+    this.dialogueTag,
     required this.timestamp,
     required this.scriptIndex,
     required this.stateSnapshot,

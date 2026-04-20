@@ -681,115 +681,58 @@ $attemptedMessage
     }
 
     try {
-      bool saveSuccess = false;
-      String errorMessage = '';
-
-      // 方法1: 直接文件写入（如果沙箱被禁用）
-      try {
-        final file = File(_currentScriptPath);
-        await file.writeAsString(_scriptController.text);
-        saveSuccess = true;
-
-        if (kEngineDebugMode) {
-          print('开发者面板: 直接文件写入成功 $_currentScriptPath');
-        }
-      } catch (directWriteError) {
-        if (kEngineDebugMode) {
-          print('开发者面板: 直接文件写入失败: $directWriteError');
-        }
-
-        // 方法2: 使用命令行 echo 写入（绕过沙箱限制）
-        try {
-          final content = _scriptController.text;
-          // 转义特殊字符
-          final escapedContent = content
-              .replaceAll('\\', '\\\\')
-              .replaceAll('\$', '\\\$')
-              .replaceAll('"', '\\"')
-              .replaceAll('\n', '\\n');
-
-          final result = await Process.run('sh',
-              ['-c', 'echo -e "$escapedContent" > "${_currentScriptPath}"']);
-
-          if (result.exitCode == 0) {
-            saveSuccess = true;
-            if (kEngineDebugMode) {
-              print('开发者面板: 命令行写入成功 $_currentScriptPath');
-            }
-          } else {
-            errorMessage = '命令行写入失败: ${result.stderr}';
-          }
-        } catch (commandError) {
-          // 方法3: 使用 cp 命令
-          try {
-            final content = _scriptController.text;
-            final tempFile =
-                File('${Directory.systemTemp.path}/saki_temp_script.sks');
-            await tempFile.writeAsString(content);
-
-            final result =
-                await Process.run('cp', [tempFile.path, _currentScriptPath]);
-            await tempFile.delete();
-
-            if (result.exitCode == 0) {
-              saveSuccess = true;
-              if (kEngineDebugMode) {
-                print('开发者面板: cp命令写入成功 $_currentScriptPath');
-              }
-            } else {
-              errorMessage = 'cp命令失败: ${result.stderr}';
-            }
-          } catch (copyError) {
-            errorMessage =
-                '所有保存方法均失败: 直接写入($directWriteError), 命令行($commandError), cp($copyError)';
-          }
-        }
+      final file = File(_currentScriptPath);
+      if (!await file.exists()) {
+        throw FileSystemException('目标脚本不存在', _currentScriptPath);
       }
 
-      if (saveSuccess) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('脚本已保存: ${_currentScriptPath.split('/').last}'),
-              duration: const Duration(seconds: 2),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
+      final parentDir = file.parent;
+      if (!await parentDir.exists()) {
+        throw FileSystemException('目标目录不存在', parentDir.path);
+      }
 
-        // 保存成功后自动重载
-        if (widget.onReload != null) {
-          try {
-            await widget.onReload!();
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('重载完成'),
-                  duration: const Duration(seconds: 2),
-                  backgroundColor: Colors.blue,
-                ),
-              );
-            }
-          } catch (reloadError) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('重载失败: $reloadError'),
-                  duration: const Duration(seconds: 3),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-            }
+      await _atomicWriteScript(file, _scriptController.text);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('脚本已保存: ${_currentScriptPath.split('/').last}'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
+      // 保存成功后自动重载
+      if (widget.onReload != null) {
+        try {
+          await widget.onReload!();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('重载完成'),
+                duration: const Duration(seconds: 2),
+                backgroundColor: Colors.blue,
+              ),
+            );
+          }
+        } catch (reloadError) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('重载失败: $reloadError'),
+                duration: const Duration(seconds: 3),
+                backgroundColor: Colors.orange,
+              ),
+            );
           }
         }
-      } else {
-        throw Exception(errorMessage);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('保存失败: $e'),
+            content: Text('保存失败: $_currentScriptPath\n$e'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 4),
           ),
@@ -797,6 +740,55 @@ $attemptedMessage
       }
       if (kEngineDebugMode) {
         print('开发者面板: 保存脚本失败: $e');
+      }
+    }
+  }
+
+  Future<void> _atomicWriteScript(File targetFile, String content) async {
+    final tmpPath =
+        '${targetFile.path}.tmp_${DateTime.now().microsecondsSinceEpoch}';
+    final tmpFile = File(tmpPath);
+    Object? atomicError;
+
+    try {
+      await tmpFile.writeAsString(content, flush: true);
+      await tmpFile.rename(targetFile.path);
+
+      if (kEngineDebugMode) {
+        print('开发者面板: 原子写入成功 ${targetFile.path}');
+      }
+      return;
+    } catch (e) {
+      atomicError = e;
+      if (kEngineDebugMode) {
+        print('开发者面板: 原子写入失败，尝试回退: $e');
+      }
+    }
+
+    try {
+      if (await tmpFile.exists()) {
+        // rename失败时优先 copy 覆盖。
+        await tmpFile.copy(targetFile.path);
+        await tmpFile.delete();
+        if (kEngineDebugMode) {
+          print('开发者面板: 原子写入回退 copy 成功 ${targetFile.path}');
+        }
+        return;
+      }
+
+      // 连临时文件都没写出来时，回退到直接写目标文件，保留可用性。
+      await targetFile.writeAsString(content, flush: true);
+      if (kEngineDebugMode) {
+        print('开发者面板: 原子写入回退 direct-write 成功 ${targetFile.path}');
+      }
+      return;
+    } catch (fallbackError) {
+      final message =
+          '原子写入失败: $atomicError; 回退失败: $fallbackError; path=${targetFile.path}';
+      throw FileSystemException(message, targetFile.path);
+    } finally {
+      if (await tmpFile.exists()) {
+        await tmpFile.delete();
       }
     }
   }

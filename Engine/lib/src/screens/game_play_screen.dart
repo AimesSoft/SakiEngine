@@ -44,6 +44,7 @@ import 'package:sakiengine/src/utils/cg_image_compositor.dart';
 import 'package:sakiengine/src/widgets/debug_panel_dialog.dart';
 import 'package:sakiengine/src/utils/character_auto_distribution.dart';
 import 'package:sakiengine/src/widgets/expression_selector_dialog.dart';
+import 'package:sakiengine/src/widgets/expression_radial_wheel.dart';
 import 'package:sakiengine/src/utils/expression_selector_manager.dart';
 import 'package:sakiengine/src/utils/expression_offset_manager.dart';
 import 'package:sakiengine/src/utils/key_sequence_detector.dart';
@@ -95,6 +96,8 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   bool _showDeveloperPanel = false; // 开发者面板显示状态
   bool _showDebugPanel = false; // 调试面板显示状态
   bool _showExpressionSelector = false; // 表情选择器显示状态
+  bool _showExpressionWheel = false; // 差分快捷轮盘显示状态（Debug）
+  bool _isMetaKeyPressed = false; // Command/Meta按键按住状态（Debug）
   HotKey? _reloadHotKey;
   HotKey? _developerPanelHotKey; // Shift+D快捷键
   KeySequenceDetector? _consoleSequenceDetector; // console序列检测器
@@ -109,6 +112,10 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   bool _reviewOpenedByMouseRollback = false;
   final GlobalKey _nvlScreenKey = GlobalKey();
   bool _isParallaxEnabled = SettingsManager.defaultMouseParallaxEnabled;
+  Timer? _expressionWheelOpenTimer;
+  SpeakerInfo? _expressionWheelSpeakerInfo;
+  List<String> _expressionWheelExpressions = const [];
+  String? _expressionWheelHighlightedExpression;
 
   // 跟踪上一次的NVL状态，用于检测转场
   bool _previousIsNvlMode = false;
@@ -138,7 +145,8 @@ class _GamePlayScreenState extends State<GamePlayScreen>
         _showFlowchart ||
         _showDeveloperPanel ||
         _showDebugPanel ||
-        _showExpressionSelector;
+        _showExpressionSelector ||
+        _showExpressionWheel;
   }
 
   Future<Uint8List?> _captureSaveThumbnailFromBoundary() async {
@@ -397,6 +405,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
 
     // 清理已读文本快进管理器
     _readTextSkipManager?.dispose();
+    _expressionWheelOpenTimer?.cancel();
 
     // 清理加载淡出动画控制器
     _loadingFadeController.dispose();
@@ -431,6 +440,10 @@ class _GamePlayScreenState extends State<GamePlayScreen>
         child: Focus(
           autofocus: true, // 确保能接收键盘事件
           onKeyEvent: (node, event) {
+            if (kEngineDebugMode && _handleExpressionWheelKeyEvent(event)) {
+              return KeyEventResult.handled;
+            }
+
             // 处理快进键盘事件
             if (_fastForwardManager != null) {
               final handled = _fastForwardManager!.handleKeyEvent(event);
@@ -448,7 +461,8 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   _showSettings ||
                   _showDeveloperPanel ||
                   _showDebugPanel ||
-                  _showExpressionSelector;
+                  _showExpressionSelector ||
+                  _showExpressionWheel;
               // 选项界面允许“回滚->观看记录”，但仍视为推进输入的阻断态。
               final hasOverlayOpenExceptMenu = _showSaveOverlay ||
                   _showLoadOverlay ||
@@ -456,7 +470,8 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   _showSettings ||
                   _showDeveloperPanel ||
                   _showDebugPanel ||
-                  _showExpressionSelector;
+                  _showExpressionSelector ||
+                  _showExpressionWheel;
 
               if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
                 if (!hasOverlayOpen &&
@@ -584,7 +599,8 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                             _showSettings ||
                             _showDeveloperPanel ||
                             _showDebugPanel ||
-                            _showExpressionSelector;
+                            _showExpressionSelector ||
+                            _showExpressionWheel;
 
                         // 检查是否正在播放视频
                         final isPlayingMovie = gameState.movieFile != null;
@@ -668,6 +684,21 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                                 _expressionSelectorManager,
                             createDialogueBox: _createDialogueBox,
                           ),
+                          if (kEngineDebugMode &&
+                              _showExpressionWheel &&
+                              _expressionWheelSpeakerInfo != null &&
+                              _expressionWheelExpressions.isNotEmpty)
+                            ExpressionRadialWheel(
+                              characterName:
+                                  _expressionWheelSpeakerInfo!.speakerName,
+                              currentExpression: _expressionWheelSpeakerInfo!
+                                  .currentExpression,
+                              expressions: _expressionWheelExpressions,
+                              onHighlightedExpressionChanged: (expression) {
+                                _expressionWheelHighlightedExpression =
+                                    expression;
+                              },
+                            ),
                           // 加载淡出覆盖层 - 不会被隐藏
                           AnimatedBuilder(
                             animation: _loadingFadeAnimation,

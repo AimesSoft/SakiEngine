@@ -44,8 +44,17 @@ class ConfigParser {
       }
       final resourceId = resourceIdAndPose[0];
       String? defaultPoseId;
-      if (resourceIdAndPose.length > 2 && resourceIdAndPose[1] == 'at') {
-        defaultPoseId = resourceIdAndPose[2];
+      String? slotId;
+      for (int i = 1; i < resourceIdAndPose.length; i++) {
+        final token = resourceIdAndPose[i];
+        if (token == 'at' && i + 1 < resourceIdAndPose.length) {
+          defaultPoseId = resourceIdAndPose[i + 1];
+          i++;
+          continue;
+        }
+        if (token.startsWith('slot:') && token.length > 'slot:'.length) {
+          slotId = token.substring('slot:'.length);
+        }
       }
 
       configs[id] = CharacterConfig(
@@ -53,6 +62,7 @@ class ConfigParser {
         name: name,
         resourceId: resourceId,
         defaultPoseId: defaultPoseId,
+        slotId: slotId,
       );
     }
     return configs;

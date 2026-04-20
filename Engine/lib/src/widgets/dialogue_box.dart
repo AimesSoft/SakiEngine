@@ -15,6 +15,7 @@ import 'package:sakiengine/src/widgets/dialogue_content.dart';
 class DialogueBox extends StatefulWidget {
   final String? speaker;
   final String? speakerAlias; // 新增：角色简写
+  final String? dialogueTag; // 对话行尾扩展 token（默认对话框不消费）
   final String dialogue;
   final DialogueProgressionManager? progressionManager;
   final bool isFastForwarding;
@@ -24,6 +25,7 @@ class DialogueBox extends StatefulWidget {
     super.key,
     this.speaker,
     this.speakerAlias, // 新增：角色简写参数
+    this.dialogueTag,
     required this.dialogue,
     this.progressionManager,
     this.isFastForwarding = false,

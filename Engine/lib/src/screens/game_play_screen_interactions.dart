@@ -75,6 +75,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     Key? key,
     String? speaker,
     String? speakerAlias, // 新增：角色简写参数
+    String? dialogueTag, // 对话行尾扩展 token（项目层可自定义）
     required String dialogue,
     required bool isFastForwarding, // 新增快进状态参数
     required int scriptIndex, // 新增脚本索引参数
@@ -87,6 +88,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       key: key,
       speaker: speaker,
       speakerAlias: speakerAlias,
+      dialogueTag: dialogueTag,
       dialogue: dialogue,
       progressionManager: _dialogueProgressionManager,
       isFastForwarding: isFastForwarding,
@@ -328,6 +330,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         if (mounted) {
           // 检查是否可以显示表情选择器
           final canShow = show &&
+              !_showExpressionWheel &&
               _expressionSelectorManager!.canShowExpressionSelector(
                 showSaveOverlay: _showSaveOverlay,
                 showLoadOverlay: _showLoadOverlay,
@@ -348,6 +351,255 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     );
 
     _expressionSelectorManager!.initialize();
+  }
+
+  bool _handleExpressionWheelKeyEvent(KeyEvent event) {
+    final logicalKey = event.logicalKey;
+    final isMetaKey = logicalKey == LogicalKeyboardKey.metaLeft ||
+        logicalKey == LogicalKeyboardKey.metaRight ||
+        logicalKey == LogicalKeyboardKey.meta;
+
+    if (kEngineDebugMode && isMetaKey) {
+      print(
+          'ExpressionWheel: Meta key event type=${event.runtimeType}, key=${logicalKey.debugName}, isMetaPressed=${HardwareKeyboard.instance.isMetaPressed}, internalPressed=$_isMetaKeyPressed, visible=$_showExpressionWheel');
+    }
+
+    if (isMetaKey) {
+      if (event is KeyDownEvent || event is KeyRepeatEvent) {
+        if (_isMetaKeyPressed) {
+          return true;
+        }
+        _isMetaKeyPressed = true;
+        if (kEngineDebugMode) {
+          print('ExpressionWheel: schedule open in 120ms');
+        }
+        _scheduleExpressionWheelOpen();
+        return true;
+      }
+
+      if (event is KeyUpEvent) {
+        _isMetaKeyPressed = HardwareKeyboard.instance.isMetaPressed;
+        if (_isMetaKeyPressed) {
+          if (kEngineDebugMode) {
+            print('ExpressionWheel: keyUp ignored, meta still pressed');
+          }
+          return true;
+        }
+
+        _expressionWheelOpenTimer?.cancel();
+        if (_showExpressionWheel) {
+          if (kEngineDebugMode) {
+            print('ExpressionWheel: keyUp apply selection');
+          }
+          unawaited(_applyExpressionWheelSelectionAndClose());
+        } else {
+          if (kEngineDebugMode) {
+            print('ExpressionWheel: keyUp clear state (wheel not visible)');
+          }
+          _clearExpressionWheelState();
+        }
+        return true;
+      }
+    }
+
+    if (_showExpressionWheel) {
+      // 轮盘开启时阻断其他键盘输入，避免误推进剧情。
+      return true;
+    }
+    return false;
+  }
+
+  void _scheduleExpressionWheelOpen() {
+    _expressionWheelOpenTimer?.cancel();
+    _expressionWheelOpenTimer = Timer(const Duration(milliseconds: 120), () {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: open timer fired');
+      }
+      unawaited(_openExpressionWheelIfPossible());
+    });
+  }
+
+  bool _canShowExpressionWheel() {
+    return !_showExpressionWheel &&
+        !_showSaveOverlay &&
+        !_showLoadOverlay &&
+        !_showReviewOverlay &&
+        !_showSettings &&
+        !_showFlowchart &&
+        !_showDeveloperPanel &&
+        !_showDebugPanel &&
+        !_showExpressionSelector &&
+        !_isShowingMenu &&
+        _gameManager.currentState.movieFile == null;
+  }
+
+  Future<void> _openExpressionWheelIfPossible() async {
+    if (!_isMetaKeyPressed || !mounted) {
+      if (kEngineDebugMode) {
+        print(
+            'ExpressionWheel: open aborted (metaPressed=$_isMetaKeyPressed, mounted=$mounted)');
+      }
+      return;
+    }
+
+    if (!_canShowExpressionWheel()) {
+      if (kEngineDebugMode) {
+        print(
+            'ExpressionWheel: open blocked overlays menu=$_isShowingMenu save=$_showSaveOverlay load=$_showLoadOverlay review=$_showReviewOverlay settings=$_showSettings flowchart=$_showFlowchart dev=$_showDeveloperPanel debug=$_showDebugPanel selector=$_showExpressionSelector wheel=$_showExpressionWheel movie=${_gameManager.currentState.movieFile != null}');
+      }
+      return;
+    }
+
+    final manager = _expressionSelectorManager;
+    if (manager == null) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: manager is null');
+      }
+      return;
+    }
+
+    final speakerInfo = manager.getCurrentSpeakerInfo();
+    if (speakerInfo == null) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: no current speaker');
+      }
+      _showNotificationMessage('没有当前说话角色');
+      return;
+    }
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionWheel: speaker=${speakerInfo.speakerName}, characterId=${speakerInfo.characterId}, currentPose=${speakerInfo.currentPose}, currentExpression=${speakerInfo.currentExpression}, scriptCharacterKey=${speakerInfo.scriptCharacterKey}');
+    }
+
+    final expressions =
+        await _loadExpressionWheelExpressions(speakerInfo.characterId);
+    if (expressions.isEmpty) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: no layers for ${speakerInfo.characterId}');
+      }
+      _showNotificationMessage('未找到可用差分');
+      return;
+    }
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionWheel: loaded ${expressions.length} layers, first=${expressions.first}, last=${expressions.last}');
+    }
+
+    if (!mounted || !_isMetaKeyPressed) {
+      if (kEngineDebugMode) {
+        print(
+            'ExpressionWheel: open cancelled after load (mounted=$mounted, metaPressed=$_isMetaKeyPressed)');
+      }
+      return;
+    }
+
+    final highlightedExpression =
+        expressions.contains(speakerInfo.currentExpression)
+            ? speakerInfo.currentExpression
+            : expressions.contains(speakerInfo.currentPose)
+                ? speakerInfo.currentPose
+                : expressions.first;
+
+    _setStateIfMounted(() {
+      _expressionWheelSpeakerInfo = speakerInfo;
+      _expressionWheelExpressions = expressions;
+      _expressionWheelHighlightedExpression = highlightedExpression;
+      _showExpressionWheel = true;
+    });
+    if (kEngineDebugMode) {
+      print('ExpressionWheel: opened highlight=$highlightedExpression');
+    }
+  }
+
+  Future<List<String>> _loadExpressionWheelExpressions(
+      String characterId) async {
+    final layers =
+        await AssetManager.getAvailableCharacterLayersRecursive(characterId);
+    final expressions = <String>{};
+
+    for (final layer in layers) {
+      if (layer.isEmpty) {
+        continue;
+      }
+      expressions.add(layer);
+    }
+
+    final result = expressions.toList()
+      ..sort((a, b) {
+        final aIsPose = a.toLowerCase().startsWith('pose');
+        final bIsPose = b.toLowerCase().startsWith('pose');
+        if (aIsPose != bIsPose) {
+          return aIsPose ? -1 : 1;
+        }
+        return a.compareTo(b);
+      });
+    return result;
+  }
+
+  Future<void> _applyExpressionWheelSelectionAndClose() async {
+    final speakerInfo = _expressionWheelSpeakerInfo;
+    final selectedExpression = _expressionWheelHighlightedExpression;
+    _clearExpressionWheelState();
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionWheel: apply requested selected=$selectedExpression speaker=${speakerInfo?.speakerName}/${speakerInfo?.characterId}');
+    }
+
+    if (speakerInfo == null ||
+        selectedExpression == null ||
+        selectedExpression.isEmpty) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: apply skipped (missing speaker or selection)');
+      }
+      return;
+    }
+    if (selectedExpression == speakerInfo.currentExpression) {
+      if (!selectedExpression.toLowerCase().startsWith('pose')) {
+        if (kEngineDebugMode) {
+          print(
+              'ExpressionWheel: apply skipped (expression unchanged: $selectedExpression)');
+        }
+        return;
+      }
+    }
+
+    if (selectedExpression == speakerInfo.currentPose &&
+        selectedExpression.toLowerCase().startsWith('pose')) {
+      if (kEngineDebugMode) {
+        print(
+            'ExpressionWheel: apply skipped (pose unchanged: $selectedExpression)');
+      }
+      return;
+    }
+
+    final selectedIsPose = selectedExpression.toLowerCase().startsWith('pose');
+    final nextPose =
+        selectedIsPose ? selectedExpression : speakerInfo.currentPose;
+    final nextExpression =
+        selectedIsPose ? speakerInfo.currentExpression : selectedExpression;
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionWheel: apply -> nextPose=$nextPose, nextExpression=$nextExpression');
+    }
+
+    await _expressionSelectorManager?.handleExpressionSelectionChanged(
+      speakerInfo.characterId,
+      nextPose,
+      nextExpression,
+    );
+  }
+
+  void _clearExpressionWheelState() {
+    _expressionWheelOpenTimer?.cancel();
+    _setStateIfMounted(() {
+      _showExpressionWheel = false;
+      _expressionWheelSpeakerInfo = null;
+      _expressionWheelExpressions = const [];
+      _expressionWheelHighlightedExpression = null;
+    });
+    if (kEngineDebugMode) {
+      print('ExpressionWheel: state cleared');
+    }
   }
 
   // 设置console按键序列检测器（发行版也可用，方便玩家复制日志）
@@ -403,7 +655,8 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showSettings ||
             _showDeveloperPanel ||
             _showDebugPanel ||
-            _showExpressionSelector;
+            _showExpressionSelector ||
+            _showExpressionWheel;
         // 禁用在视频播放时的快进功能
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
         return !hasOverlayOpen && !isPlayingMovie;
@@ -445,7 +698,8 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showSettings ||
             _showDeveloperPanel ||
             _showDebugPanel ||
-            _showExpressionSelector;
+            _showExpressionSelector ||
+            _showExpressionWheel;
         // 禁用在视频播放时的快进功能
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
         return !hasOverlayOpen && !isPlayingMovie;
@@ -468,7 +722,8 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showSettings ||
             _showDeveloperPanel ||
             _showDebugPanel ||
-            _showExpressionSelector;
+            _showExpressionSelector ||
+            _showExpressionWheel;
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
         if (hasOverlayOpen || isPlayingMovie) {
           return;
@@ -490,7 +745,8 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showSettings ||
             _showDeveloperPanel ||
             _showDebugPanel ||
-            _showExpressionSelector;
+            _showExpressionSelector ||
+            _showExpressionWheel;
 
         // 检查是否正在播放视频
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
@@ -525,6 +781,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
+            _showExpressionWheel ||
             _isFastForwarding; // 快进时不能自动播放
         // 禁用在视频播放时的自动播放功能
         final isPlayingMovie = _gameManager.currentState.movieFile != null;

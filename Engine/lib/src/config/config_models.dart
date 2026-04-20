@@ -3,12 +3,14 @@ class CharacterConfig {
   final String name;
   final String resourceId;
   final String? defaultPoseId;
+  final String? slotId;
 
   CharacterConfig({
     required this.id,
     required this.name,
     required this.resourceId,
     this.defaultPoseId,
+    this.slotId,
   });
 }
 

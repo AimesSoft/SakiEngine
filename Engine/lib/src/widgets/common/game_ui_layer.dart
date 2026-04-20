@@ -73,6 +73,7 @@ class GameUILayer extends StatefulWidget {
       {Key? key,
       String? speaker,
       String? speakerAlias,
+      String? dialogueTag,
       required String dialogue,
       required bool isFastForwarding,
       required int scriptIndex,
@@ -135,6 +136,7 @@ class GameUILayerState extends State<GameUILayer> {
         widget.showDeveloperPanel ||
         widget.showDebugPanel ||
         widget.showExpressionSelector ||
+        // 轮盘由外层 GamePlayScreen 控制并阻断输入，UI层无需额外状态字段。
         widget.gameState.movieFile != null; // 添加视频播放状态检查
   }
 
@@ -162,6 +164,8 @@ class GameUILayerState extends State<GameUILayer> {
         menuPreviousDialogueEntry?.dialogue ?? widget.gameState.dialogue;
     final speakerForDialogueBox =
         menuPreviousDialogueEntry?.speaker ?? widget.gameState.speaker;
+    final dialogueTagForDialogueBox =
+        menuPreviousDialogueEntry?.dialogueTag ?? widget.gameState.dialogueTag;
     final speakerAliasForDialogueBox = widget.gameState.speakerAlias;
     final scriptIndexForDialogueBox = menuPreviousDialogueEntry?.scriptIndex ??
         latestDialogueEntry?.scriptIndex ??
@@ -202,6 +206,7 @@ class GameUILayerState extends State<GameUILayer> {
                     key: const ValueKey('normal_dialogue'),
                     speaker: speakerForDialogueBox,
                     speakerAlias: speakerAliasForDialogueBox, // 传递角色简写
+                    dialogueTag: dialogueTagForDialogueBox,
                     dialogue: dialogueForDialogueBox!,
                     isFastForwarding:
                         widget.gameState.isFastForwarding, // 传递快进状态

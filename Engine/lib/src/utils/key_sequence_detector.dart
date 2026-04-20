@@ -249,14 +249,15 @@ class ScriptContentModifier {
       bool modified = false;
 
       for (int i = 0; i < lines.length; i++) {
-        final line = lines[i].trim();
+        final originalLine = lines[i];
+        final line = originalLine.trim();
 
         // 检查是否是包含目标对话的行，同时验证角色ID
         if (_isTargetDialogueLine(line, targetDialogue, characterId)) {
           final modifiedLine =
               _modifyDialogueLine(line, characterId, null, newExpression);
           if (modifiedLine != line) {
-            lines[i] = lines[i].replaceAll(line, modifiedLine);
+            lines[i] = originalLine.replaceFirst(line, modifiedLine);
             modified = true;
 
             if (kEngineDebugMode) {
@@ -343,12 +344,14 @@ class ScriptContentModifier {
         }
 
         // 如果指定了expectedCharacterId，必须匹配
-        if (expectedCharacterId != null &&
-            lineCharacterId != expectedCharacterId) {
+        if (!_isCharacterIdCompatible(
+          lineCharacterId: lineCharacterId,
+          expectedCharacterId: expectedCharacterId,
+        )) {
           if (kEngineDebugMode &&
               line.contains(targetDialogue.replaceAll('"', ''))) {
             print(
-                'ScriptModifier: 角色ID不匹配: "$lineCharacterId" != "$expectedCharacterId"');
+                'ScriptModifier: 角色ID不匹配: "$lineCharacterId" !~ "$expectedCharacterId"');
           }
           return false;
         }
@@ -384,38 +387,73 @@ class ScriptContentModifier {
     return false;
   }
 
+  /// 角色ID兼容匹配：
+  /// - 完全相等
+  /// - expected 作为前缀，后缀首字符为字母或下划线（例如 q3 -> q3r / q3_alt）
+  static bool _isCharacterIdCompatible({
+    required String lineCharacterId,
+    String? expectedCharacterId,
+  }) {
+    if (expectedCharacterId == null || expectedCharacterId.isEmpty) {
+      return true;
+    }
+    if (lineCharacterId == expectedCharacterId) {
+      return true;
+    }
+    if (!lineCharacterId.startsWith(expectedCharacterId)) {
+      return false;
+    }
+    if (lineCharacterId.length == expectedCharacterId.length) {
+      return true;
+    }
+    final nextChar = lineCharacterId[expectedCharacterId.length];
+    return RegExp(r'[A-Za-z_]').hasMatch(nextChar);
+  }
+
   /// 修改对话行，添加或更新pose和表情信息
   static String _modifyDialogueLine(
       String line, String characterId, String? newPose, String? newExpression) {
     final trimmedLine = line.trim();
+    final parts = trimmedLine.split(' ');
+    final lineCharacterId = trimmedLine.contains('"') &&
+            !trimmedLine.startsWith('"') &&
+            parts.isNotEmpty
+        ? parts[0]
+        : null;
+    final writeCharacterId = (lineCharacterId != null &&
+            _isCharacterIdCompatible(
+              lineCharacterId: lineCharacterId,
+              expectedCharacterId: characterId,
+            ))
+        ? lineCharacterId
+        : characterId;
 
     // 如果已经包含该角色的信息，更新它
-    if (trimmedLine.startsWith(characterId)) {
-      final parts = trimmedLine.split(' ');
-
+    if (lineCharacterId != null &&
+        _isCharacterIdCompatible(
+          lineCharacterId: lineCharacterId,
+          expectedCharacterId: characterId,
+        )) {
       // 识别不同格式
-      if (parts.length >= 4 &&
-          parts[0] == characterId &&
-          parts[3].startsWith('"')) {
+      if (parts.length >= 4 && parts[3].startsWith('"')) {
         // 格式: character pose expression "dialogue"
         if (newPose != null) parts[1] = newPose;
         if (newExpression != null) parts[2] = newExpression;
+        parts[0] = writeCharacterId;
         return parts.join(' ');
-      } else if (parts.length >= 3 &&
-          parts[0] == characterId &&
-          parts[2].startsWith('"')) {
+      } else if (parts.length >= 3 && parts[2].startsWith('"')) {
         // 格式: character expression "dialogue" 或 character pose "dialogue"
         // 需要扩展为三段式
         final dialoguePart = parts.sublist(2).join(' ');
         final currentPose = newPose ?? 'pose1'; // 默认pose
         final currentExpression = newExpression ?? parts[1]; // 保持原有或使用新的
-        return '$characterId $currentPose $currentExpression $dialoguePart';
+        return '$writeCharacterId $currentPose $currentExpression $dialoguePart';
       } else if (parts.length >= 2 && parts[1].startsWith('"')) {
         // 格式: character "dialogue"
         // 插入pose和表情
         final pose = newPose ?? 'pose1';
         final expression = newExpression ?? 'normal';
-        return '$characterId $pose $expression ${parts.sublist(1).join(' ')}';
+        return '$writeCharacterId $pose $expression ${parts.sublist(1).join(' ')}';
       }
     }
 
@@ -423,7 +461,7 @@ class ScriptContentModifier {
     if (trimmedLine.startsWith('"') && trimmedLine.endsWith('"')) {
       final pose = newPose ?? 'pose1';
       final expression = newExpression ?? 'normal';
-      return '$characterId $pose $expression $trimmedLine';
+      return '$writeCharacterId $pose $expression $trimmedLine';
     }
 
     // 其他情况，尝试智能添加
@@ -431,7 +469,7 @@ class ScriptContentModifier {
       final quoteIndex = trimmedLine.indexOf('"');
       final pose = newPose ?? 'pose1';
       final expression = newExpression ?? 'normal';
-      return '${trimmedLine.substring(0, quoteIndex)}$characterId $pose $expression ${trimmedLine.substring(quoteIndex)}';
+      return '${trimmedLine.substring(0, quoteIndex)}$writeCharacterId $pose $expression ${trimmedLine.substring(quoteIndex)}';
     }
 
     // 如果无法识别格式，返回原始行
@@ -474,7 +512,8 @@ class ScriptContentModifier {
       }
 
       for (int i = 0; i < lines.length; i++) {
-        final line = lines[i].trim();
+        final originalLine = lines[i];
+        final line = originalLine.trim();
 
         // 检查是否包含对话的关键部分（不含引号和特殊符号）
         final dialogueCore = targetDialogue
@@ -494,7 +533,7 @@ class ScriptContentModifier {
           final modifiedLine =
               _modifyDialogueLine(line, characterId, newPose, newExpression);
           if (modifiedLine != line) {
-            lines[i] = lines[i].replaceAll(line, modifiedLine);
+            lines[i] = originalLine.replaceFirst(line, modifiedLine);
             modified = true;
 
             if (kEngineDebugMode) {

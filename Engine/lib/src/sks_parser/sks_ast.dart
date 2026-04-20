@@ -74,6 +74,7 @@ class BackgroundNode implements SksNode {
 class SayNode implements SksNode {
   final String? character;
   final String dialogue;
+  final String? dialogueTag; // 对话行尾的扩展 token（项目层可自定义语义）
   final String? pose;
   final String? expression;
   final String? position;
@@ -86,6 +87,7 @@ class SayNode implements SksNode {
   SayNode({
     this.character, 
     required this.dialogue, 
+    this.dialogueTag,
     this.pose, 
     this.expression, 
     this.position, 
@@ -184,6 +186,7 @@ class BoolNode implements SksNode {
 class ConditionalSayNode implements SksNode {
   final String dialogue;
   final String? character;
+  final String? dialogueTag; // 对话行尾的扩展 token（项目层可自定义语义）
   final String conditionVariable;
   final bool conditionValue;
   final String? pose;
@@ -195,6 +198,7 @@ class ConditionalSayNode implements SksNode {
   ConditionalSayNode({
     required this.dialogue,
     this.character,
+    this.dialogueTag,
     required this.conditionVariable,
     required this.conditionValue,
     this.pose,

@@ -126,6 +126,7 @@ extension _GameManagerLifecycle on GameManager {
     // 修复bug：从新脚本中获取当前对话文本，避免使用存档中的旧文本
     // 使用 NvlStateManager 来处理 NVL 模式的特殊逻辑
     String? freshDialogue;
+    String? freshDialogueTag;
     String? freshSpeaker;
     List<NvlDialogue>? freshNvlDialogues;
 
@@ -152,6 +153,7 @@ extension _GameManagerLifecycle on GameManager {
         final currentNode = _script.children[dialogueScriptIndex];
         if (currentNode is SayNode) {
           freshDialogue = _resolveScriptText(currentNode.dialogue);
+          freshDialogueTag = currentNode.dialogueTag;
           if (currentNode.character != null) {
             final characterConfig = _characterConfigs[currentNode.character];
             freshSpeaker = characterConfig?.name;
@@ -172,6 +174,7 @@ extension _GameManagerLifecycle on GameManager {
       cgCharacters: snapshot.currentState.cgCharacters,
       // 修复bug：使用从新脚本获取的对话文本
       dialogue: freshDialogue ?? snapshot.currentState.dialogue,
+      dialogueTag: freshDialogueTag ?? snapshot.currentState.dialogueTag,
       speaker: freshSpeaker ?? snapshot.currentState.speaker,
     );
 

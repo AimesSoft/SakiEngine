@@ -113,6 +113,21 @@ class SksParser {
         .replaceAll(r'\\', '\\');
   }
 
+  String? _extractDialogueTag(String? rawTag) {
+    if (rawTag == null) {
+      return null;
+    }
+    final tag = rawTag.trim();
+    if (tag.isEmpty) {
+      return null;
+    }
+    // 仅允许简单 token，避免和现有命令语法冲突。
+    if (RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(tag)) {
+      return tag;
+    }
+    return null;
+  }
+
   Map<String, String> _parseApiParameters(String rawParams) {
     final params = <String, String>{};
     if (rawParams.trim().isEmpty) {
@@ -866,8 +881,9 @@ class SksParser {
     }
 
     // 检查是否是时序差分切换语法: x [wakuwaku2,0.5,think] "我去。"
-    final timedExpressionRegex =
-        RegExp(r'^(\w+)\s*\[([^,]+),([^,]+),([^\]]+)\]\s*"([^"]*)"$');
+    final timedExpressionRegex = RegExp(
+      r'^(\w+)\s*\[([^,]+),([^,]+),([^\]]+)\]\s*"([^"]*)"(?:\s+([A-Za-z0-9_-]+))?\s*$',
+    );
     final timedMatch = timedExpressionRegex.firstMatch(processedLine);
 
     if (timedMatch != null) {
@@ -876,6 +892,7 @@ class SksParser {
       final delayStr = timedMatch.group(3)!.trim();
       final endExpression = timedMatch.group(4)!.trim();
       final dialogue = timedMatch.group(5)!;
+      final dialogueTag = _extractDialogueTag(timedMatch.group(6));
 
       final switchDelay = double.tryParse(delayStr);
       if (switchDelay == null || switchDelay <= 0) {
@@ -888,22 +905,26 @@ class SksParser {
       return SayNode(
         character: character,
         dialogue: _formatDialogueWithQuotes(dialogue, character),
+        dialogueTag: dialogueTag,
         startExpression: startExpression,
         switchDelay: switchDelay,
         endExpression: endExpression,
       );
     }
 
-    // 检查是否是条件对话 "dialogue" if variable true/false
-    final conditionalRegex =
-        RegExp(r'^(.*?)\s*"([^"]+)"\s+if\s+(\w+)\s+(true|false)\s*$');
+    // 条件对话，支持可选行尾 tag：
+    // xxx "dialogue" [tag] if var true/false
+    final conditionalRegex = RegExp(
+      r'^(.*?)\s*"([^"]+)"(?:\s+([A-Za-z0-9_-]+))?\s+if\s+(\w+)\s+(true|false)\s*$',
+    );
     final conditionalMatch = conditionalRegex.firstMatch(processedLine);
 
     if (conditionalMatch != null) {
       final beforeQuote = conditionalMatch.group(1)!.trim();
       final dialogue = conditionalMatch.group(2)!;
-      final variableName = conditionalMatch.group(3)!;
-      final conditionValue = conditionalMatch.group(4)! == 'true';
+      final dialogueTag = _extractDialogueTag(conditionalMatch.group(3));
+      final variableName = conditionalMatch.group(4)!;
+      final conditionValue = conditionalMatch.group(5)! == 'true';
 
       String? character;
       String? pose;
@@ -993,6 +1014,7 @@ class SksParser {
       return ConditionalSayNode(
         dialogue: _formatDialogueWithQuotes(dialogue, character),
         character: character,
+        dialogueTag: dialogueTag,
         conditionVariable: variableName,
         conditionValue: conditionValue,
         pose: pose,
@@ -1005,29 +1027,40 @@ class SksParser {
 
     // 继续原有的解析逻辑
 
-    // Improved regex to capture character, attributes and dialogue
-    // 1: Optional character and attributes part
-    // 2: Dialogue part
-    final sayRegex = RegExp(r'^(.*?)\s*"([^"]*)"$');
+    // 普通对话，支持可选行尾 tag：
+    // xxx "dialogue" [tag]
+    // 1: 可选角色及属性
+    // 2: 对话文本
+    // 3: 可选行尾 tag
+    final sayRegex =
+        RegExp(r'^(.*?)\s*"([^"]*)"(?:\s+([A-Za-z0-9_-]+))?\s*$');
     final match = sayRegex.firstMatch(processedLine);
 
     if (match == null) {
       // Simple narration check for lines that are just "dialogue"
-      final simpleNarrationRegex = RegExp(r'^"([^"]*)"$');
+      final simpleNarrationRegex =
+          RegExp(r'^"([^"]*)"(?:\s+([A-Za-z0-9_-]+))?\s*$');
       final simpleMatch = simpleNarrationRegex.firstMatch(processedLine);
       if (simpleMatch != null) {
+        final dialogueTag = _extractDialogueTag(simpleMatch.group(2));
         return SayNode(
-            dialogue: _formatDialogueWithQuotes(simpleMatch.group(1)!, null));
+          dialogue: _formatDialogueWithQuotes(simpleMatch.group(1)!, null),
+          dialogueTag: dialogueTag,
+        );
       }
       return null;
     }
 
     final dialogue = match.group(2)!;
+    final dialogueTag = _extractDialogueTag(match.group(3));
     final beforeQuote = match.group(1)!.trim();
 
     if (beforeQuote.isEmpty) {
       // Narration: "dialogue"
-      return SayNode(dialogue: _formatDialogueWithQuotes(dialogue, null));
+      return SayNode(
+        dialogue: _formatDialogueWithQuotes(dialogue, null),
+        dialogueTag: dialogueTag,
+      );
     }
 
     final parts =
@@ -1112,6 +1145,7 @@ class SksParser {
       return SayNode(
           character: character,
           dialogue: _formatDialogueWithQuotes(dialogue, character),
+          dialogueTag: dialogueTag,
           pose: pose,
           expression: expression,
           position: position,
@@ -1122,6 +1156,7 @@ class SksParser {
     return SayNode(
         character: character,
         dialogue: _formatDialogueWithQuotes(dialogue, character),
+        dialogueTag: dialogueTag,
         pose: pose,
         expression: expression,
         position: position);

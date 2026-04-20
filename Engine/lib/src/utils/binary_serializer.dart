@@ -7,7 +7,7 @@ import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 
 /// 二进制序列化工具类，用于将游戏数据序列化为二进制格式
 class BinarySerializer {
-  static const int _version = 11; // 增加版本号以支持脚本API逐行布局状态
+  static const int _version = 12; // 增加版本号以支持对话行尾扩展 token
   static const String _magicNumber = 'SAKI';
 
   /// 将SaveSlot序列化为二进制数据
@@ -180,7 +180,7 @@ class BinarySerializer {
     final nvlDialoguesLength = reader.readInt32();
     final nvlDialogues = <NvlDialogue>[];
     for (int i = 0; i < nvlDialoguesLength; i++) {
-      nvlDialogues.add(_deserializeNvlDialogue(reader));
+      nvlDialogues.add(_deserializeNvlDialogue(reader, version));
     }
 
     return GameStateSnapshot(
@@ -202,6 +202,7 @@ class BinarySerializer {
     buffer.addAll(_writeNullableString(state.background));
     buffer.addAll(_writeNullableString(state.movieFile)); // 新增：序列化视频文件
     buffer.addAll(_writeNullableString(state.dialogue));
+    buffer.addAll(_writeNullableString(state.dialogueTag));
     buffer.addAll(_writeNullableString(state.speaker));
 
     // 序列化角色状态
@@ -260,6 +261,10 @@ class BinarySerializer {
     }
 
     final dialogue = reader.readNullableString();
+    String? dialogueTag;
+    if (version != null && version >= 12) {
+      dialogueTag = reader.readNullableString();
+    }
     final speaker = reader.readNullableString();
 
     // 反序列化角色状态
@@ -297,7 +302,7 @@ class BinarySerializer {
     final nvlDialoguesLength = reader.readInt32();
     final nvlDialogues = <NvlDialogue>[];
     for (int i = 0; i < nvlDialoguesLength; i++) {
-      nvlDialogues.add(_deserializeNvlDialogue(reader));
+      nvlDialogues.add(_deserializeNvlDialogue(reader, version));
     }
 
     // 反序列化 currentNode（版本7新增）
@@ -339,6 +344,7 @@ class BinarySerializer {
       background: background,
       movieFile: movieFile, // 新增：视频文件参数
       dialogue: dialogue,
+      dialogueTag: dialogueTag,
       speaker: speaker,
       characters: characters,
       cgCharacters: cgCharacters, // 新增：CG角色状态
@@ -445,6 +451,7 @@ class BinarySerializer {
 
     buffer.addAll(_writeNullableString(entry.speaker));
     buffer.addAll(_writeString(entry.dialogue));
+    buffer.addAll(_writeNullableString(entry.dialogueTag));
     // Web平台使用Int32存储时间戳（秒级精度）
     if (kIsWeb) {
       buffer.addAll(
@@ -464,6 +471,8 @@ class BinarySerializer {
       [int? version]) {
     final speaker = reader.readNullableString();
     final dialogue = reader.readString();
+    final String? dialogueTag =
+        (version != null && version >= 12) ? reader.readNullableString() : null;
     // 读取时间戳
     final DateTime timestamp;
     if (kIsWeb) {
@@ -479,6 +488,7 @@ class BinarySerializer {
     return DialogueHistoryEntry(
       speaker: speaker,
       dialogue: dialogue,
+      dialogueTag: dialogueTag,
       timestamp: timestamp,
       scriptIndex: scriptIndex,
       stateSnapshot: stateSnapshot,
@@ -532,6 +542,7 @@ class BinarySerializer {
     final buffer = <int>[];
     buffer.addAll(_writeNullableString(nvlDialogue.speaker));
     buffer.addAll(_writeString(nvlDialogue.dialogue));
+    buffer.addAll(_writeNullableString(nvlDialogue.dialogueTag));
     // Web平台使用Int32存储时间戳（秒级精度）
     if (kIsWeb) {
       buffer.addAll(
@@ -543,9 +554,14 @@ class BinarySerializer {
   }
 
   /// 反序列化 NvlDialogue
-  static NvlDialogue _deserializeNvlDialogue(_BinaryReader reader) {
+  static NvlDialogue _deserializeNvlDialogue(
+    _BinaryReader reader, [
+    int? version,
+  ]) {
     final speaker = reader.readNullableString();
     final dialogue = reader.readString();
+    final String? dialogueTag =
+        (version != null && version >= 12) ? reader.readNullableString() : null;
     // 读取时间戳
     final DateTime timestamp;
     if (kIsWeb) {
@@ -558,6 +574,7 @@ class BinarySerializer {
     return NvlDialogue(
       speaker: speaker,
       dialogue: dialogue,
+      dialogueTag: dialogueTag,
       timestamp: timestamp,
     );
   }

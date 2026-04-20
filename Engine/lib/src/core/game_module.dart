@@ -87,6 +87,7 @@ abstract class GameModule {
     Key? key,
     String? speaker,
     String? speakerAlias, // 新增：角色简写参数
+    String? dialogueTag, // 对话行尾扩展 token（项目层可自定义）
     required String dialogue,
     DialogueProgressionManager? progressionManager,
     required bool isFastForwarding,
@@ -317,6 +318,7 @@ class DefaultGameModule implements GameModule {
     Key? key,
     String? speaker,
     String? speakerAlias, // 新增：角色简写参数
+    String? dialogueTag, // 对话行尾扩展 token（项目层可自定义）
     required String dialogue,
     DialogueProgressionManager? progressionManager,
     required bool isFastForwarding,
@@ -328,6 +330,7 @@ class DefaultGameModule implements GameModule {
       key: key,
       speaker: speaker,
       speakerAlias: speakerAlias, // 新增：传递角色简写
+      dialogueTag: dialogueTag,
       dialogue: dialogue,
       progressionManager: progressionManager,
       isFastForwarding: isFastForwarding,
