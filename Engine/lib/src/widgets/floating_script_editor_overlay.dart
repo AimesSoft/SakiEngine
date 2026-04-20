@@ -44,9 +44,303 @@ class _VisualLineLayout {
   });
 }
 
+class _SksSyntaxHighlightController extends TextEditingController {
+  static const Set<String> _commands = <String>{
+    'label',
+    'jump',
+    'return',
+    'menu',
+    'endmenu',
+    'scene',
+    'movie',
+    'anime',
+    'show',
+    'cg',
+    'hide',
+    'nvl',
+    'endnvl',
+    'nvln',
+    'endnvln',
+    'nvlm',
+    'endnvlm',
+    'fx',
+    'play',
+    'stop',
+    'bool',
+    'api',
+    'pause',
+    'shake',
+  };
+
+  static const Set<String> _keywords = <String>{
+    'if',
+    'at',
+    'an',
+    'repeat',
+    'timer',
+    'with',
+    'loop',
+    'keep',
+    'duration',
+    'intensity',
+    'target',
+    'music',
+    'sound',
+  };
+
+  static final RegExp _numberRegex =
+      RegExp(r'^[+-]?(?:\d+\.?\d*|\.\d+)$');
+  static final RegExp _hexColorRegex =
+      RegExp(r'^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$');
+  static final RegExp _identifierRegex = RegExp(r'^[A-Za-z_]\w*$');
+
+  static const Color _commentColor = Color(0xFF6A9955);
+  static const Color _commandColor = Color(0xFF569CD6);
+  static const Color _keywordColor = Color(0xFFC586C0);
+  static const Color _characterColor = Color(0xFF4EC9B0);
+  static const Color _stringColor = Color(0xFFCE9178);
+  static const Color _numberColor = Color(0xFFB5CEA8);
+  static const Color _labelColor = Color(0xFFDCDCAA);
+  static const Color _paramKeyColor = Color(0xFF9CDCFE);
+  static const Color _boolColor = Color(0xFF569CD6);
+  static const Color _hexColor = Color(0xFFD7BA7D);
+  static const Color _punctuationColor = Color(0xFFD4D4D4);
+  static const Color _tagColor = Color(0xFFE8AFD7);
+
+  static bool _isWhitespace(String ch) {
+    return ch == ' ' || ch == '\t' || ch == '\r';
+  }
+
+  static bool _isPunctuation(String ch) {
+    return ch == '[' ||
+        ch == ']' ||
+        ch == '(' ||
+        ch == ')' ||
+        ch == ',' ||
+        ch == ':' ||
+        ch == '=';
+  }
+
+  static int _findCommentStartOutsideQuotes(String line) {
+    var inQuotes = false;
+    var escaped = false;
+    for (var i = 0; i < line.length - 1; i++) {
+      final ch = line[i];
+      if (ch == '"' && !escaped) {
+        inQuotes = !inQuotes;
+      }
+      if (!inQuotes && ch == '/' && line[i + 1] == '/') {
+        return i;
+      }
+      escaped = ch == '\\' && !escaped;
+      if (ch != '\\') {
+        escaped = false;
+      }
+    }
+    return -1;
+  }
+
+  static int _consumeQuotedString(String line, int start) {
+    var i = start + 1;
+    var escaped = false;
+    while (i < line.length) {
+      final ch = line[i];
+      if (ch == '"' && !escaped) {
+        return i + 1;
+      }
+      if (ch == '\\' && !escaped) {
+        escaped = true;
+        i++;
+        continue;
+      }
+      escaped = false;
+      i++;
+    }
+    return line.length;
+  }
+
+  static String? _extractFirstWord(String line) {
+    final trimmed = line.trimLeft();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    var i = 0;
+    while (i < trimmed.length &&
+        !_isWhitespace(trimmed[i]) &&
+        !_isPunctuation(trimmed[i]) &&
+        trimmed[i] != '"') {
+      i++;
+    }
+    if (i == 0) {
+      return null;
+    }
+    return trimmed.substring(0, i).toLowerCase();
+  }
+
+  TextStyle _applyColor(TextStyle baseStyle, Color color) {
+    return baseStyle.copyWith(color: color);
+  }
+
+  List<InlineSpan> _highlightCodePart(String codePart, TextStyle baseStyle) {
+    final spans = <InlineSpan>[];
+    final firstWordLower = _extractFirstWord(codePart);
+    final isCommandLine =
+        firstWordLower != null && _commands.contains(firstWordLower);
+    final isDialogueLike = !isCommandLine && codePart.contains('"');
+    final isMenuChoiceLike = codePart.trimLeft().startsWith('"');
+
+    var i = 0;
+    var wordIndex = 0;
+    var hasSeenDialogueString = false;
+    var hasStyledTrailingTag = false;
+    var previousWordLower = '';
+
+    while (i < codePart.length) {
+      final ch = codePart[i];
+
+      if (_isWhitespace(ch)) {
+        final start = i;
+        while (i < codePart.length && _isWhitespace(codePart[i])) {
+          i++;
+        }
+        spans.add(TextSpan(text: codePart.substring(start, i), style: baseStyle));
+        continue;
+      }
+
+      if (ch == '"') {
+        final end = _consumeQuotedString(codePart, i);
+        spans.add(
+          TextSpan(
+            text: codePart.substring(i, end),
+            style: _applyColor(baseStyle, _stringColor),
+          ),
+        );
+        i = end;
+        hasSeenDialogueString = true;
+        previousWordLower = '';
+        continue;
+      }
+
+      if (_isPunctuation(ch)) {
+        spans.add(
+          TextSpan(
+            text: ch,
+            style: _applyColor(baseStyle, _punctuationColor),
+          ),
+        );
+        i++;
+        previousWordLower = '';
+        continue;
+      }
+
+      final start = i;
+      while (i < codePart.length &&
+          !_isWhitespace(codePart[i]) &&
+          !_isPunctuation(codePart[i]) &&
+          codePart[i] != '"') {
+        i++;
+      }
+      final word = codePart.substring(start, i);
+      final lower = word.toLowerCase();
+      final nextIsAssignment = i < codePart.length && codePart[i] == '=';
+      TextStyle style = baseStyle;
+
+      if (_hexColorRegex.hasMatch(word)) {
+        style = _applyColor(baseStyle, _hexColor);
+      } else if (_numberRegex.hasMatch(word)) {
+        style = _applyColor(baseStyle, _numberColor);
+      } else if (lower == 'true' || lower == 'false') {
+        style = _applyColor(baseStyle, _boolColor);
+      } else if (!isCommandLine &&
+          wordIndex == 0 &&
+          _identifierRegex.hasMatch(word) &&
+          i < codePart.length &&
+          codePart[i] == ':') {
+        style = _applyColor(baseStyle, _labelColor);
+      } else if (wordIndex == 0 && isCommandLine) {
+        style = _applyColor(baseStyle, _commandColor);
+      } else if (_keywords.contains(lower)) {
+        style = _applyColor(baseStyle, _keywordColor);
+      } else if (isCommandLine && firstWordLower == 'label' && wordIndex == 1) {
+        style = _applyColor(baseStyle, _labelColor);
+      } else if (isCommandLine && firstWordLower == 'jump' && wordIndex == 1) {
+        style = _applyColor(baseStyle, _labelColor);
+      } else if (isCommandLine && firstWordLower == 'api' && wordIndex == 1) {
+        style = _applyColor(baseStyle, _labelColor);
+      } else if (isCommandLine &&
+          (firstWordLower == 'show' ||
+              firstWordLower == 'cg' ||
+              firstWordLower == 'hide') &&
+          wordIndex == 1) {
+        style = _applyColor(baseStyle, _characterColor);
+      } else if (isDialogueLike && wordIndex == 0 && !isMenuChoiceLike) {
+        style = _applyColor(baseStyle, _characterColor);
+      } else if ((firstWordLower == 'api' && nextIsAssignment) ||
+          (previousWordLower == 'if' && _identifierRegex.hasMatch(word))) {
+        style = _applyColor(baseStyle, _paramKeyColor);
+      } else if (hasSeenDialogueString &&
+          !hasStyledTrailingTag &&
+          _identifierRegex.hasMatch(word) &&
+          lower != 'if') {
+        style = _applyColor(
+          baseStyle,
+          isMenuChoiceLike ? _labelColor : _tagColor,
+        );
+        hasStyledTrailingTag = true;
+      }
+
+      spans.add(TextSpan(text: word, style: style));
+      wordIndex++;
+      previousWordLower = lower;
+    }
+
+    return spans;
+  }
+
+  List<InlineSpan> _highlightLine(String line, TextStyle baseStyle) {
+    final spans = <InlineSpan>[];
+    final commentIndex = _findCommentStartOutsideQuotes(line);
+    final codePart = commentIndex >= 0 ? line.substring(0, commentIndex) : line;
+    final commentPart = commentIndex >= 0 ? line.substring(commentIndex) : '';
+
+    spans.addAll(_highlightCodePart(codePart, baseStyle));
+
+    if (commentPart.isNotEmpty) {
+      spans.add(
+        TextSpan(
+          text: commentPart,
+          style: _applyColor(baseStyle, _commentColor),
+        ),
+      );
+    }
+    return spans;
+  }
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final baseStyle = style ?? const TextStyle();
+    final lines = text.split('\n');
+    final children = <InlineSpan>[];
+
+    for (var i = 0; i < lines.length; i++) {
+      children.addAll(_highlightLine(lines[i], baseStyle));
+      if (i < lines.length - 1) {
+        children.add(TextSpan(text: '\n', style: baseStyle));
+      }
+    }
+
+    return TextSpan(style: baseStyle, children: children);
+  }
+}
+
 class _FloatingScriptEditorOverlayState
     extends State<FloatingScriptEditorOverlay> {
-  final TextEditingController _scriptController = TextEditingController();
+  final _SksSyntaxHighlightController _scriptController =
+      _SksSyntaxHighlightController();
   final ScrollController _scrollController = ScrollController();
 
   String _currentScriptPath = '';
