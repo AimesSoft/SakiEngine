@@ -455,7 +455,6 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         !_showDeveloperPanel &&
         !_showDebugPanel &&
         !_showExpressionSelector &&
-        !_showFloatingScriptEditor &&
         !_isShowingMenu &&
         _gameManager.currentState.movieFile == null;
   }
@@ -685,7 +684,6 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showFloatingScriptEditor ||
             _showExpressionWheel;
         // 禁用在视频播放时的快进功能
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
@@ -729,7 +727,6 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showFloatingScriptEditor ||
             _showExpressionWheel;
         // 禁用在视频播放时的快进功能
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
@@ -754,7 +751,6 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showFloatingScriptEditor ||
             _showExpressionWheel;
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
         if (hasOverlayOpen || isPlayingMovie) {
@@ -778,7 +774,6 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showFloatingScriptEditor ||
             _showExpressionWheel;
 
         // 检查是否正在播放视频
@@ -814,7 +809,6 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showFloatingScriptEditor ||
             _showExpressionWheel ||
             _isFastForwarding; // 快进时不能自动播放
         // 禁用在视频播放时的自动播放功能

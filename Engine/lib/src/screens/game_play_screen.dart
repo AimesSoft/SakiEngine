@@ -152,7 +152,6 @@ class _GamePlayScreenState extends State<GamePlayScreen>
         _showDeveloperPanel ||
         _showDebugPanel ||
         _showExpressionSelector ||
-        _showFloatingScriptEditor ||
         _showExpressionWheel;
   }
 
@@ -485,7 +484,6 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   _showDeveloperPanel ||
                   _showDebugPanel ||
                   _showExpressionSelector ||
-                  _showFloatingScriptEditor ||
                   _showExpressionWheel;
               // 选项界面允许“回滚->观看记录”，但仍视为推进输入的阻断态。
               final hasOverlayOpenExceptMenu = _showSaveOverlay ||
@@ -495,7 +493,6 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   _showDeveloperPanel ||
                   _showDebugPanel ||
                   _showExpressionSelector ||
-                  _showFloatingScriptEditor ||
                   _showExpressionWheel;
 
               if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -625,7 +622,6 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                             _showDeveloperPanel ||
                             _showDebugPanel ||
                             _showExpressionSelector ||
-                            _showFloatingScriptEditor ||
                             _showExpressionWheel;
 
                         // 检查是否正在播放视频
