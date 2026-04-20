@@ -46,6 +46,7 @@ import 'package:sakiengine/src/widgets/debug_panel_dialog.dart';
 import 'package:sakiengine/src/utils/character_auto_distribution.dart';
 import 'package:sakiengine/src/widgets/expression_selector_dialog.dart';
 import 'package:sakiengine/src/widgets/expression_radial_wheel.dart';
+import 'package:sakiengine/src/widgets/floating_script_editor_overlay.dart';
 import 'package:sakiengine/src/utils/expression_selector_manager.dart';
 import 'package:sakiengine/src/utils/expression_offset_manager.dart';
 import 'package:sakiengine/src/utils/key_sequence_detector.dart';
@@ -98,9 +99,11 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   bool _showDebugPanel = false; // 调试面板显示状态
   bool _showExpressionSelector = false; // 表情选择器显示状态
   bool _showExpressionWheel = false; // 差分快捷轮盘显示状态（Debug）
+  bool _showFloatingScriptEditor = false; // 悬浮脚本编辑器显示状态（Debug）
   bool _isMetaKeyPressed = false; // Command/Meta按键按住状态（Debug）
   HotKey? _reloadHotKey;
   HotKey? _developerPanelHotKey; // Shift+D快捷键
+  HotKey? _floatingScriptEditorHotKey; // Shift+P 快捷键
   KeySequenceDetector? _consoleSequenceDetector; // console序列检测器
   ExpressionSelectorManager? _expressionSelectorManager; // 表情选择器管理器
   FastForwardManager? _fastForwardManager; // 快进管理器
@@ -149,6 +152,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
         _showDeveloperPanel ||
         _showDebugPanel ||
         _showExpressionSelector ||
+        _showFloatingScriptEditor ||
         _showExpressionWheel;
   }
 
@@ -395,6 +399,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
       if (_developerPanelHotKey != null) {
         hotKeyManager.unregister(_developerPanelHotKey!);
       }
+      if (_floatingScriptEditorHotKey != null) {
+        hotKeyManager.unregister(_floatingScriptEditorHotKey!);
+      }
     }
     // 清理表情选择器管理器
     _expressionSelectorManager?.dispose();
@@ -478,6 +485,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   _showDeveloperPanel ||
                   _showDebugPanel ||
                   _showExpressionSelector ||
+                  _showFloatingScriptEditor ||
                   _showExpressionWheel;
               // 选项界面允许“回滚->观看记录”，但仍视为推进输入的阻断态。
               final hasOverlayOpenExceptMenu = _showSaveOverlay ||
@@ -487,6 +495,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   _showDeveloperPanel ||
                   _showDebugPanel ||
                   _showExpressionSelector ||
+                  _showFloatingScriptEditor ||
                   _showExpressionWheel;
 
               if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -616,6 +625,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                             _showDeveloperPanel ||
                             _showDebugPanel ||
                             _showExpressionSelector ||
+                            _showFloatingScriptEditor ||
                             _showExpressionWheel;
 
                         // 检查是否正在播放视频
@@ -719,6 +729,16 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                                 _expressionWheelHighlightedExpression =
                                     expression;
                               },
+                            ),
+                          if (kEngineDebugMode && _showFloatingScriptEditor)
+                            FloatingScriptEditorOverlay(
+                              gameManager: _gameManager,
+                              currentScript: _currentScript,
+                              onReload: _handleHotReload,
+                              onNotify: _showNotificationMessage,
+                              onClose: () => _setStateIfMounted(
+                                () => _showFloatingScriptEditor = false,
+                              ),
                             ),
                           // 加载淡出覆盖层 - 不会被隐藏
                           AnimatedBuilder(

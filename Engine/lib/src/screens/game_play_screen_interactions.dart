@@ -310,6 +310,32 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       } catch (e) {
         print('开发者面板快捷键注册失败: $e');
       }
+
+      // 注册悬浮脚本编辑器快捷键 Shift+P（仅Debug）
+      _floatingScriptEditorHotKey = HotKey(
+        key: PhysicalKeyboardKey.keyP,
+        modifiers: [HotKeyModifier.shift],
+        scope: HotKeyScope.inapp,
+      );
+      try {
+        await hotKeyManager.register(
+          _floatingScriptEditorHotKey!,
+          keyDownHandler: (hotKey) {
+            if (kEngineDebugMode) {
+              print('悬浮脚本编辑器热键触发: ${hotKey.toJson()}');
+            }
+            _setStateIfMounted(() {
+              _showFloatingScriptEditor = !_showFloatingScriptEditor;
+            });
+            _showNotificationMessage(
+              '脚本浮窗 ${_showFloatingScriptEditor ? '开启' : '关闭'}',
+            );
+          },
+        );
+        print('快捷键 Shift+P 注册成功 (脚本浮窗)');
+      } catch (e) {
+        print('脚本浮窗快捷键注册失败: $e');
+      }
     }
 
     // 上下方向键改由 Focus.onKeyEvent 统一处理，避免平台热键差异。
@@ -429,6 +455,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         !_showDeveloperPanel &&
         !_showDebugPanel &&
         !_showExpressionSelector &&
+        !_showFloatingScriptEditor &&
         !_isShowingMenu &&
         _gameManager.currentState.movieFile == null;
   }
@@ -658,6 +685,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
+            _showFloatingScriptEditor ||
             _showExpressionWheel;
         // 禁用在视频播放时的快进功能
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
@@ -701,6 +729,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
+            _showFloatingScriptEditor ||
             _showExpressionWheel;
         // 禁用在视频播放时的快进功能
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
@@ -725,6 +754,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
+            _showFloatingScriptEditor ||
             _showExpressionWheel;
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
         if (hasOverlayOpen || isPlayingMovie) {
@@ -748,6 +778,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
+            _showFloatingScriptEditor ||
             _showExpressionWheel;
 
         // 检查是否正在播放视频
@@ -783,6 +814,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
+            _showFloatingScriptEditor ||
             _showExpressionWheel ||
             _isFastForwarding; // 快进时不能自动播放
         // 禁用在视频播放时的自动播放功能
