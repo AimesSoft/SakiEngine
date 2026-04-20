@@ -504,6 +504,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       _expressionWheelSpeakerInfo = speakerInfo;
       _expressionWheelExpressions = expressions;
       _expressionWheelHighlightedExpression = highlightedExpression;
+      _expressionWheelCenter = _lastPointerPosition;
       _showExpressionWheel = true;
     });
     if (kEngineDebugMode) {
@@ -596,6 +597,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       _expressionWheelSpeakerInfo = null;
       _expressionWheelExpressions = const [];
       _expressionWheelHighlightedExpression = null;
+      _expressionWheelCenter = null;
     });
     if (kEngineDebugMode) {
       print('ExpressionWheel: state cleared');

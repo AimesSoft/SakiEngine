@@ -7,6 +7,7 @@ class ExpressionRadialWheel extends StatefulWidget {
   final String characterName;
   final String currentExpression;
   final List<String> expressions;
+  final Offset center;
   final ValueChanged<String> onHighlightedExpressionChanged;
 
   const ExpressionRadialWheel({
@@ -14,6 +15,7 @@ class ExpressionRadialWheel extends StatefulWidget {
     required this.characterName,
     required this.currentExpression,
     required this.expressions,
+    required this.center,
     required this.onHighlightedExpressionChanged,
   });
 
@@ -68,8 +70,18 @@ class _ExpressionRadialWheelState extends State<ExpressionRadialWheel> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final size = constraints.biggest;
-          final center = Offset(size.width / 2, size.height / 2);
-          final outerRadius = math.min(size.width, size.height) * 0.27;
+          final center = Offset(
+            widget.center.dx.clamp(0.0, size.width),
+            widget.center.dy.clamp(0.0, size.height),
+          );
+          final maxRadiusByEdges = [
+            center.dx,
+            center.dy,
+            size.width - center.dx,
+            size.height - center.dy,
+          ].reduce(math.min);
+          final outerRadius =
+              math.max(90.0, math.min(maxRadiusByEdges - 12, 220.0));
           final innerRadius = outerRadius * 0.45;
 
           return Listener(
@@ -80,30 +92,25 @@ class _ExpressionRadialWheelState extends State<ExpressionRadialWheel> {
                 _updateHighlightFromPointer(event.localPosition, center),
             onPointerHover: (event) =>
                 _updateHighlightFromPointer(event.localPosition, center),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.22),
-              ),
-              child: Stack(
-                children: [
-                  CustomPaint(
-                    size: size,
-                    painter: _ExpressionRadialWheelPainter(
-                      center: center,
-                      outerRadius: outerRadius,
-                      innerRadius: innerRadius,
-                      segmentCount: widget.expressions.length,
-                      highlightedIndex: _highlightedIndex,
-                    ),
-                  ),
-                  ..._buildSegmentLabels(
+            child: Stack(
+              children: [
+                CustomPaint(
+                  size: size,
+                  painter: _ExpressionRadialWheelPainter(
                     center: center,
                     outerRadius: outerRadius,
                     innerRadius: innerRadius,
+                    segmentCount: widget.expressions.length,
+                    highlightedIndex: _highlightedIndex,
                   ),
-                  _buildCenterLabel(center: center, innerRadius: innerRadius),
-                ],
-              ),
+                ),
+                ..._buildSegmentLabels(
+                  center: center,
+                  outerRadius: outerRadius,
+                  innerRadius: innerRadius,
+                ),
+                _buildCenterLabel(center: center, innerRadius: innerRadius),
+              ],
             ),
           );
         },

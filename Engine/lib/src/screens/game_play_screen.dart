@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
@@ -116,6 +117,8 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   SpeakerInfo? _expressionWheelSpeakerInfo;
   List<String> _expressionWheelExpressions = const [];
   String? _expressionWheelHighlightedExpression;
+  Offset? _lastPointerPosition;
+  Offset? _expressionWheelCenter;
 
   // 跟踪上一次的NVL状态，用于检测转场
   bool _previousIsNvlMode = false;
@@ -422,9 +425,22 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   Widget build(BuildContext context) {
     return Listener(
       onPointerSignal: (signal) {
+        if (signal is PointerScrollEvent) {
+          _lastPointerPosition = signal.localPosition;
+        }
         _mouseWheelHandler.handlePointerSignal(signal);
       },
+      onPointerHover: (event) {
+        _lastPointerPosition = event.localPosition;
+      },
+      onPointerDown: (event) {
+        _lastPointerPosition = event.localPosition;
+      },
+      onPointerMove: (event) {
+        _lastPointerPosition = event.localPosition;
+      },
       onPointerPanZoomUpdate: (event) {
+        _lastPointerPosition = event.localPosition;
         _mouseWheelHandler.handlePanZoomUpdate(event);
       },
       child: PopScope(
@@ -694,6 +710,11 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                               currentExpression: _expressionWheelSpeakerInfo!
                                   .currentExpression,
                               expressions: _expressionWheelExpressions,
+                              center: _expressionWheelCenter ??
+                                  Offset(
+                                    MediaQuery.of(context).size.width / 2,
+                                    MediaQuery.of(context).size.height / 2,
+                                  ),
                               onHighlightedExpressionChanged: (expression) {
                                 _expressionWheelHighlightedExpression =
                                     expression;

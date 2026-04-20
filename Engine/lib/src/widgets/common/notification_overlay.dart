@@ -54,30 +54,41 @@ class NotificationOverlayState extends State<NotificationOverlay> {
       child: AnimatedOpacity(
         opacity: _show ? 1.0 : 0.0,
         duration: _fadeInOutDuration,
-        child: Container(
-          color: Colors.black.withOpacity(0.5),
-          child: Center(
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                  horizontal: 48 * widget.scale, vertical: 32 * widget.scale),
-              decoration: BoxDecoration(
-                color: config.themeColors.background.withValues(alpha: 0.95),
-                borderRadius: BorderRadius.circular(config.baseWindowBorder * widget.scale),
-                border: Border.all(
-                    color: config.themeColors.primary.withValues(alpha: 0.5)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 15 * widget.scale,
-                  ),
-                ],
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 18 * widget.scale,
+                top: 14 * widget.scale,
               ),
-              child: Text(
-                _message,
-                style: config.reviewTitleTextStyle.copyWith(
-                  fontSize:
-                      config.reviewTitleTextStyle.fontSize! * widget.scale * 0.8,
-                  color: config.themeColors.primary,
+              child: Container(
+                constraints: BoxConstraints(maxWidth: 560 * widget.scale),
+                padding: EdgeInsets.symmetric(
+                    horizontal: 16 * widget.scale, vertical: 10 * widget.scale),
+                decoration: BoxDecoration(
+                  color: config.themeColors.background.withValues(alpha: 0.9),
+                  borderRadius:
+                      BorderRadius.circular(config.baseWindowBorder * 0.7),
+                  border: Border.all(
+                      color:
+                          config.themeColors.primary.withValues(alpha: 0.42)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.22),
+                      blurRadius: 8 * widget.scale,
+                      offset: Offset(0, 2 * widget.scale),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  _message,
+                  style: config.reviewTitleTextStyle.copyWith(
+                    fontSize: config.reviewTitleTextStyle.fontSize! *
+                        widget.scale *
+                        0.52,
+                    color: config.themeColors.primary,
+                  ),
                 ),
               ),
             ),
