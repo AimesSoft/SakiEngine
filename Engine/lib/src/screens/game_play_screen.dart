@@ -63,6 +63,7 @@ import 'package:sakiengine/src/utils/settings_manager.dart';
 import 'package:sakiengine/src/widgets/movie_player.dart'; // 新增：视频播放器导入
 import 'package:sakiengine/src/utils/dialogue_shake_effect.dart'; // 新增：震动效果导入
 import 'package:sakiengine/src/rendering/image_sampling.dart';
+import 'package:sakiengine/src/utils/music_manager.dart';
 
 part 'game_play_screen_interactions.dart';
 
@@ -70,6 +71,7 @@ enum _CommandDebugMenuMode {
   expression,
   character,
   background,
+  music,
 }
 
 class GamePlayScreen extends StatefulWidget {
@@ -109,6 +111,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   bool _showExpressionWheel = false; // 差分快捷轮盘显示状态（Debug）
   bool _showCharacterWheel = false; // 角色切换轮盘显示状态（Debug）
   bool _showBackgroundGridMenu = false; // 背景选择网格菜单显示状态（Debug）
+  bool _showMusicGridMenu = false; // 音乐选择网格菜单显示状态（Debug）
   bool _showFloatingScriptEditor = false; // 悬浮脚本编辑器显示状态（Debug）
   bool _isMetaKeyPressed = false; // Command/Meta按键按住状态（Debug）
   _CommandDebugMenuMode? _activeCommandMenuMode;
@@ -138,6 +141,11 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   List<CommandWheelOption> _backgroundGridOptions = const [];
   String? _backgroundGridCurrentId;
   String? _backgroundGridHighlightedId;
+  List<CommandWheelOption> _musicGridOptions = const [];
+  String? _musicGridCurrentId;
+  String? _musicGridHighlightedId;
+  String? _musicGridOriginalAssetPath;
+  String? _musicPreviewPlayingId;
   Offset? _lastPointerPosition;
   Offset? _expressionWheelCenter;
 
@@ -162,7 +170,10 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   Uint8List? _frozenSaveThumbnailFrame;
 
   bool get _isAnyCommandMenuOpen =>
-      _showExpressionWheel || _showCharacterWheel || _showBackgroundGridMenu;
+      _showExpressionWheel ||
+      _showCharacterWheel ||
+      _showBackgroundGridMenu ||
+      _showMusicGridMenu;
 
   bool get _hasThumbnailBlockingOverlayOpen {
     return _showSaveOverlay ||
@@ -769,6 +780,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                               _backgroundGridOptions.isNotEmpty)
                             CommandGridMenu(
                               title: '切换背景',
+                              applyHint: 'Double Click To Apply',
                               options: _backgroundGridOptions,
                               currentOptionId: _backgroundGridCurrentId,
                               center: _expressionWheelCenter ??
@@ -778,6 +790,32 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                                   ),
                               onHighlightedOptionChanged: (optionId) {
                                 _backgroundGridHighlightedId = optionId;
+                              },
+                              onOptionDoubleTap: (_) {
+                                unawaited(_applyBackgroundGridSelectionAndClose());
+                              },
+                            ),
+                          if (kEngineDebugMode &&
+                              _showMusicGridMenu &&
+                              _musicGridOptions.isNotEmpty)
+                            CommandGridMenu(
+                              title: '切换音乐',
+                              applyHint: 'Double Click To Apply',
+                              options: _musicGridOptions,
+                              currentOptionId: _musicGridCurrentId,
+                              center: _expressionWheelCenter ??
+                                  Offset(
+                                    MediaQuery.of(context).size.width / 2,
+                                    MediaQuery.of(context).size.height / 2,
+                                  ),
+                              onHighlightedOptionChanged: (optionId) {
+                                _musicGridHighlightedId = optionId;
+                                unawaited(
+                                  _previewMusicSelectionIfNeeded(optionId),
+                                );
+                              },
+                              onOptionDoubleTap: (_) {
+                                unawaited(_applyMusicGridSelectionAndClose());
                               },
                             ),
                           if (kEngineDebugMode && _showFloatingScriptEditor)

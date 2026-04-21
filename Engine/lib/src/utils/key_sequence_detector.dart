@@ -622,6 +622,16 @@ class ScriptContentModifier {
     return trimmed.startsWith('scene ') || trimmed.startsWith('movie ');
   }
 
+  static bool _isPlayMusicLine(String line) {
+    final trimmed = line.trimLeft();
+    return trimmed.startsWith('play music ');
+  }
+
+  static bool _isStopMusicLine(String line) {
+    final trimmed = line.trimLeft();
+    return trimmed.startsWith('stop music');
+  }
+
   /// 修改指定对话行的pose和表情信息
   /// 支持同时修改pose和expression
   static Future<bool> modifyDialogueLineWithPose({
@@ -1006,6 +1016,91 @@ class ScriptContentModifier {
     } catch (e) {
       if (kEngineDebugMode) {
         print('ScriptModifier: 修改背景失败: $e');
+      }
+      return false;
+    }
+  }
+
+  /// 在当前对话附近最近的play music命令上替换音乐参数。
+  /// 若附近不存在play music，则在目标行前插入新的play music命令。
+  static Future<bool> modifyMusicNearDialogue({
+    required String scriptFilePath,
+    required String newMusic,
+    int? targetLineNumber,
+    int searchWindow = 120,
+  }) async {
+    try {
+      final normalized = newMusic.trim();
+      if (normalized.isEmpty) {
+        return false;
+      }
+      final file = File(scriptFilePath);
+      if (!await file.exists()) {
+        return false;
+      }
+      final content = await file.readAsString();
+      final lines = content.split('\n');
+      if (lines.isEmpty) {
+        return false;
+      }
+
+      int? targetIndex;
+      if (targetLineNumber != null &&
+          targetLineNumber > 0 &&
+          targetLineNumber <= lines.length) {
+        targetIndex = targetLineNumber - 1;
+      }
+
+      int? bestIndex;
+      int bestDistance = 1 << 30;
+      if (targetIndex != null) {
+        final start = (targetIndex - searchWindow).clamp(0, lines.length - 1);
+        final end = (targetIndex + searchWindow).clamp(0, lines.length - 1);
+        for (int i = start; i <= end; i++) {
+          if (_isStopMusicLine(lines[i])) {
+            continue;
+          }
+          if (!_isPlayMusicLine(lines[i])) {
+            continue;
+          }
+          final distance = (i - targetIndex).abs();
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = i;
+          }
+        }
+      }
+
+      if (bestIndex == null) {
+        for (int i = lines.length - 1; i >= 0; i--) {
+          if (_isStopMusicLine(lines[i])) {
+            continue;
+          }
+          if (_isPlayMusicLine(lines[i])) {
+            bestIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (bestIndex != null) {
+        final originalLine = lines[bestIndex];
+        final trimmed = originalLine.trim();
+        final changed = 'play music $normalized';
+        if (trimmed == changed) {
+          return false;
+        }
+        lines[bestIndex] = originalLine.replaceFirst(trimmed, changed);
+      } else {
+        final insertAt = targetIndex?.clamp(0, lines.length) ?? lines.length;
+        lines.insert(insertAt, 'play music $normalized');
+      }
+
+      await _writeScriptFile(file, lines.join('\n'));
+      return true;
+    } catch (e) {
+      if (kEngineDebugMode) {
+        print('ScriptModifier: 修改音乐失败: $e');
       }
       return false;
     }

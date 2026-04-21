@@ -388,10 +388,13 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     final isMetaKey = logicalKey == LogicalKeyboardKey.metaLeft ||
         logicalKey == LogicalKeyboardKey.metaRight ||
         logicalKey == LogicalKeyboardKey.meta;
+    final isCommandA = logicalKey == LogicalKeyboardKey.keyA;
     final isCommandC = logicalKey == LogicalKeyboardKey.keyC;
     final isCommandB = logicalKey == LogicalKeyboardKey.keyB;
+    final isCommand1 = logicalKey == LogicalKeyboardKey.digit1;
 
-    if (kEngineDebugMode && (isMetaKey || isCommandC || isCommandB)) {
+    if (kEngineDebugMode &&
+        (isMetaKey || isCommandA || isCommandC || isCommandB || isCommand1)) {
       print(
           'ExpressionWheel: key event type=${event.runtimeType}, key=${logicalKey.debugName}, isMetaPressed=${HardwareKeyboard.instance.isMetaPressed}, internalPressed=$_isMetaKeyPressed, mode=$_activeCommandMenuMode, visible=$_isAnyCommandMenuOpen');
     }
@@ -402,11 +405,6 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
           return true;
         }
         _isMetaKeyPressed = true;
-        _activeCommandMenuMode = _CommandDebugMenuMode.expression;
-        if (kEngineDebugMode) {
-          print('ExpressionWheel: schedule expression wheel open in 120ms');
-        }
-        _scheduleCommandMenuOpen(_CommandDebugMenuMode.expression);
         return true;
       }
 
@@ -418,61 +416,86 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
           }
           return true;
         }
-
-        _expressionWheelOpenTimer?.cancel();
-        if (_showExpressionWheel) {
-          if (kEngineDebugMode) {
-            print('ExpressionWheel: keyUp apply expression selection');
-          }
-          unawaited(_applyExpressionWheelSelectionAndClose());
-        } else if (_showCharacterWheel) {
-          if (kEngineDebugMode) {
-            print('ExpressionWheel: keyUp apply character selection');
-          }
-          unawaited(_applyCharacterWheelSelectionAndClose());
-        } else if (_showBackgroundGridMenu) {
-          if (kEngineDebugMode) {
-            print('ExpressionWheel: keyUp apply background selection');
-          }
-          unawaited(_applyBackgroundGridSelectionAndClose());
-        } else {
-          if (kEngineDebugMode) {
-            print('ExpressionWheel: keyUp clear state (menu not visible)');
-          }
-          _clearCommandMenuState();
-        }
         return true;
       }
     }
 
     if (event is KeyRepeatEvent &&
         _isMetaKeyPressed &&
-        (isCommandC || isCommandB)) {
+        (isCommandA || isCommandC || isCommandB || isCommand1)) {
       return true;
     }
 
-    if (event is KeyDownEvent && _isMetaKeyPressed && isCommandC) {
-      if (_activeCommandMenuMode != _CommandDebugMenuMode.character ||
-          !_showCharacterWheel) {
-        _activeCommandMenuMode = _CommandDebugMenuMode.character;
-        if (kEngineDebugMode) {
-          print('ExpressionWheel: switch mode -> character');
-        }
-        _scheduleCommandMenuOpen(_CommandDebugMenuMode.character);
+    if (event is KeyDownEvent && _isMetaKeyPressed) {
+      _CommandDebugMenuMode? requestedMode;
+      if (isCommandA) {
+        requestedMode = _CommandDebugMenuMode.expression;
+      } else if (isCommandC) {
+        requestedMode = _CommandDebugMenuMode.character;
+      } else if (isCommandB) {
+        requestedMode = _CommandDebugMenuMode.background;
+      } else if (isCommand1) {
+        requestedMode = _CommandDebugMenuMode.music;
       }
-      return true;
-    }
 
-    if (event is KeyDownEvent && _isMetaKeyPressed && isCommandB) {
-      if (_activeCommandMenuMode != _CommandDebugMenuMode.background ||
-          !_showBackgroundGridMenu) {
-        _activeCommandMenuMode = _CommandDebugMenuMode.background;
-        if (kEngineDebugMode) {
-          print('ExpressionWheel: switch mode -> background');
+      if (requestedMode != null) {
+        if (_isGridMenuMode(requestedMode)) {
+          if (_activeCommandMenuMode == requestedMode &&
+              _isGridMenuVisibleForMode(requestedMode)) {
+            if (requestedMode == _CommandDebugMenuMode.music) {
+              unawaited(_restoreMusicPreviewIfNeeded());
+            }
+            _clearCommandMenuState();
+          } else {
+            if (_showMusicGridMenu && requestedMode != _CommandDebugMenuMode.music) {
+              unawaited(_restoreMusicPreviewIfNeeded());
+            }
+            _clearCommandMenuState();
+            _activeCommandMenuMode = requestedMode;
+            _scheduleCommandMenuOpen(requestedMode);
+          }
+          return true;
         }
-        _scheduleCommandMenuOpen(_CommandDebugMenuMode.background);
+
+        final currentMode = _activeCommandMenuMode;
+        if (_isAnyCommandMenuOpen && currentMode != requestedMode) {
+          if (_showMusicGridMenu) {
+            unawaited(_restoreMusicPreviewIfNeeded());
+          }
+          _clearCommandMenuState();
+        }
+
+        bool isTargetVisible;
+        switch (requestedMode) {
+          case _CommandDebugMenuMode.expression:
+            isTargetVisible = _showExpressionWheel;
+            break;
+          case _CommandDebugMenuMode.character:
+            isTargetVisible = _showCharacterWheel;
+            break;
+          case _CommandDebugMenuMode.background:
+            isTargetVisible = _showBackgroundGridMenu;
+            break;
+          case _CommandDebugMenuMode.music:
+            isTargetVisible = _showMusicGridMenu;
+            break;
+        }
+
+        if (_activeCommandMenuMode != requestedMode || !isTargetVisible) {
+          _activeCommandMenuMode = requestedMode;
+          if (kEngineDebugMode) {
+            final modeName = switch (requestedMode) {
+              _CommandDebugMenuMode.expression => 'expression',
+              _CommandDebugMenuMode.character => 'character',
+              _CommandDebugMenuMode.background => 'background',
+              _CommandDebugMenuMode.music => 'music',
+            };
+            print('ExpressionWheel: switch mode -> $modeName');
+          }
+          _scheduleCommandMenuOpen(requestedMode);
+        }
+        return true;
       }
-      return true;
     }
 
     if (_isAnyCommandMenuOpen) {
@@ -480,6 +503,24 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       return true;
     }
     return false;
+  }
+
+  bool _isGridMenuMode(_CommandDebugMenuMode mode) {
+    return mode == _CommandDebugMenuMode.background ||
+        mode == _CommandDebugMenuMode.music;
+  }
+
+  bool _isGridMenuVisibleForMode(_CommandDebugMenuMode mode) {
+    switch (mode) {
+      case _CommandDebugMenuMode.background:
+        return _showBackgroundGridMenu;
+      case _CommandDebugMenuMode.music:
+        return _showMusicGridMenu;
+      case _CommandDebugMenuMode.expression:
+        return _showExpressionWheel;
+      case _CommandDebugMenuMode.character:
+        return _showCharacterWheel;
+    }
   }
 
   void _scheduleCommandMenuOpen(_CommandDebugMenuMode mode) {
@@ -497,6 +538,9 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
           break;
         case _CommandDebugMenuMode.background:
           unawaited(_openBackgroundGridIfPossible());
+          break;
+        case _CommandDebugMenuMode.music:
+          unawaited(_openMusicGridIfPossible());
           break;
       }
     });
@@ -545,6 +589,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     _setStateIfMounted(() {
       _showExpressionWheel = false;
       _showBackgroundGridMenu = false;
+      _showMusicGridMenu = false;
       _expressionWheelSpeakerInfo = null;
       _expressionWheelExpressions = const [];
       _expressionWheelImagePaths = const {};
@@ -594,6 +639,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     _setStateIfMounted(() {
       _showExpressionWheel = false;
       _showCharacterWheel = false;
+      _showMusicGridMenu = false;
       _expressionWheelSpeakerInfo = null;
       _expressionWheelExpressions = const [];
       _expressionWheelImagePaths = const {};
@@ -609,6 +655,58 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     if (kEngineDebugMode) {
       print(
           'ExpressionWheel: background grid opened options=${options.length}, current=$_backgroundGridCurrentId');
+    }
+  }
+
+  Future<void> _openMusicGridIfPossible() async {
+    if (!_isMetaKeyPressed || !mounted) {
+      if (kEngineDebugMode) {
+        print(
+            'ExpressionWheel: music open aborted (metaPressed=$_isMetaKeyPressed, mounted=$mounted)');
+      }
+      return;
+    }
+    if (!_canShowExpressionWheel()) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: music open blocked by overlays');
+      }
+      return;
+    }
+
+    final options = await _buildMusicGridOptions();
+    if (options.isEmpty) {
+      _showNotificationMessage('未找到可用音乐资源');
+      return;
+    }
+    final currentMusic = MusicManager().currentBackgroundMusic ?? '';
+    final current = _resolveCurrentMusicOptionId(options, currentMusic);
+
+    if (!mounted || !_isMetaKeyPressed) {
+      return;
+    }
+
+    _setStateIfMounted(() {
+      _showExpressionWheel = false;
+      _showCharacterWheel = false;
+      _showBackgroundGridMenu = false;
+      _expressionWheelSpeakerInfo = null;
+      _expressionWheelExpressions = const [];
+      _expressionWheelImagePaths = const {};
+      _expressionWheelHighlightedExpression = null;
+
+      _musicGridOptions = options;
+      _musicGridCurrentId = current;
+      _musicGridHighlightedId = current ?? options.first.id;
+      _musicGridOriginalAssetPath = currentMusic;
+      _musicPreviewPlayingId = null;
+      _expressionWheelCenter = _lastPointerPosition;
+      _showMusicGridMenu = true;
+      _activeCommandMenuMode = _CommandDebugMenuMode.music;
+    });
+    await _previewMusicSelectionIfNeeded(_musicGridHighlightedId);
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionWheel: music grid opened options=${options.length}, current=$_musicGridCurrentId, original=$_musicGridOriginalAssetPath');
     }
   }
 
@@ -695,10 +793,14 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       _backgroundGridOptions = const [];
       _backgroundGridCurrentId = null;
       _backgroundGridHighlightedId = null;
+      _musicGridOptions = const [];
+      _musicGridCurrentId = null;
+      _musicGridHighlightedId = null;
       _expressionWheelCenter = _lastPointerPosition;
       _showExpressionWheel = true;
       _showCharacterWheel = false;
       _showBackgroundGridMenu = false;
+      _showMusicGridMenu = false;
       _activeCommandMenuMode = _CommandDebugMenuMode.expression;
     });
     if (kEngineDebugMode) {
@@ -964,6 +1066,52 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     return options;
   }
 
+  Future<List<CommandWheelOption>> _buildMusicGridOptions() async {
+    const primaryDir = 'Assets/music/';
+    const legacyDir = 'assets/music/';
+    final audioFiles = <String>{
+      ...await AssetManager().listAssets(primaryDir, '.mp3'),
+      ...await AssetManager().listAssets(primaryDir, '.ogg'),
+      ...await AssetManager().listAssets(primaryDir, '.wav'),
+      ...await AssetManager().listAssets(primaryDir, '.flac'),
+      ...await AssetManager().listAssets(primaryDir, '.m4a'),
+      ...await AssetManager().listAssets(legacyDir, '.mp3'),
+      ...await AssetManager().listAssets(legacyDir, '.ogg'),
+      ...await AssetManager().listAssets(legacyDir, '.wav'),
+      ...await AssetManager().listAssets(legacyDir, '.flac'),
+      ...await AssetManager().listAssets(legacyDir, '.m4a'),
+    };
+    final supported = <String>{'.mp3', '.ogg', '.wav', '.flac', '.m4a'};
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionWheel: music scan files=${audioFiles.length}, samples=${audioFiles.take(8).join(',')}');
+    }
+    final options = <CommandWheelOption>[];
+    for (final fileName in audioFiles) {
+      final lower = fileName.toLowerCase();
+      if (!supported.any((ext) => lower.endsWith(ext))) {
+        continue;
+      }
+      final dot = fileName.lastIndexOf('.');
+      if (dot <= 0) {
+        continue;
+      }
+      final base = fileName.substring(0, dot).trim();
+      final id = fileName.trim();
+      if (id.isEmpty || base.isEmpty) {
+        continue;
+      }
+      options.add(
+        CommandWheelOption(
+          id: id,
+          label: base,
+        ),
+      );
+    }
+    options.sort((a, b) => a.label.compareTo(b.label));
+    return options;
+  }
+
   String? _resolveCurrentBackgroundOptionId(
     List<CommandWheelOption> options,
     String currentBackgroundRaw,
@@ -981,6 +1129,104 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       }
     }
     return options.isNotEmpty ? options.first.id : null;
+  }
+
+  String? _resolveCurrentMusicOptionId(
+    List<CommandWheelOption> options,
+    String currentMusicAssetPath,
+  ) {
+    if (options.isEmpty) {
+      return null;
+    }
+    if (currentMusicAssetPath.trim().isEmpty) {
+      return null;
+    }
+    final fileName = currentMusicAssetPath.split('/').last.trim();
+    final dot = fileName.lastIndexOf('.');
+    final normalized = dot > 0 ? fileName.substring(0, dot) : fileName;
+    for (final option in options) {
+      final optionFile = option.id.trim();
+      final optionDot = optionFile.lastIndexOf('.');
+      final optionBase =
+          optionDot > 0 ? optionFile.substring(0, optionDot) : optionFile;
+      if (optionFile == fileName ||
+          optionBase == normalized ||
+          currentMusicAssetPath.contains(option.id)) {
+        return option.id;
+      }
+    }
+    return null;
+  }
+
+  String _buildMusicAssetPathFromOptionId(String optionId) {
+    final trimmed = optionId.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    if (trimmed.contains('.')) {
+      return 'Assets/music/$trimmed';
+    }
+    return 'Assets/music/$trimmed.mp3';
+  }
+
+  Future<void> _previewMusicSelectionIfNeeded(String? optionId) async {
+    if (!_showMusicGridMenu) {
+      return;
+    }
+    if (optionId == null || optionId.isEmpty) {
+      return;
+    }
+    if (_musicPreviewPlayingId == optionId) {
+      return;
+    }
+    final assetPath = _buildMusicAssetPathFromOptionId(optionId);
+    if (assetPath.isEmpty) {
+      return;
+    }
+    if (kEngineDebugMode) {
+      print('ExpressionWheel: music preview -> $optionId ($assetPath)');
+    }
+    try {
+      await MusicManager().playBackgroundMusic(
+        assetPath,
+        fadeTransition: false,
+      );
+      _musicPreviewPlayingId = optionId;
+    } catch (e) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: music preview failed: $e');
+      }
+    }
+  }
+
+  Future<void> _restoreMusicPreviewIfNeeded() async {
+    await _restoreMusicToOriginal(
+      originalAssetPath: _musicGridOriginalAssetPath,
+      previewId: _musicPreviewPlayingId,
+    );
+  }
+
+  Future<void> _restoreMusicToOriginal({
+    required String? originalAssetPath,
+    required String? previewId,
+  }) async {
+    if (previewId == null || previewId.isEmpty) {
+      return;
+    }
+    if (originalAssetPath == null || originalAssetPath.isEmpty) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: restore music preview -> stop');
+      }
+      await MusicManager().stopBackgroundMusic(fadeOut: false);
+      return;
+    }
+    if (kEngineDebugMode) {
+      print('ExpressionWheel: restore music preview -> $originalAssetPath');
+    }
+    await MusicManager().playBackgroundMusic(
+      originalAssetPath,
+      fadeTransition: false,
+    );
   }
 
   Future<void> _applyExpressionWheelSelectionAndClose() async {
@@ -1093,6 +1339,50 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     }
   }
 
+  Future<void> _applyMusicGridSelectionAndClose() async {
+    final selectedMusic = _musicGridHighlightedId;
+    final currentMusic = _musicGridCurrentId;
+    final originalAssetPath = _musicGridOriginalAssetPath;
+    final previewId = _musicPreviewPlayingId;
+    _clearCommandMenuState();
+    if (selectedMusic == null || selectedMusic.isEmpty) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: apply music skipped (empty selection)');
+      }
+      await _restoreMusicToOriginal(
+        originalAssetPath: originalAssetPath,
+        previewId: previewId,
+      );
+      return;
+    }
+    if (selectedMusic == currentMusic) {
+      if (kEngineDebugMode) {
+        print(
+            'ExpressionWheel: apply music skipped (selection unchanged: $selectedMusic)');
+      }
+      await _restoreMusicToOriginal(
+        originalAssetPath: originalAssetPath,
+        previewId: previewId,
+      );
+      return;
+    }
+    final success = await _applyMusicChangeForCurrentDialogue(selectedMusic);
+    if (success) {
+      _showNotificationMessage('已切换音乐: $selectedMusic');
+      await _handleHotReload();
+      return;
+    }
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionWheel: apply music failed, rollback preview to $originalAssetPath');
+    }
+    await _restoreMusicToOriginal(
+      originalAssetPath: originalAssetPath,
+      previewId: previewId,
+    );
+    _showNotificationMessage('音乐切换失败');
+  }
+
   Future<bool> _applyCharacterChangeForCurrentDialogue(
       String selectedCharacterKey) async {
     final sourceScriptFile = _gameManager.currentDialogueSourceScriptFile;
@@ -1154,12 +1444,37 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     );
   }
 
+  Future<bool> _applyMusicChangeForCurrentDialogue(String selectedMusic) async {
+    final sourceScriptFile = _gameManager.currentDialogueSourceScriptFile;
+    final scriptFileForWrite =
+        (sourceScriptFile != null && sourceScriptFile.trim().isNotEmpty)
+            ? sourceScriptFile
+            : _gameManager.currentScriptFile;
+    final scriptPath = await ScriptContentModifier.getCurrentScriptFilePath(
+      scriptFileForWrite,
+    );
+    if (scriptPath == null) {
+      return false;
+    }
+    final targetLine = _gameManager.currentDialogueSourceLine;
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionWheel: apply music -> script=$sourceScriptFile, line=$targetLine, music=$selectedMusic');
+    }
+    return ScriptContentModifier.modifyMusicNearDialogue(
+      scriptFilePath: scriptPath,
+      targetLineNumber: targetLine,
+      newMusic: selectedMusic,
+    );
+  }
+
   void _clearCommandMenuState() {
     _expressionWheelOpenTimer?.cancel();
     _setStateIfMounted(() {
       _showExpressionWheel = false;
       _showCharacterWheel = false;
       _showBackgroundGridMenu = false;
+      _showMusicGridMenu = false;
       _activeCommandMenuMode = null;
       _expressionWheelSpeakerInfo = null;
       _expressionWheelExpressions = const [];
@@ -1171,6 +1486,11 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       _backgroundGridOptions = const [];
       _backgroundGridCurrentId = null;
       _backgroundGridHighlightedId = null;
+      _musicGridOptions = const [];
+      _musicGridCurrentId = null;
+      _musicGridHighlightedId = null;
+      _musicGridOriginalAssetPath = null;
+      _musicPreviewPlayingId = null;
       _expressionWheelCenter = null;
     });
     if (kEngineDebugMode) {

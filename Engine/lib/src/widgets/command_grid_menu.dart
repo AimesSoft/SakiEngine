@@ -10,6 +10,7 @@ class CommandGridMenu extends StatefulWidget {
   final String? currentOptionId;
   final Offset center;
   final ValueChanged<String> onHighlightedOptionChanged;
+  final ValueChanged<String>? onOptionDoubleTap;
 
   const CommandGridMenu({
     super.key,
@@ -17,6 +18,7 @@ class CommandGridMenu extends StatefulWidget {
     required this.options,
     required this.center,
     required this.onHighlightedOptionChanged,
+    this.onOptionDoubleTap,
     this.currentOptionId,
     this.applyHint = 'Release Command To Apply',
   });
@@ -166,6 +168,15 @@ class _CommandGridMenuState extends State<CommandGridMenu> {
                                   });
                                   widget.onHighlightedOptionChanged(option.id);
                                 },
+                                onDoubleTap: () {
+                                  if (_highlightedId != option.id) {
+                                    setState(() {
+                                      _highlightedId = option.id;
+                                    });
+                                    widget.onHighlightedOptionChanged(option.id);
+                                  }
+                                  widget.onOptionDoubleTap?.call(option.id);
+                                },
                               );
                             },
                           ),
@@ -187,11 +198,13 @@ class _GridCell extends StatelessWidget {
   final CommandWheelOption option;
   final bool selected;
   final VoidCallback onHover;
+  final VoidCallback? onDoubleTap;
 
   const _GridCell({
     required this.option,
     required this.selected,
     required this.onHover,
+    this.onDoubleTap,
   });
 
   @override
@@ -202,6 +215,7 @@ class _GridCell extends StatelessWidget {
       child: GestureDetector(
         onTapDown: (_) => onHover(),
         onPanDown: (_) => onHover(),
+        onDoubleTap: onDoubleTap,
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 90),
