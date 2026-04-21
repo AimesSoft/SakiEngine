@@ -331,16 +331,22 @@ class FilterRenderer {
           }
         }
 
-        // 电视无信号风格：更重的雪花、偏冷色闪烁与明显模糊。
+        // 电视无信号风格：先铺纯色底，再叠加雪花与扫描线。
         final blurSigma = 1.6 + (animatedIntensity * 6.4);
         final overlayAlpha = 0.10 + (animatedIntensity * 0.30);
         final flicker =
             0.65 + 0.35 * (1 + math.sin((animationController?.value ?? 0.5) * 26 * math.pi)) / 2;
         final tintedAlpha = (overlayAlpha * flicker).clamp(0.0, 0.9);
+        final baseGray = (142 + (animatedIntensity * 38)).round().clamp(0, 255);
+        final baseBlue = (154 + (animatedIntensity * 46)).round().clamp(0, 255);
+        final baseColor = Color.fromARGB(255, baseGray, baseGray + 6, baseBlue);
 
         return Stack(
           children: [
             child,
+            Positioned.fill(
+              child: ColoredBox(color: baseColor),
+            ),
             Positioned.fill(
               child: BackdropFilter(
                 filter: ui.ImageFilter.blur(
