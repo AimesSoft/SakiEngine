@@ -312,6 +312,12 @@ class _SksCompiler {
     }
     if (node is SayNode) {
       return 'SayNode(character: ${_nullableString(node.character)}, dialogue: ${_str(node.dialogue)}, '
+          'dialogueTag: ${_nullableString(node.dialogueTag)}, '
+          'tailCharacter: ${_nullableString(node.tailCharacter)}, '
+          'tailPose: ${_nullableString(node.tailPose)}, '
+          'tailExpression: ${_nullableString(node.tailExpression)}, '
+          'sourceFile: ${_nullableString(node.sourceFile)}, '
+          'sourceLine: ${_nullableInt(node.sourceLine)}, '
           'pose: ${_nullableString(node.pose)}, expression: ${_nullableString(node.expression)}, '
           'position: ${_nullableString(node.position)}, animation: ${_nullableString(node.animation)}, '
           'repeatCount: ${_nullableInt(node.repeatCount)}, startExpression: ${_nullableString(node.startExpression)}, '
@@ -351,7 +357,8 @@ class _SksCompiler {
       return 'EndNvlMovieNode()';
     }
     if (node is FxNode) {
-      return 'FxNode(${_str(node.filterString)})';
+      return 'FxNode(${_str(node.filterString)}, sourceFile: ${_nullableString(node.sourceFile)}, '
+          'sourceLine: ${_nullableInt(node.sourceLine)})';
     }
     if (node is PlayMusicNode) {
       return 'PlayMusicNode(${_str(node.musicFile)})';
@@ -365,12 +372,21 @@ class _SksCompiler {
     if (node is StopSoundNode) {
       return 'StopSoundNode()';
     }
+    if (node is ApiCallNode) {
+      return 'ApiCallNode(${_str(node.apiName)}, parameters: ${_stringMap(node.parameters)})';
+    }
     if (node is BoolNode) {
       return 'BoolNode(${_str(node.variableName)}, ${node.value})';
     }
     if (node is ConditionalSayNode) {
       return 'ConditionalSayNode(dialogue: ${_str(node.dialogue)}, '
           'character: ${_nullableString(node.character)}, '
+          'dialogueTag: ${_nullableString(node.dialogueTag)}, '
+          'tailCharacter: ${_nullableString(node.tailCharacter)}, '
+          'tailPose: ${_nullableString(node.tailPose)}, '
+          'tailExpression: ${_nullableString(node.tailExpression)}, '
+          'sourceFile: ${_nullableString(node.sourceFile)}, '
+          'sourceLine: ${_nullableInt(node.sourceLine)}, '
           'conditionVariable: ${_str(node.conditionVariable)}, '
           'conditionValue: ${node.conditionValue}, '
           'pose: ${_nullableString(node.pose)}, expression: ${_nullableString(node.expression)}, '
@@ -408,6 +424,16 @@ class _SksCompiler {
       return '<String>[]';
     }
     return '<String>[${values.map(_str).join(', ')}]';
+  }
+
+  String _stringMap(Map<String, String> values) {
+    if (values.isEmpty) {
+      return '<String, String>{}';
+    }
+    final entries = values.entries
+        .map((entry) => '${_str(entry.key)}: ${_str(entry.value)}')
+        .join(', ');
+    return '<String, String>{$entries}';
   }
 
   String _doubleValue(double value) {

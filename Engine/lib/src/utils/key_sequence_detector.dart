@@ -298,7 +298,13 @@ class ScriptContentModifier {
     if (tokens.length < 2) {
       return false;
     }
-    final alias = tokens.first;
+    String alias;
+    if (tokens.length >= 3 && !tokens[1].toLowerCase().startsWith('pose')) {
+      // 兼容： "..." sad aru normal（前缀tag + 角色控制）
+      alias = tokens[1];
+    } else {
+      alias = tokens.first;
+    }
     return _isCharacterIdCompatible(
       lineCharacterId: alias,
       expectedCharacterId: expectedCharacterId,
@@ -324,7 +330,10 @@ class ScriptContentModifier {
       return '$quoted $characterId $pose $expression';
     }
 
-    final alias = tokens.first;
+    final hasLeadingTag =
+        tokens.length >= 3 && !tokens[1].toLowerCase().startsWith('pose');
+    final leadingTag = hasLeadingTag ? tokens.first : null;
+    final alias = hasLeadingTag ? tokens[1] : tokens.first;
     if (!_isCharacterIdCompatible(
       lineCharacterId: alias,
       expectedCharacterId: characterId,
@@ -332,7 +341,7 @@ class ScriptContentModifier {
       return line;
     }
 
-    final rest = tokens.sublist(1);
+    final rest = tokens.sublist(hasLeadingTag ? 2 : 1);
     String? pose;
     String? expression;
     if (rest.isNotEmpty) {
@@ -350,7 +359,11 @@ class ScriptContentModifier {
 
     final nextPose = newPose ?? pose;
     final nextExpression = newExpression ?? expression;
-    final nextTail = <String>[alias];
+    final nextTail = <String>[];
+    if (leadingTag != null && leadingTag.isNotEmpty) {
+      nextTail.add(leadingTag);
+    }
+    nextTail.add(alias);
     if (nextPose != null && nextPose.isNotEmpty) {
       nextTail.add(nextPose);
     }

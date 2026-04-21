@@ -180,29 +180,83 @@ class SksParser {
       );
     }
 
-    final tailCharacter = tokens[0];
-    String? tailPose;
-    String? tailExpression;
-    final rest = tokens.sublist(1);
-
-    if (rest.length == 1) {
-      // "..." aru normal
-      if (rest[0].toLowerCase().startsWith('pose')) {
-        tailPose = rest[0];
-      } else {
-        tailExpression = rest[0];
+    ({
+      String? tailCharacter,
+      String? tailPose,
+      String? tailExpression
+    }) parseTailControl(List<String> controlTokens) {
+      if (controlTokens.isEmpty) {
+        return (
+          tailCharacter: null,
+          tailPose: null,
+          tailExpression: null,
+        );
       }
-    } else {
-      // "..." aru pose1 normal（第三个及之后的token拼回expression，容错）
-      tailPose = rest[0];
-      tailExpression = rest.sublist(1).join('_');
+      final tailCharacter = controlTokens[0];
+      String? tailPose;
+      String? tailExpression;
+      final rest = controlTokens.sublist(1);
+
+      if (rest.length == 1) {
+        if (rest[0].toLowerCase().startsWith('pose')) {
+          tailPose = rest[0];
+        } else {
+          tailExpression = rest[0];
+        }
+      } else if (rest.length > 1) {
+        tailPose = rest[0];
+        tailExpression = rest.sublist(1).join('_');
+      }
+
+      return (
+        tailCharacter: tailCharacter,
+        tailPose: tailPose,
+        tailExpression: tailExpression,
+      );
     }
 
+    // 双 token 仅支持旧语法： "..." aru normal / "..." aru pose1
+    if (tokens.length == 2) {
+      final parsed = parseTailControl(tokens);
+      return (
+        dialogueTag: null,
+        tailCharacter: parsed.tailCharacter,
+        tailPose: parsed.tailPose,
+        tailExpression: parsed.tailExpression,
+      );
+    }
+
+    // 三个及以上 token：
+    // 1) 旧语法： "..." aru pose1 normal
+    // 2) 新语法： "..." sad aru normal（dialogueTag + 角色差分控制）
+    final secondTokenLooksLikePose = tokens[1].toLowerCase().startsWith('pose');
+    if (secondTokenLooksLikePose) {
+      final parsed = parseTailControl(tokens);
+      return (
+        dialogueTag: null,
+        tailCharacter: parsed.tailCharacter,
+        tailPose: parsed.tailPose,
+        tailExpression: parsed.tailExpression,
+      );
+    }
+
+    final dialogueTag = _extractDialogueTag(tokens[0]);
+    if (dialogueTag == null) {
+      final parsed = parseTailControl(tokens);
+      return (
+        dialogueTag: null,
+        tailCharacter: parsed.tailCharacter,
+        tailPose: parsed.tailPose,
+        tailExpression: parsed.tailExpression,
+      );
+    }
+
+    final parsed = parseTailControl(tokens.sublist(1));
     return (
-      dialogueTag: null,
-      tailCharacter: tailCharacter,
-      tailPose: tailPose,
-      tailExpression: tailExpression,
+      dialogueTag: dialogueTag,
+      tailCharacter: parsed.tailCharacter,
+      tailPose: parsed.tailPose,
+      tailExpression: parsed.tailExpression,
     );
   }
 
