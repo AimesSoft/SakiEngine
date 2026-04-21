@@ -948,12 +948,13 @@ class ScriptContentModifier {
     }
   }
 
-  /// 在当前对话附近最近的scene/movie命令上替换背景参数
+  /// 以当前对话行为锚点修改背景：
+  /// 1) 若目标行正上方连续命令块中存在scene/movie，则只替换该条；
+  /// 2) 否则在目标行前插入新的scene命令（不会改远处旧场景行）。
   static Future<bool> modifyBackgroundNearDialogue({
     required String scriptFilePath,
     required String newBackground,
     int? targetLineNumber,
-    int searchWindow = 120,
   }) async {
     try {
       final file = File(scriptFilePath);
@@ -966,51 +967,43 @@ class ScriptContentModifier {
         return false;
       }
 
-      int? targetIndex;
-      if (targetLineNumber != null &&
+      final hasAnchor = targetLineNumber != null &&
           targetLineNumber > 0 &&
-          targetLineNumber <= lines.length) {
-        targetIndex = targetLineNumber - 1;
-      }
+          targetLineNumber <= lines.length;
+      final targetIndex = hasAnchor ? targetLineNumber - 1 : lines.length;
 
-      int? bestIndex;
-      int bestDistance = 1 << 30;
-      if (targetIndex != null) {
-        final start = (targetIndex - searchWindow).clamp(0, lines.length - 1);
-        final end = (targetIndex + searchWindow).clamp(0, lines.length - 1);
-        for (int i = start; i <= end; i++) {
-          if (!_isSceneOrMovieLine(lines[i])) {
+      int? replaceIndex;
+      if (hasAnchor) {
+        // 只在当前对话上方紧邻命令块中寻找可替换scene/movie，避免误改远处已有场景。
+        for (int i = targetIndex - 1; i >= 0; i--) {
+          final trimmed = lines[i].trim();
+          if (trimmed.isEmpty) {
             continue;
           }
-          final distance = (i - targetIndex).abs();
-          if (distance < bestDistance) {
-            bestDistance = distance;
-            bestIndex = i;
+          if (trimmed.startsWith('//') || trimmed.startsWith('#')) {
+            continue;
           }
+          if (_isSceneOrMovieLine(trimmed)) {
+            replaceIndex = i;
+          }
+          break;
         }
       }
 
-      if (bestIndex == null) {
-        for (int i = lines.length - 1; i >= 0; i--) {
-          if (_isSceneOrMovieLine(lines[i])) {
-            bestIndex = i;
-            break;
-          }
+      if (replaceIndex != null) {
+        final originalLine = lines[replaceIndex];
+        final changed =
+            _modifySceneOrMovieBackground(originalLine.trim(), newBackground);
+        if (changed == originalLine.trim()) {
+          return false;
         }
+        lines[replaceIndex] =
+            originalLine.replaceFirst(originalLine.trim(), changed);
+      } else {
+        final insertAt = targetIndex.clamp(0, lines.length);
+        lines.insert(insertAt, 'scene $newBackground');
       }
 
-      if (bestIndex == null) {
-        return false;
-      }
-
-      final originalLine = lines[bestIndex];
-      final changed =
-          _modifySceneOrMovieBackground(originalLine.trim(), newBackground);
-      if (changed == originalLine.trim()) {
-        return false;
-      }
-      lines[bestIndex] =
-          originalLine.replaceFirst(originalLine.trim(), changed);
       await _writeScriptFile(file, lines.join('\n'));
       return true;
     } catch (e) {
@@ -1021,13 +1014,13 @@ class ScriptContentModifier {
     }
   }
 
-  /// 在当前对话附近最近的play music命令上替换音乐参数。
-  /// 若附近不存在play music，则在目标行前插入新的play music命令。
+  /// 以当前对话行为锚点修改音乐：
+  /// 1) 若目标行正上方连续命令块中存在play music，则只替换该条；
+  /// 2) 否则在目标行前插入新的play music（不会去改很远处旧命令）。
   static Future<bool> modifyMusicNearDialogue({
     required String scriptFilePath,
     required String newMusic,
     int? targetLineNumber,
-    int searchWindow = 120,
   }) async {
     try {
       final normalized = newMusic.trim();
@@ -1044,55 +1037,41 @@ class ScriptContentModifier {
         return false;
       }
 
-      int? targetIndex;
+      int targetIndex;
       if (targetLineNumber != null &&
           targetLineNumber > 0 &&
           targetLineNumber <= lines.length) {
         targetIndex = targetLineNumber - 1;
+      } else {
+        targetIndex = lines.length;
       }
 
-      int? bestIndex;
-      int bestDistance = 1 << 30;
-      if (targetIndex != null) {
-        final start = (targetIndex - searchWindow).clamp(0, lines.length - 1);
-        final end = (targetIndex + searchWindow).clamp(0, lines.length - 1);
-        for (int i = start; i <= end; i++) {
-          if (_isStopMusicLine(lines[i])) {
-            continue;
-          }
-          if (!_isPlayMusicLine(lines[i])) {
-            continue;
-          }
-          final distance = (i - targetIndex).abs();
-          if (distance < bestDistance) {
-            bestDistance = distance;
-            bestIndex = i;
-          }
+      // 只在目标行上方紧邻命令块里查找可替换的play music。
+      int? replaceIndex;
+      for (int i = targetIndex - 1; i >= 0; i--) {
+        final trimmed = lines[i].trim();
+        if (trimmed.isEmpty) {
+          continue;
         }
-      }
-
-      if (bestIndex == null) {
-        for (int i = lines.length - 1; i >= 0; i--) {
-          if (_isStopMusicLine(lines[i])) {
-            continue;
-          }
-          if (_isPlayMusicLine(lines[i])) {
-            bestIndex = i;
-            break;
-          }
+        if (trimmed.startsWith('//') || trimmed.startsWith('#')) {
+          continue;
         }
+        if (_isPlayMusicLine(trimmed)) {
+          replaceIndex = i;
+        }
+        break;
       }
 
-      if (bestIndex != null) {
-        final originalLine = lines[bestIndex];
+      if (replaceIndex != null) {
+        final originalLine = lines[replaceIndex];
         final trimmed = originalLine.trim();
         final changed = 'play music $normalized';
         if (trimmed == changed) {
           return false;
         }
-        lines[bestIndex] = originalLine.replaceFirst(trimmed, changed);
+        lines[replaceIndex] = originalLine.replaceFirst(trimmed, changed);
       } else {
-        final insertAt = targetIndex?.clamp(0, lines.length) ?? lines.length;
+        final insertAt = targetIndex.clamp(0, lines.length);
         lines.insert(insertAt, 'play music $normalized');
       }
 

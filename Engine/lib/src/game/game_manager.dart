@@ -1863,6 +1863,7 @@ class GameManager {
             node.expression ?? currentCharacterState.expression ?? 'happy';
 
         tempCharacters[finalCharacterKey] = currentCharacterState.copyWith(
+          resourceId: resourceId,
           pose: targetPose,
           expression: targetExpression,
           clearAnimationProperties: false,
@@ -1877,6 +1878,7 @@ class GameManager {
             .preload(resourceId, targetPose, targetExpression);
 
         newCharacters[finalCharacterKey] = currentCharacterState.copyWith(
+          resourceId: resourceId,
           pose: targetPose,
           expression: targetExpression,
           clearAnimationProperties: false,
@@ -2081,6 +2083,7 @@ class GameManager {
         CharacterState? currentCharacterState;
 
         if (node.character != null) {
+          final targetResourceId = characterConfig?.resourceId ?? node.character!;
           // 确定最终的角色key
           final finalCharacterKey = _resolveCharacterRenderKey(
             node.character,
@@ -2107,6 +2110,7 @@ class GameManager {
             }
 
             final updatedCharacter = currentCharacterState.copyWith(
+              resourceId: targetResourceId,
               pose: node.pose,
               expression: node.expression,
               positionId: node.position ??
@@ -2310,6 +2314,7 @@ class GameManager {
             _activeNvlContext == _NvlContextMode.none;
 
         if (node.character != null) {
+          final targetResourceId = characterConfig?.resourceId ?? node.character!;
           // 检查当前背景是否为CG，如果是CG则不更新角色立绘
           if (_isCurrentBackgroundCG()) {
             ////print('[GameManager] 当前背景为CG，跳过角色立绘更新');
@@ -2374,6 +2379,7 @@ class GameManager {
               }
 
               final updatedCharacter = currentCharacterState.copyWith(
+                resourceId: targetResourceId,
                 pose: node.pose,
                 expression: finalExpression,
                 positionId: node.position ??
@@ -4402,6 +4408,7 @@ class CharacterState {
   });
 
   CharacterState copyWith({
+    String? resourceId,
     String? pose,
     String? expression,
     String? positionId,
@@ -4410,7 +4417,7 @@ class CharacterState {
     bool? isFadingOut,
   }) {
     return CharacterState(
-      resourceId: resourceId,
+      resourceId: resourceId ?? this.resourceId,
       pose: pose ?? this.pose,
       expression: expression ?? this.expression,
       positionId: positionId ?? this.positionId,
