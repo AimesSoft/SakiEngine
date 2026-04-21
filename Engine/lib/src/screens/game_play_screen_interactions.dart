@@ -447,7 +447,8 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             }
             _clearCommandMenuState();
           } else {
-            if (_showMusicGridMenu && requestedMode != _CommandDebugMenuMode.music) {
+            if (_showMusicGridMenu &&
+                requestedMode != _CommandDebugMenuMode.music) {
               unawaited(_restoreMusicPreviewIfNeeded());
             }
             _clearCommandMenuState();
@@ -609,10 +610,9 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
   }
 
   Future<void> _openBackgroundGridIfPossible() async {
-    if (!_isMetaKeyPressed || !mounted) {
+    if (!mounted) {
       if (kEngineDebugMode) {
-        print(
-            'ExpressionWheel: background open aborted (metaPressed=$_isMetaKeyPressed, mounted=$mounted)');
+        print('ExpressionWheel: background open aborted (mounted=$mounted)');
       }
       return;
     }
@@ -632,7 +632,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     final current =
         _resolveCurrentBackgroundOptionId(options, currentBackground);
 
-    if (!mounted || !_isMetaKeyPressed) {
+    if (!mounted) {
       return;
     }
 
@@ -659,10 +659,9 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
   }
 
   Future<void> _openMusicGridIfPossible() async {
-    if (!_isMetaKeyPressed || !mounted) {
+    if (!mounted) {
       if (kEngineDebugMode) {
-        print(
-            'ExpressionWheel: music open aborted (metaPressed=$_isMetaKeyPressed, mounted=$mounted)');
+        print('ExpressionWheel: music open aborted (mounted=$mounted)');
       }
       return;
     }
@@ -681,7 +680,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     final currentMusic = MusicManager().currentBackgroundMusic ?? '';
     final current = _resolveCurrentMusicOptionId(options, currentMusic);
 
-    if (!mounted || !_isMetaKeyPressed) {
+    if (!mounted) {
       return;
     }
 

@@ -792,7 +792,8 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                                 _backgroundGridHighlightedId = optionId;
                               },
                               onOptionDoubleTap: (_) {
-                                unawaited(_applyBackgroundGridSelectionAndClose());
+                                unawaited(
+                                    _applyBackgroundGridSelectionAndClose());
                               },
                             ),
                           if (kEngineDebugMode &&

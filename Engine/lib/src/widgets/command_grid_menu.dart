@@ -79,10 +79,10 @@ class _CommandGridMenuState extends State<CommandGridMenu> {
           final size = constraints.biggest;
           final menuWidth = size.width.clamp(560.0, 880.0);
           final menuHeight = size.height.clamp(360.0, 620.0);
-          final left =
-              (widget.center.dx - menuWidth / 2).clamp(12.0, size.width - menuWidth - 12.0);
-          final top =
-              (widget.center.dy - menuHeight / 2).clamp(12.0, size.height - menuHeight - 12.0);
+          final left = (widget.center.dx - menuWidth / 2)
+              .clamp(12.0, size.width - menuWidth - 12.0);
+          final top = (widget.center.dy - menuHeight / 2)
+              .clamp(12.0, size.height - menuHeight - 12.0);
 
           return Stack(
             children: [
@@ -173,7 +173,8 @@ class _CommandGridMenuState extends State<CommandGridMenu> {
                                     setState(() {
                                       _highlightedId = option.id;
                                     });
-                                    widget.onHighlightedOptionChanged(option.id);
+                                    widget
+                                        .onHighlightedOptionChanged(option.id);
                                   }
                                   widget.onOptionDoubleTap?.call(option.id);
                                 },
@@ -240,15 +241,16 @@ class _GridCell extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                   child: Container(
                     color: const Color(0xFF151515),
-                    child: option.imagePath != null && option.imagePath!.isNotEmpty
-                        ? SmartImage.asset(
-                            option.imagePath!,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                            errorWidget: const _GridFallbackIcon(),
-                          )
-                        : const _GridFallbackIcon(),
+                    child:
+                        option.imagePath != null && option.imagePath!.isNotEmpty
+                            ? SmartImage.asset(
+                                option.imagePath!,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                                errorWidget: const _GridFallbackIcon(),
+                              )
+                            : const _GridFallbackIcon(),
                   ),
                 ),
               ),
