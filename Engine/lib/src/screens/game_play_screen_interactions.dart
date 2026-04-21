@@ -416,6 +416,26 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
           }
           return true;
         }
+        _expressionWheelOpenTimer?.cancel();
+        if (_showExpressionWheel) {
+          if (kEngineDebugMode) {
+            print('ExpressionWheel: keyUp apply expression selection');
+          }
+          unawaited(_applyExpressionWheelSelectionAndClose());
+        } else if (_showCharacterWheel) {
+          if (kEngineDebugMode) {
+            print('ExpressionWheel: keyUp apply character selection');
+          }
+          unawaited(_applyCharacterWheelSelectionAndClose());
+        } else if (_showBackgroundGridMenu || _showMusicGridMenu) {
+          // 背景/音乐改为“常驻+双击应用”，Meta松开不做自动应用。
+          if (kEngineDebugMode) {
+            print(
+                'ExpressionWheel: keyUp keep grid menu open (background/music persistent mode)');
+          }
+        } else {
+          _clearCommandMenuState();
+        }
         return true;
       }
     }
