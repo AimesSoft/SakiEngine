@@ -1084,6 +1084,8 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     final success =
         await _applyBackgroundChangeForCurrentDialogue(selectedBackground);
     if (success) {
+      // 先即时更新当前画面，再触发脚本热重载，避免“改了但仍显示旧背景”的感知延迟。
+      _gameManager.applyDebugBackgroundImmediately(selectedBackground);
       _showNotificationMessage('已切换背景: $selectedBackground');
       await _handleHotReload();
     } else {

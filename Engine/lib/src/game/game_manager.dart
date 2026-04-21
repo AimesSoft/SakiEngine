@@ -962,6 +962,35 @@ class GameManager {
   // 获取角色配置（用于表情选择器）
   Map<String, CharacterConfig> get characterConfigs => _characterConfigs;
 
+  /// Debug: 立即应用背景到当前运行时状态（不等待脚本推进到scene行）。
+  /// 主要用于开发者面板/命令轮盘的“边改边看”体验。
+  void applyDebugBackgroundImmediately(
+    String backgroundName, {
+    bool clearCharacters = false,
+  }) {
+    final normalized = backgroundName.trim();
+    if (normalized.isEmpty) {
+      return;
+    }
+    if (kEngineDebugMode) {
+      print('[GameManager] Debug即时切背景: $normalized');
+    }
+
+    _currentState = _currentState.copyWith(
+      background: normalized,
+      clearMovieFile: true,
+      clearSceneFilter: true,
+      clearSceneLayers: true,
+      clearSceneAnimation: true,
+      clearCgCharacters: true,
+      clearCharacters: clearCharacters,
+      clearDialogueAndSpeaker: false,
+      forceNullCurrentNode: true,
+      everShownCharacters: _everShownCharacters,
+    );
+    _gameStateController.add(_currentState);
+  }
+
   /// 分析脚本中CG差分的表达式变化
   /// 查找指定resourceId和pose在当前位置附近的所有表达式
   List<String> analyzeCgExpressions(String resourceId, String pose,
