@@ -223,6 +223,57 @@ class LongPressKeyDetector {
 /// 脚本内容修改器
 /// 负责修改脚本文件中的对话行，添加或更新角色差分信息
 class ScriptContentModifier {
+  static const String narratorCharacterId = '__narrator__';
+
+  static bool _isNarratorCharacterId(String? characterId) {
+    if (characterId == null) {
+      return true;
+    }
+    final normalized = characterId.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return true;
+    }
+    return normalized == narratorCharacterId || normalized == 'narrator';
+  }
+
+  static String _normalizeDialogueText(String text) {
+    final localized = ScriptTextLocalizer.resolve(text);
+    return localized
+        .replaceAll('"', '')
+        .replaceAll('「', '')
+        .replaceAll('」', '')
+        .trim();
+  }
+
+  static bool _lineHasTargetDialogue(String line, String targetDialogue) {
+    final trimmedLine = line.trim();
+    final quoteStart = trimmedLine.indexOf('"');
+    final quoteEnd = trimmedLine.lastIndexOf('"');
+    if (quoteStart >= 0 && quoteEnd > quoteStart) {
+      final dialogueContent = trimmedLine.substring(quoteStart + 1, quoteEnd);
+      return _normalizeDialogueText(dialogueContent) ==
+          _normalizeDialogueText(targetDialogue);
+    }
+    return false;
+  }
+
+  static bool _lineStartsWithCharacterToken(String line) {
+    final trimmed = line.trimLeft();
+    if (trimmed.isEmpty || trimmed.startsWith('"')) {
+      return false;
+    }
+    final quoteIndex = trimmed.indexOf('"');
+    if (quoteIndex <= 0) {
+      return false;
+    }
+    final beforeQuote = trimmed.substring(0, quoteIndex).trimRight();
+    if (beforeQuote.isEmpty) {
+      return false;
+    }
+    final token = beforeQuote.split(RegExp(r'\s+')).first;
+    return token.isNotEmpty;
+  }
+
   /// 修改脚本文件中的对话行，添加差分信息
   ///
   /// [scriptFilePath] 脚本文件的完整路径
@@ -306,24 +357,16 @@ class ScriptContentModifier {
       print('ScriptModifier: 期望角色ID: $expectedCharacterId');
     }
 
-    // 标准化对话文本 - 统一引号类型和去除引号
-    String normalizeDialogue(String text) {
-      final localized = ScriptTextLocalizer.resolve(text);
-      return localized
-          .replaceAll('"', '')
-          .replaceAll('「', '')
-          .replaceAll('」', '')
-          .trim();
-    }
+    final expectsNarration = _isNarratorCharacterId(expectedCharacterId);
 
     // 检查不同的对话格式
     // 格式1: "对话内容" - 只有在没有指定expectedCharacterId时才匹配
     if (trimmedLine.startsWith('"') &&
         trimmedLine.endsWith('"') &&
-        expectedCharacterId == null) {
+        expectsNarration) {
       final dialogueContent = trimmedLine.substring(1, trimmedLine.length - 1);
-      if (normalizeDialogue(dialogueContent) ==
-          normalizeDialogue(trimmedDialogue)) {
+      if (_normalizeDialogueText(dialogueContent) ==
+          _normalizeDialogueText(trimmedDialogue)) {
         if (kEngineDebugMode) {
           print('ScriptModifier: 匹配格式1（纯对话）');
         }
@@ -344,6 +387,14 @@ class ScriptContentModifier {
         }
 
         // 如果指定了expectedCharacterId，必须匹配
+        if (expectsNarration) {
+          if (kEngineDebugMode &&
+              line.contains(targetDialogue.replaceAll('"', ''))) {
+            print('ScriptModifier: 期望旁白行，但命中角色行，跳过');
+          }
+          return false;
+        }
+
         if (!_isCharacterIdCompatible(
           lineCharacterId: lineCharacterId,
           expectedCharacterId: expectedCharacterId,
@@ -365,16 +416,16 @@ class ScriptContentModifier {
               line.contains(targetDialogue.replaceAll('"', ''))) {
             print('ScriptModifier: 提取的对话内容: "$dialogueContent"');
             print(
-                'ScriptModifier: 标准化后的对话内容: "${normalizeDialogue(dialogueContent)}"');
+                'ScriptModifier: 标准化后的对话内容: "${_normalizeDialogueText(dialogueContent)}"');
             print(
-                'ScriptModifier: 标准化后的目标对话: "${normalizeDialogue(trimmedDialogue)}"');
+                'ScriptModifier: 标准化后的目标对话: "${_normalizeDialogueText(trimmedDialogue)}"');
             print(
-                'ScriptModifier: 是否匹配: ${normalizeDialogue(dialogueContent) == normalizeDialogue(trimmedDialogue)}');
+                'ScriptModifier: 是否匹配: ${_normalizeDialogueText(dialogueContent) == _normalizeDialogueText(trimmedDialogue)}');
           }
 
           // 使用标准化后的文本进行比较
-          if (normalizeDialogue(dialogueContent) ==
-              normalizeDialogue(trimmedDialogue)) {
+          if (_normalizeDialogueText(dialogueContent) ==
+              _normalizeDialogueText(trimmedDialogue)) {
             if (kEngineDebugMode) {
               print('ScriptModifier: 匹配格式2/3（角色+对话）');
             }
@@ -478,34 +529,59 @@ class ScriptContentModifier {
 
   static String _replaceLeadingCharacterId(
     String line,
-    String oldCharacterId,
+    String? oldCharacterId,
     String newCharacterId,
   ) {
     final trimmed = line.trim();
-    if (trimmed.isEmpty || trimmed.startsWith('"')) {
+    if (trimmed.isEmpty) {
       return line;
     }
+
+    final wantsNarration = _isNarratorCharacterId(newCharacterId);
+    final oldIsNarration = _isNarratorCharacterId(oldCharacterId);
+    final hasCharacterPrefix = _lineStartsWithCharacterToken(trimmed);
     final quoteIndex = trimmed.indexOf('"');
+    if (quoteIndex < 0) {
+      return line;
+    }
+
+    if (!hasCharacterPrefix) {
+      if (wantsNarration) {
+        return line;
+      }
+      final insertPrefix = '$newCharacterId ';
+      return '$insertPrefix$trimmed';
+    }
+
     if (quoteIndex <= 0) {
       return line;
     }
+
     final beforeQuote = trimmed.substring(0, quoteIndex).trimRight();
     final tokens = beforeQuote.split(RegExp(r'\s+'));
     if (tokens.isEmpty) {
       return line;
     }
     final lineCharacterId = tokens.first;
-    if (!_isCharacterIdCompatible(
-      lineCharacterId: lineCharacterId,
-      expectedCharacterId: oldCharacterId,
-    )) {
+
+    if (!oldIsNarration &&
+        !_isCharacterIdCompatible(
+          lineCharacterId: lineCharacterId,
+          expectedCharacterId: oldCharacterId,
+        )) {
       return line;
     }
-    final replacedPrefix = beforeQuote.replaceFirst(lineCharacterId, newCharacterId);
+
+    if (wantsNarration) {
+      return trimmed.substring(quoteIndex);
+    }
+    final replacedPrefix =
+        beforeQuote.replaceFirst(lineCharacterId, newCharacterId);
     return '$replacedPrefix${trimmed.substring(quoteIndex)}';
   }
 
-  static String _modifySceneOrMovieBackground(String line, String newBackground) {
+  static String _modifySceneOrMovieBackground(
+      String line, String newBackground) {
     final trimmed = line.trim();
     final prefix = trimmed.startsWith('scene ') ? 'scene ' : 'movie ';
     if (!trimmed.startsWith(prefix)) {
@@ -533,7 +609,8 @@ class ScriptContentModifier {
       }
     }
 
-    final tail = keywordIndex >= 0 ? tokens.sublist(keywordIndex).join(' ') : '';
+    final tail =
+        keywordIndex >= 0 ? tokens.sublist(keywordIndex).join(' ') : '';
     if (tail.isEmpty) {
       return '$prefix$newBackground';
     }
@@ -717,50 +794,125 @@ class ScriptContentModifier {
   static Future<bool> modifyDialogueCharacterWithPose({
     required String scriptFilePath,
     required String targetDialogue,
-    required String oldCharacterId,
+    String? oldCharacterId,
     required String newCharacterId,
     int? targetLineNumber,
   }) async {
     try {
+      if (kEngineDebugMode) {
+        print('ScriptModifier: 开始修改对话角色');
+        print('ScriptModifier: 文件路径: $scriptFilePath');
+        print('ScriptModifier: 目标对话: "$targetDialogue"');
+        print('ScriptModifier: 原角色ID: $oldCharacterId');
+        print('ScriptModifier: 新角色ID: $newCharacterId');
+        print('ScriptModifier: 目标行号: $targetLineNumber');
+      }
       final file = File(scriptFilePath);
       if (!await file.exists()) {
+        if (kEngineDebugMode) {
+          print('ScriptModifier: 文件不存在');
+        }
         return false;
       }
       final content = await file.readAsString();
       final lines = content.split('\n');
       bool modified = false;
+      final oldIsNarration = _isNarratorCharacterId(oldCharacterId);
+      final newIsNarration = _isNarratorCharacterId(newCharacterId);
+      final effectiveOldCharacterId = oldIsNarration ? null : oldCharacterId;
+
+      bool canModifyCandidateLine(String line) {
+        final hasDialogue = _lineHasTargetDialogue(line, targetDialogue);
+        if (!hasDialogue) {
+          return false;
+        }
+        final hasCharacter = _lineStartsWithCharacterToken(line);
+        if (!hasCharacter) {
+          if (newIsNarration) {
+            return false;
+          }
+          // 旁白行转角色：不依赖 oldCharacterId，直接允许。
+          return true;
+        }
+        if (newIsNarration) {
+          if (effectiveOldCharacterId == null ||
+              effectiveOldCharacterId.trim().isEmpty) {
+            return true;
+          }
+          final quoteIndex = line.trim().indexOf('"');
+          final beforeQuote = line.trim().substring(0, quoteIndex).trimRight();
+          final token = beforeQuote.split(RegExp(r'\s+')).first;
+          return _isCharacterIdCompatible(
+            lineCharacterId: token,
+            expectedCharacterId: effectiveOldCharacterId,
+          );
+        }
+
+        if (effectiveOldCharacterId == null ||
+            effectiveOldCharacterId.trim().isEmpty) {
+          return true;
+        }
+        final quoteIndex = line.trim().indexOf('"');
+        final beforeQuote = line.trim().substring(0, quoteIndex).trimRight();
+        final token = beforeQuote.split(RegExp(r'\s+')).first;
+        return _isCharacterIdCompatible(
+          lineCharacterId: token,
+          expectedCharacterId: effectiveOldCharacterId,
+        );
+      }
+
+      bool tryModifyAtIndex(int i, {String reason = ''}) {
+        if (i < 0 || i >= lines.length) {
+          return false;
+        }
+        final originalLine = lines[i];
+        final trimmedLine = originalLine.trim();
+        if (!canModifyCandidateLine(trimmedLine)) {
+          return false;
+        }
+        final changed = _replaceLeadingCharacterId(
+          trimmedLine,
+          effectiveOldCharacterId,
+          newCharacterId,
+        );
+        if (changed == trimmedLine) {
+          return false;
+        }
+        lines[i] = originalLine.replaceFirst(trimmedLine, changed);
+        if (kEngineDebugMode) {
+          print(
+              'ScriptModifier: 角色修改命中行 ${i + 1}${reason.isNotEmpty ? ' ($reason)' : ''}');
+          print('ScriptModifier: 原始行: $trimmedLine');
+          print('ScriptModifier: 修改后: $changed');
+        }
+        return true;
+      }
 
       if (targetLineNumber != null &&
           targetLineNumber > 0 &&
           targetLineNumber <= lines.length) {
         final idx = targetLineNumber - 1;
-        final originalLine = lines[idx];
-        final trimmedLine = originalLine.trim();
-        if (_isTargetDialogueLine(trimmedLine, targetDialogue, oldCharacterId)) {
-          final changed =
-              _replaceLeadingCharacterId(trimmedLine, oldCharacterId, newCharacterId);
-          if (changed != trimmedLine) {
-            lines[idx] = originalLine.replaceFirst(trimmedLine, changed);
-            modified = true;
-          }
-        }
+        modified = tryModifyAtIndex(idx, reason: 'exact-line');
 
         if (!modified) {
           const nearbyWindow = 24;
           final start = (idx - nearbyWindow).clamp(0, lines.length - 1);
           final end = (idx + nearbyWindow).clamp(0, lines.length - 1);
           for (int i = start; i <= end; i++) {
-            final originalLine = lines[i];
-            final trimmedLine = originalLine.trim();
-            if (!_isTargetDialogueLine(trimmedLine, targetDialogue, oldCharacterId)) {
+            if (i == idx) {
               continue;
             }
-            final changed = _replaceLeadingCharacterId(
-                trimmedLine, oldCharacterId, newCharacterId);
-            if (changed == trimmedLine) {
-              continue;
+            if (tryModifyAtIndex(i, reason: 'nearby-window')) {
+              modified = true;
+              break;
             }
-            lines[i] = originalLine.replaceFirst(trimmedLine, changed);
+          }
+        }
+      }
+
+      if (!modified) {
+        for (int i = 0; i < lines.length; i++) {
+          if (tryModifyAtIndex(i, reason: 'full-scan')) {
             modified = true;
             break;
           }
@@ -768,27 +920,15 @@ class ScriptContentModifier {
       }
 
       if (!modified) {
-        for (int i = 0; i < lines.length; i++) {
-          final originalLine = lines[i];
-          final trimmedLine = originalLine.trim();
-          if (!_isTargetDialogueLine(trimmedLine, targetDialogue, oldCharacterId)) {
-            continue;
-          }
-          final changed =
-              _replaceLeadingCharacterId(trimmedLine, oldCharacterId, newCharacterId);
-          if (changed == trimmedLine) {
-            continue;
-          }
-          lines[i] = originalLine.replaceFirst(trimmedLine, changed);
-          modified = true;
-          break;
+        if (kEngineDebugMode) {
+          print('ScriptModifier: 未找到可修改的目标对话行（角色切换）');
         }
-      }
-
-      if (!modified) {
         return false;
       }
       await _writeScriptFile(file, lines.join('\n'));
+      if (kEngineDebugMode) {
+        print('ScriptModifier: 成功保存修改的脚本文件（角色切换）');
+      }
       return true;
     } catch (e) {
       if (kEngineDebugMode) {
@@ -854,11 +994,13 @@ class ScriptContentModifier {
       }
 
       final originalLine = lines[bestIndex];
-      final changed = _modifySceneOrMovieBackground(originalLine.trim(), newBackground);
+      final changed =
+          _modifySceneOrMovieBackground(originalLine.trim(), newBackground);
       if (changed == originalLine.trim()) {
         return false;
       }
-      lines[bestIndex] = originalLine.replaceFirst(originalLine.trim(), changed);
+      lines[bestIndex] =
+          originalLine.replaceFirst(originalLine.trim(), changed);
       await _writeScriptFile(file, lines.join('\n'));
       return true;
     } catch (e) {

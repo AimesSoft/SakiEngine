@@ -2,6 +2,8 @@ part of 'game_play_screen.dart';
 
 extension _GamePlayScreenInteractions on _GamePlayScreenState {
   static const Duration _commandMenuOpenDelay = Duration(milliseconds: 120);
+  static const String _narratorWheelId =
+      ScriptContentModifier.narratorCharacterId;
 
   Future<void> _loadMouseRollbackBehavior() async {
     try {
@@ -443,25 +445,33 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       }
     }
 
-    if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
+    if (event is KeyRepeatEvent &&
         _isMetaKeyPressed &&
-        isCommandC) {
-      _activeCommandMenuMode = _CommandDebugMenuMode.character;
-      if (kEngineDebugMode) {
-        print('ExpressionWheel: switch mode -> character');
-      }
-      _scheduleCommandMenuOpen(_CommandDebugMenuMode.character);
+        (isCommandC || isCommandB)) {
       return true;
     }
 
-    if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
-        _isMetaKeyPressed &&
-        isCommandB) {
-      _activeCommandMenuMode = _CommandDebugMenuMode.background;
-      if (kEngineDebugMode) {
-        print('ExpressionWheel: switch mode -> background');
+    if (event is KeyDownEvent && _isMetaKeyPressed && isCommandC) {
+      if (_activeCommandMenuMode != _CommandDebugMenuMode.character ||
+          !_showCharacterWheel) {
+        _activeCommandMenuMode = _CommandDebugMenuMode.character;
+        if (kEngineDebugMode) {
+          print('ExpressionWheel: switch mode -> character');
+        }
+        _scheduleCommandMenuOpen(_CommandDebugMenuMode.character);
       }
-      _scheduleCommandMenuOpen(_CommandDebugMenuMode.background);
+      return true;
+    }
+
+    if (event is KeyDownEvent && _isMetaKeyPressed && isCommandB) {
+      if (_activeCommandMenuMode != _CommandDebugMenuMode.background ||
+          !_showBackgroundGridMenu) {
+        _activeCommandMenuMode = _CommandDebugMenuMode.background;
+        if (kEngineDebugMode) {
+          print('ExpressionWheel: switch mode -> background');
+        }
+        _scheduleCommandMenuOpen(_CommandDebugMenuMode.background);
+      }
       return true;
     }
 
@@ -574,7 +584,8 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       return;
     }
     final currentBackground = _gameManager.currentState.background ?? '';
-    final current = _resolveCurrentBackgroundOptionId(options, currentBackground);
+    final current =
+        _resolveCurrentBackgroundOptionId(options, currentBackground);
 
     if (!mounted || !_isMetaKeyPressed) {
       return;
@@ -815,7 +826,13 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     }
 
     options.sort((a, b) => a.label.compareTo(b.label));
-    return options;
+    return <CommandWheelOption>[
+      const CommandWheelOption(
+        id: _narratorWheelId,
+        label: '旁白',
+      ),
+      ...options,
+    ];
   }
 
   String? _resolveCharacterKeyByResourceId(String resourceId) {
@@ -868,6 +885,11 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
   String? _resolveCurrentCharacterWheelId(List<CommandWheelOption> options) {
     final currentSpeakerAlias = _gameManager.currentState.speakerAlias;
     final currentSpeakerName = _gameManager.currentState.speaker;
+    if ((currentSpeakerAlias == null || currentSpeakerAlias.isEmpty) &&
+        (currentSpeakerName == null || currentSpeakerName.isEmpty) &&
+        options.any((o) => o.id == _narratorWheelId)) {
+      return _narratorWheelId;
+    }
     if (currentSpeakerAlias != null &&
         currentSpeakerAlias.isNotEmpty &&
         options.any((o) => o.id == currentSpeakerAlias)) {
@@ -885,15 +907,24 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
   }
 
   Future<List<CommandWheelOption>> _buildBackgroundGridOptions() async {
-    final files = await AssetManager().listAssets('assets/images/backgrounds/', '');
-    final supported = <String>{'.png', '.jpg', '.jpeg', '.webp', '.avif', '.bmp'};
+    final files =
+        await AssetManager().listAssets('assets/images/backgrounds/', '');
+    final supported = <String>{
+      '.png',
+      '.jpg',
+      '.jpeg',
+      '.webp',
+      '.avif',
+      '.bmp'
+    };
     final options = <CommandWheelOption>[];
     for (final fileName in files) {
       final lower = fileName.toLowerCase();
       if (!supported.any((ext) => lower.endsWith(ext))) {
         continue;
       }
-      final base = fileName.substring(0, fileName.length - fileName.split('.').last.length - 1);
+      final base = fileName.substring(
+          0, fileName.length - fileName.split('.').last.length - 1);
       final resolved = await AssetManager().findAsset('backgrounds/$base');
       options.add(
         CommandWheelOption(
@@ -914,12 +945,8 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     if (currentBackgroundRaw.isEmpty) {
       return options.isNotEmpty ? options.first.id : null;
     }
-    final normalized = currentBackgroundRaw
-        .split('/')
-        .last
-        .split('.')
-        .first
-        .trim();
+    final normalized =
+        currentBackgroundRaw.split('/').last.split('.').first.trim();
     for (final option in options) {
       if (option.id == normalized ||
           option.id == currentBackgroundRaw ||
@@ -985,6 +1012,16 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
 
   Future<void> _applyCharacterWheelSelectionAndClose() async {
     final selectedCharacterKey = _characterWheelHighlightedId;
+    final currentCharacterKey = _characterWheelCurrentId;
+    String selectedLabel = selectedCharacterKey ?? '';
+    if (selectedCharacterKey != null) {
+      for (final option in _characterWheelOptions) {
+        if (option.id == selectedCharacterKey) {
+          selectedLabel = option.label;
+          break;
+        }
+      }
+    }
     _clearCommandMenuState();
     if (selectedCharacterKey == null || selectedCharacterKey.isEmpty) {
       if (kEngineDebugMode) {
@@ -992,10 +1029,17 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       }
       return;
     }
+    if (selectedCharacterKey == currentCharacterKey) {
+      if (kEngineDebugMode) {
+        print(
+            'ExpressionWheel: apply character skipped (selection unchanged: $selectedCharacterKey)');
+      }
+      return;
+    }
     final success =
         await _applyCharacterChangeForCurrentDialogue(selectedCharacterKey);
     if (success) {
-      _showNotificationMessage('已切换角色: $selectedCharacterKey');
+      _showNotificationMessage('已切换角色: $selectedLabel');
       await _handleHotReload();
     } else {
       _showNotificationMessage('角色切换失败');
@@ -1028,8 +1072,8 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         (sourceScriptFile != null && sourceScriptFile.trim().isNotEmpty)
             ? sourceScriptFile
             : _gameManager.currentScriptFile;
-    final scriptPath =
-        await ScriptContentModifier.getCurrentScriptFilePath(scriptFileForWrite);
+    final scriptPath = await ScriptContentModifier.getCurrentScriptFilePath(
+        scriptFileForWrite);
     if (scriptPath == null) {
       return false;
     }
@@ -1037,18 +1081,27 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     final targetDialogue = _gameManager.currentDialogueText;
     final targetLine = _gameManager.currentDialogueSourceLine;
     if (targetDialogue.trim().isEmpty) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: apply character aborted (empty dialogue)');
+      }
       return false;
     }
+    final writeCharacterId = selectedCharacterKey == _narratorWheelId
+        ? ScriptContentModifier.narratorCharacterId
+        : selectedCharacterKey;
     final currentSpeaker = _expressionSelectorManager?.getCurrentSpeakerInfo();
     final fallbackCharacter = currentSpeaker?.scriptCharacterKey ??
-        _gameManager.currentState.speakerAlias ??
-        selectedCharacterKey;
+        _gameManager.currentState.speakerAlias;
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionWheel: apply character -> sourceScript=$sourceScriptFile, line=$targetLine, oldCharacter=$fallbackCharacter, newCharacter=$writeCharacterId, dialogue="$targetDialogue"');
+    }
 
     return ScriptContentModifier.modifyDialogueCharacterWithPose(
       scriptFilePath: scriptPath,
       targetDialogue: targetDialogue,
       oldCharacterId: fallbackCharacter,
-      newCharacterId: selectedCharacterKey,
+      newCharacterId: writeCharacterId,
       targetLineNumber: targetLine,
     );
   }
@@ -1060,8 +1113,8 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         (sourceScriptFile != null && sourceScriptFile.trim().isNotEmpty)
             ? sourceScriptFile
             : _gameManager.currentScriptFile;
-    final scriptPath =
-        await ScriptContentModifier.getCurrentScriptFilePath(scriptFileForWrite);
+    final scriptPath = await ScriptContentModifier.getCurrentScriptFilePath(
+        scriptFileForWrite);
     if (scriptPath == null) {
       return false;
     }
