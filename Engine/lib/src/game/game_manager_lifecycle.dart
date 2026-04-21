@@ -287,6 +287,57 @@ extension _GameManagerLifecycle on GameManager {
         isFastForwarding: false, // 修复快进回退bug：强制设置为非快进状态
       );
 
+      // 热重载时会回放当前显示句；若该句已被改为旁白，需要回滚旧句对子立绘的副作用。
+      // 否则会出现“脚本已无说话人，但旧立绘仍停留”的状态残留。
+      if (_scriptIndex >= 0 && _scriptIndex < _script.children.length) {
+        final replayNode = _script.children[_scriptIndex];
+        if (replayNode is SayNode && replayNode.character == null) {
+          Map<String, CharacterState>? rollbackCharacters;
+
+          if (_savedSnapshot!.dialogueHistory.length >= 2) {
+            final previousDialogueState = _savedSnapshot!
+                .dialogueHistory[_savedSnapshot!.dialogueHistory.length - 2]
+                .stateSnapshot
+                .currentState;
+            rollbackCharacters = Map<String, CharacterState>.from(
+              previousDialogueState.characters,
+            );
+            if (kEngineDebugMode) {
+              print(
+                  '[GameManager] HotReload: narration replay detected, rollback characters from previous dialogue snapshot.');
+            }
+          } else {
+            // 历史不足时兜底：尝试移除旧的说话人立绘。
+            final previousSpeakerAlias =
+                _savedSnapshot!.currentState.speakerAlias;
+            if (previousSpeakerAlias != null &&
+                previousSpeakerAlias.isNotEmpty) {
+              final fallbackCharacters = Map<String, CharacterState>.from(
+                _savedSnapshot!.currentState.characters,
+              );
+              final speakerConfig = _characterConfigs[previousSpeakerAlias];
+              final speakerRenderKey = _resolveCharacterRenderKey(
+                previousSpeakerAlias,
+                characterConfig: speakerConfig,
+              );
+              fallbackCharacters.remove(speakerRenderKey);
+              rollbackCharacters = fallbackCharacters;
+              if (kEngineDebugMode) {
+                print(
+                    '[GameManager] HotReload: narration replay fallback, removed previous speaker render key=$speakerRenderKey.');
+              }
+            }
+          }
+
+          if (rollbackCharacters != null) {
+            _currentState = _currentState.copyWith(
+              characters: rollbackCharacters,
+              everShownCharacters: _everShownCharacters,
+            );
+          }
+        }
+      }
+
       // 设置NVL上下文模式
       _activeNvlContext = _savedSnapshot!.isNvlMode
           ? (_savedSnapshot!.isNvlMovieMode

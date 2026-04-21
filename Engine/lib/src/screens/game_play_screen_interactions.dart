@@ -907,8 +907,24 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
   }
 
   Future<List<CommandWheelOption>> _buildBackgroundGridOptions() async {
-    final files =
-        await AssetManager().listAssets('assets/images/backgrounds/', '');
+    const primaryDir = 'Assets/images/backgrounds/';
+    const legacyDir = 'assets/images/backgrounds/';
+    final files = await AssetManager().listAssets(primaryDir, '.png');
+    final imageFiles = <String>{
+      ...files,
+      ...await AssetManager().listAssets(primaryDir, '.jpg'),
+      ...await AssetManager().listAssets(primaryDir, '.jpeg'),
+      ...await AssetManager().listAssets(primaryDir, '.webp'),
+      ...await AssetManager().listAssets(primaryDir, '.avif'),
+      ...await AssetManager().listAssets(primaryDir, '.bmp'),
+      // 向后兼容旧写法，避免项目路径大小写/前缀差异导致扫空。
+      ...await AssetManager().listAssets(legacyDir, '.png'),
+      ...await AssetManager().listAssets(legacyDir, '.jpg'),
+      ...await AssetManager().listAssets(legacyDir, '.jpeg'),
+      ...await AssetManager().listAssets(legacyDir, '.webp'),
+      ...await AssetManager().listAssets(legacyDir, '.avif'),
+      ...await AssetManager().listAssets(legacyDir, '.bmp'),
+    };
     final supported = <String>{
       '.png',
       '.jpg',
@@ -917,8 +933,12 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       '.avif',
       '.bmp'
     };
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionWheel: background scan files=${imageFiles.length}, samples=${imageFiles.take(6).join(',')}');
+    }
     final options = <CommandWheelOption>[];
-    for (final fileName in files) {
+    for (final fileName in imageFiles) {
       final lower = fileName.toLowerCase();
       if (!supported.any((ext) => lower.endsWith(ext))) {
         continue;
@@ -926,6 +946,12 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       final base = fileName.substring(
           0, fileName.length - fileName.split('.').last.length - 1);
       final resolved = await AssetManager().findAsset('backgrounds/$base');
+      if (resolved == null || resolved.isEmpty) {
+        if (kEngineDebugMode) {
+          print('ExpressionWheel: background preview missing for $base');
+        }
+        continue;
+      }
       options.add(
         CommandWheelOption(
           id: base,

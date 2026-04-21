@@ -65,12 +65,14 @@ class GameScriptLocalization {
   /// 解析资源目录路径，返回按照语言优先级排列的候选目录列表。
   static List<String> resolveAssetDirectories(String originalDirectory,
       {SupportedLanguage? language}) {
-    if (!originalDirectory.startsWith(_baseAssetPrefix) ||
-        _isVariantPath(originalDirectory)) {
+    final normalizedOriginal = originalDirectory.replaceAll('\\', '/');
+    // 仅 GameScript 目录需要本地化回退；图片/音频等目录应保持原路径。
+    if (!normalizedOriginal.startsWith(_baseAssetPrefix) ||
+        _isVariantPath(normalizedOriginal)) {
       return [originalDirectory];
     }
 
-    final suffix = originalDirectory.substring(_baseAssetPrefix.length);
+    final suffix = normalizedOriginal.substring(_baseAssetPrefix.length);
     final candidates = <String>[];
     final seen = <String>{};
     for (final directory in candidateDirectories(language: language)) {
