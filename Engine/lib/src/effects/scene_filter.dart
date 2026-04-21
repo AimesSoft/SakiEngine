@@ -22,13 +22,37 @@ class SceneFilter {
   final double intensity;
   final AnimationType animation;
   final double duration;
+  final Color? color;
 
   const SceneFilter({
     required this.type,
     this.intensity = 0.5,
     this.animation = AnimationType.none,
     this.duration = 3.0,
+    this.color,
   });
+
+  static Color? _parseColorValue(String raw) {
+    var value = raw.trim();
+    if (value.isEmpty) {
+      return null;
+    }
+    if (value.startsWith('#')) {
+      value = value.substring(1);
+    } else if (value.startsWith('0x') || value.startsWith('0X')) {
+      value = value.substring(2);
+    }
+    if (value.length == 6) {
+      value = 'FF$value';
+    } else if (value.length != 8) {
+      return null;
+    }
+    final parsed = int.tryParse(value, radix: 16);
+    if (parsed == null) {
+      return null;
+    }
+    return Color(parsed);
+  }
 
   static SceneFilter? fromString(String filterString) {
     final parts = filterString.split(' ').where((s) => s.isNotEmpty).toList();
@@ -59,6 +83,7 @@ class SceneFilter {
     double intensity = 0.5;
     AnimationType animation = AnimationType.pulse; // 默认使用脉冲动画
     double duration = 3.0;
+    Color? color;
 
     for (int i = 1; i < parts.length; i++) {
       final part = parts[i];
@@ -88,6 +113,9 @@ class SceneFilter {
         if (value != null && value > 0) {
           duration = value;
         }
+      } else if (part.startsWith('color:') || part.startsWith('basecolor:')) {
+        final value = part.substring(part.indexOf(':') + 1);
+        color = _parseColorValue(value) ?? color;
       }
     }
 
@@ -96,6 +124,7 @@ class SceneFilter {
       intensity: intensity,
       animation: animation,
       duration: duration,
+      color: color,
     );
   }
 }
@@ -339,7 +368,13 @@ class FilterRenderer {
         final tintedAlpha = (overlayAlpha * flicker).clamp(0.0, 0.9);
         final baseGray = (142 + (animatedIntensity * 38)).round().clamp(0, 255);
         final baseBlue = (154 + (animatedIntensity * 46)).round().clamp(0, 255);
-        final baseColor = Color.fromARGB(255, baseGray, baseGray + 6, baseBlue);
+        final defaultBaseColor = Color.fromARGB(
+          255,
+          baseGray,
+          (baseGray + 6).clamp(0, 255),
+          baseBlue,
+        );
+        final baseColor = filter.color ?? defaultBaseColor;
 
         return Stack(
           children: [
