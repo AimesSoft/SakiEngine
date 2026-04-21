@@ -94,6 +94,10 @@ class GamePlayScreen extends StatefulWidget {
 
 class _GamePlayScreenState extends State<GamePlayScreen>
     with TickerProviderStateMixin, GameFlowchartMixin {
+  static const bool _fxDiagLogs = bool.fromEnvironment(
+    'SAKI_FX_DIAG',
+    defaultValue: true,
+  );
   late final GameManager _gameManager;
   late final DialogueProgressionManager _dialogueProgressionManager;
   final _gameUILayerKey = GlobalKey<GameUILayerState>();
@@ -138,6 +142,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   List<CommandWheelOption> _characterWheelOptions = const [];
   String? _characterWheelCurrentId;
   String? _characterWheelHighlightedId;
+  String? _lastSceneFilterDiagSignature;
   List<CommandWheelOption> _backgroundGridOptions = const [];
   String? _backgroundGridCurrentId;
   String? _backgroundGridHighlightedId;
@@ -640,109 +645,113 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   enabled: _isParallaxEnabled,
                   child: RepaintBoundary(
                     key: _saveThumbnailCaptureBoundaryKey,
-                    child: RightClickUIManager(
-                      // 背景层 - 不会被隐藏的内容（场景、角色等）
-                      backgroundChild: _buildSceneWithFilter(gameState),
-                      // 左键点击回调 - 推进剧情
-                      onLeftClick: () {
-                        // 检查是否有弹窗或菜单显示
-                        final hasOverlayOpen = _isShowingMenu ||
-                            _showSaveOverlay ||
-                            _showLoadOverlay ||
-                            _showReviewOverlay ||
-                            _showSettings ||
-                            _showDeveloperPanel ||
-                            _showDebugPanel ||
-                            _showExpressionSelector ||
-                            _isAnyCommandMenuOpen;
+                    child: Stack(
+                      children: [
+                        RightClickUIManager(
+                          // 背景层 - 不会被隐藏的内容（场景、角色等）
+                          backgroundChild: _buildSceneWithFilter(gameState),
+                          // 左键点击回调 - 推进剧情
+                          onLeftClick: () {
+                            // 检查是否有弹窗或菜单显示
+                            final hasOverlayOpen = _isShowingMenu ||
+                                _showSaveOverlay ||
+                                _showLoadOverlay ||
+                                _showReviewOverlay ||
+                                _showSettings ||
+                                _showDeveloperPanel ||
+                                _showDebugPanel ||
+                                _showExpressionSelector ||
+                                _isAnyCommandMenuOpen;
 
-                        // 检查是否正在播放视频
-                        final isPlayingMovie = gameState.movieFile != null;
+                            // 检查是否正在播放视频
+                            final isPlayingMovie = gameState.movieFile != null;
 
-                        // 只有在没有弹窗且没有播放视频时才推进剧情
-                        if (!hasOverlayOpen && !isPlayingMovie) {
-                          _dialogueProgressionManager.progressDialogue();
-                          // 通知自动播放管理器有手动推进
-                          _autoPlayManager?.onManualProgress();
-                        }
-                      },
-                      // UI层 - 使用GameUILayer组件
-                      child: Stack(
-                        children: [
-                          GameUILayer(
-                            key: _gameUILayerKey,
-                            gameState: gameState,
-                            gameManager: _gameManager,
-                            gameModule:
-                                widget.gameModule ?? DefaultGameModule(),
-                            dialogueProgressionManager:
-                                _dialogueProgressionManager,
-                            currentScript: _currentScript,
-                            nvlScreenKey: _nvlScreenKey,
-                            showReviewOverlay: _showReviewOverlay,
-                            enableReviewOverscrollClose:
-                                _mouseRollbackBehavior == 'history' &&
-                                    _reviewOpenedByMouseRollback,
-                            showSaveOverlay: _showSaveOverlay,
-                            showLoadOverlay: _showLoadOverlay,
-                            showSettings: _showSettings,
-                            showFlowchart: _showFlowchart,
-                            showDeveloperPanel: _showDeveloperPanel,
-                            showDebugPanel: _showDebugPanel,
-                            showExpressionSelector: _showExpressionSelector,
-                            isShowingMenu: _isShowingMenu,
-                            onToggleReview: _toggleReviewOverlay,
-                            onToggleSave: _toggleSaveOverlayForCapture,
-                            onToggleLoad: () {
-                              _toggleLoadOverlayForCapture();
-                            },
-                            onQuickSave: _handleQuickSave, // 新增：快速存档回调
-                            onToggleSettings: () {
-                              _toggleSettingsOverlayForCapture();
-                            },
-                            onToggleDeveloperPanel: () => setState(
-                              () => _showDeveloperPanel = !_showDeveloperPanel,
-                            ),
-                            onToggleDebugPanel: () => setState(
-                              () => _showDebugPanel = !_showDebugPanel,
-                            ),
-                            onToggleExpressionSelector: () => setState(
-                              () => _showExpressionSelector =
-                                  !_showExpressionSelector,
-                            ),
-                            onHandleQuickMenuBack: _handleQuickMenuBack,
-                            onHandlePreviousDialogue: _handlePreviousDialogue,
-                            onSkipRead: _handleSkipReadText, // 新增：跳过已读文本回调
-                            onAutoPlay: _handleAutoPlay, // 新增：自动播放回调
-                            onThemeToggle: () =>
-                                setState(() {}), // 新增：主题切换回调 - 触发重建以更新UI
-                            onFlowchart: () => setState(
-                              () => _showFlowchart = !_showFlowchart,
-                            ), // 新增：流程图回调
-                            onJumpToHistoryEntry: _jumpToHistoryEntry,
-                            onLoadGame: (saveSlot) {
-                              // 在当前GamePlayScreen中恢复存档，而不是创建新实例
-                              _currentScript = saveSlot.currentScript;
-                              _gameManager.restoreFromSnapshot(
-                                saveSlot.currentScript,
-                                saveSlot.snapshot,
-                                shouldReExecute: false,
-                              );
-                              _showNotificationMessage('读档成功');
-                              // 关闭流程图
-                              setState(() => _showFlowchart = false);
-                            },
-                            onProgressDialogue: () =>
-                                _dialogueProgressionManager.progressDialogue(),
-                            expressionSelectorManager:
-                                _expressionSelectorManager,
-                            createDialogueBox: _createDialogueBox,
-                          ),
-                          if (kEngineDebugMode &&
-                              _showExpressionWheel &&
-                              _expressionWheelSpeakerInfo != null &&
-                              _expressionWheelExpressions.isNotEmpty)
-                            ExpressionRadialWheel(
+                            // 只有在没有弹窗且没有播放视频时才推进剧情
+                            if (!hasOverlayOpen && !isPlayingMovie) {
+                              _dialogueProgressionManager.progressDialogue();
+                              // 通知自动播放管理器有手动推进
+                              _autoPlayManager?.onManualProgress();
+                            }
+                          },
+                          // UI层 - 使用GameUILayer组件
+                          child: Stack(
+                            children: [
+                              GameUILayer(
+                                key: _gameUILayerKey,
+                                gameState: gameState,
+                                gameManager: _gameManager,
+                                gameModule:
+                                    widget.gameModule ?? DefaultGameModule(),
+                                dialogueProgressionManager:
+                                    _dialogueProgressionManager,
+                                currentScript: _currentScript,
+                                nvlScreenKey: _nvlScreenKey,
+                                showReviewOverlay: _showReviewOverlay,
+                                enableReviewOverscrollClose:
+                                    _mouseRollbackBehavior == 'history' &&
+                                        _reviewOpenedByMouseRollback,
+                                showSaveOverlay: _showSaveOverlay,
+                                showLoadOverlay: _showLoadOverlay,
+                                showSettings: _showSettings,
+                                showFlowchart: _showFlowchart,
+                                showDeveloperPanel: _showDeveloperPanel,
+                                showDebugPanel: _showDebugPanel,
+                                showExpressionSelector: _showExpressionSelector,
+                                isShowingMenu: _isShowingMenu,
+                                onToggleReview: _toggleReviewOverlay,
+                                onToggleSave: _toggleSaveOverlayForCapture,
+                                onToggleLoad: () {
+                                  _toggleLoadOverlayForCapture();
+                                },
+                                onQuickSave: _handleQuickSave, // 新增：快速存档回调
+                                onToggleSettings: () {
+                                  _toggleSettingsOverlayForCapture();
+                                },
+                                onToggleDeveloperPanel: () => setState(
+                                  () => _showDeveloperPanel = !_showDeveloperPanel,
+                                ),
+                                onToggleDebugPanel: () => setState(
+                                  () => _showDebugPanel = !_showDebugPanel,
+                                ),
+                                onToggleExpressionSelector: () => setState(
+                                  () => _showExpressionSelector =
+                                      !_showExpressionSelector,
+                                ),
+                                onHandleQuickMenuBack: _handleQuickMenuBack,
+                                onHandlePreviousDialogue:
+                                    _handlePreviousDialogue,
+                                onSkipRead: _handleSkipReadText, // 新增：跳过已读文本回调
+                                onAutoPlay: _handleAutoPlay, // 新增：自动播放回调
+                                onThemeToggle: () =>
+                                    setState(() {}), // 新增：主题切换回调 - 触发重建以更新UI
+                                onFlowchart: () => setState(
+                                  () => _showFlowchart = !_showFlowchart,
+                                ), // 新增：流程图回调
+                                onJumpToHistoryEntry: _jumpToHistoryEntry,
+                                onLoadGame: (saveSlot) {
+                                  // 在当前GamePlayScreen中恢复存档，而不是创建新实例
+                                  _currentScript = saveSlot.currentScript;
+                                  _gameManager.restoreFromSnapshot(
+                                    saveSlot.currentScript,
+                                    saveSlot.snapshot,
+                                    shouldReExecute: false,
+                                  );
+                                  _showNotificationMessage('读档成功');
+                                  // 关闭流程图
+                                  setState(() => _showFlowchart = false);
+                                },
+                                onProgressDialogue: () =>
+                                    _dialogueProgressionManager
+                                        .progressDialogue(),
+                                expressionSelectorManager:
+                                    _expressionSelectorManager,
+                                createDialogueBox: _createDialogueBox,
+                              ),
+                              if (kEngineDebugMode &&
+                                  _showExpressionWheel &&
+                                  _expressionWheelSpeakerInfo != null &&
+                                  _expressionWheelExpressions.isNotEmpty)
+                                ExpressionRadialWheel(
                               characterName:
                                   _expressionWheelSpeakerInfo!.speakerName,
                               currentExpression: _expressionWheelSpeakerInfo!
@@ -819,32 +828,47 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                                 unawaited(_applyMusicGridSelectionAndClose());
                               },
                             ),
-                          if (kEngineDebugMode && _showFloatingScriptEditor)
-                            FloatingScriptEditorOverlay(
-                              gameManager: _gameManager,
-                              currentScript: _currentScript,
-                              onReload: _handleHotReload,
-                              onNotify: _showNotificationMessage,
-                              onClose: () => _setStateIfMounted(
-                                () => _showFloatingScriptEditor = false,
+                              if (kEngineDebugMode && _showFloatingScriptEditor)
+                                FloatingScriptEditorOverlay(
+                                  gameManager: _gameManager,
+                                  currentScript: _currentScript,
+                                  onReload: _handleHotReload,
+                                  onNotify: _showNotificationMessage,
+                                  onClose: () => _setStateIfMounted(
+                                    () => _showFloatingScriptEditor = false,
+                                  ),
+                                ),
+                              // 加载淡出覆盖层 - 不会被隐藏
+                              AnimatedBuilder(
+                                animation: _loadingFadeAnimation,
+                                builder: (context, child) {
+                                  if (_loadingFadeAnimation.value <= 0.0) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return ColoredBox(
+                                    color: Colors.black.withOpacity(
+                                      _loadingFadeAnimation.value,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        // 全局 scene filter 覆盖层：当模块禁用默认背景时启用，
+                        // 覆盖 UI + 背景，作为全屏后处理。
+                        if (gameState.sceneFilter != null &&
+                            !(widget.gameModule ?? DefaultGameModule())
+                                .shouldRenderDefaultSceneBackground(gameState))
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: _FilteredBackground(
+                                filter: gameState.sceneFilter!,
+                                child: const SizedBox.expand(),
                               ),
                             ),
-                          // 加载淡出覆盖层 - 不会被隐藏
-                          AnimatedBuilder(
-                            animation: _loadingFadeAnimation,
-                            builder: (context, child) {
-                              if (_loadingFadeAnimation.value <= 0.0) {
-                                return const SizedBox.shrink();
-                              }
-                              return ColoredBox(
-                                color: Colors.black.withOpacity(
-                                  _loadingFadeAnimation.value,
-                                ),
-                              );
-                            },
                           ),
-                        ],
-                      ),
+                      ],
                     ),
                   ),
                 );
@@ -879,6 +903,31 @@ class _GamePlayScreenState extends State<GamePlayScreen>
     );
     final shouldRenderDefaultSceneBackground =
         module.shouldRenderDefaultSceneBackground(gameState);
+    if (_fxDiagLogs) {
+      final filter = gameState.sceneFilter;
+      final signature =
+          '${module.runtimeType}|$shouldRenderDefaultSceneBackground|${gameState.background}|'
+          '${filter?.type}|${filter?.intensity}|${filter?.animation}|${filter?.duration}|'
+          '${customSceneBaseLayer?.runtimeType}|${sceneAttachmentLayer?.runtimeType}';
+      if (_lastSceneFilterDiagSignature != signature) {
+        _lastSceneFilterDiagSignature = signature;
+        debugPrint(
+          '[FX_DIAG] Scene build '
+          'module=${module.runtimeType} '
+          'defaultBg=$shouldRenderDefaultSceneBackground '
+          'background=${gameState.background} '
+          'filter=${filter?.type}/${filter?.intensity}/${filter?.animation}/${filter?.duration} '
+          'customBase=${customSceneBaseLayer?.runtimeType} '
+          'attachment=${sceneAttachmentLayer?.runtimeType}',
+        );
+        if (filter != null && !shouldRenderDefaultSceneBackground) {
+          debugPrint(
+            '[FX_DIAG] Scene build note: default background is disabled; '
+            'filter only works if custom scene layer applies it explicitly.',
+          );
+        }
+      }
+    }
 
     return SimpleShakeWrapper(
       trigger: gameState.isShaking &&
@@ -1457,6 +1506,12 @@ class _FilteredBackgroundState extends State<_FilteredBackground>
   @override
   void initState() {
     super.initState();
+    if (_GamePlayScreenState._fxDiagLogs) {
+      debugPrint(
+        '[FX_DIAG] _FilteredBackground init '
+        'filter=${widget.filter.type}/${widget.filter.intensity}/${widget.filter.animation}/${widget.filter.duration}',
+      );
+    }
     _animationController = AnimationController(
       duration: Duration(milliseconds: (widget.filter.duration * 1000).round()),
       vsync: this,
@@ -1471,6 +1526,13 @@ class _FilteredBackgroundState extends State<_FilteredBackground>
   void didUpdateWidget(_FilteredBackground oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.filter != widget.filter) {
+      if (_GamePlayScreenState._fxDiagLogs) {
+        debugPrint(
+          '[FX_DIAG] _FilteredBackground update '
+          'old=${oldWidget.filter.type}/${oldWidget.filter.intensity}/${oldWidget.filter.animation}/${oldWidget.filter.duration} '
+          'new=${widget.filter.type}/${widget.filter.intensity}/${widget.filter.animation}/${widget.filter.duration}',
+        );
+      }
       _animationController.duration = Duration(
         milliseconds: (widget.filter.duration * 1000).round(),
       );

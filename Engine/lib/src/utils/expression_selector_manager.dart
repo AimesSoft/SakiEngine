@@ -89,19 +89,9 @@ class ExpressionSelectorManager {
   /// 请求显示表情选择器（需要调用方进行状态检查）
   void _requestShowExpressionSelector() {
     try {
-      // 获取当前游戏状态
-      final gameStateValue = getCurrentGameState();
-      if (gameStateValue == null ||
-          gameStateValue.speaker == null ||
-          gameStateValue.speaker!.isEmpty) {
-        showNotificationCallback('没有当前说话角色');
-        return;
-      }
-
-      // 查找当前说话角色的信息
-      final speakerInfo = _findCurrentSpeakerInfo(gameStateValue);
+      final speakerInfo = getCurrentSpeakerInfo();
       if (speakerInfo == null) {
-        showNotificationCallback('无法找到角色信息: ${gameStateValue.speaker}');
+        showNotificationCallback('没有当前可操作立绘');
         return;
       }
 
@@ -124,13 +114,48 @@ class ExpressionSelectorManager {
   /// 获取当前说话角色信息
   SpeakerInfo? getCurrentSpeakerInfo() {
     final gameStateValue = getCurrentGameState();
-    if (gameStateValue == null ||
-        gameStateValue.speaker == null ||
-        gameStateValue.speaker!.isEmpty) {
+    if (gameStateValue == null) {
+      if (kEngineDebugMode) {
+        print('ExpressionSelector: getCurrentSpeakerInfo -> state is null');
+      }
       return null;
     }
+    final speaker = (gameStateValue.speaker as String?)?.trim();
+    final speakerAlias = (gameStateValue.speakerAlias as String?)?.trim();
+    final characterCount = (gameStateValue.characters as Map).length;
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionSelector: resolve speaker info speaker=$speaker, speakerAlias=$speakerAlias, characters=$characterCount');
+    }
 
-    return _findCurrentSpeakerInfo(gameStateValue);
+    if (speaker != null && speaker.isNotEmpty) {
+      final current = _findCurrentSpeakerInfo(gameStateValue);
+      if (current != null) {
+        if (kEngineDebugMode) {
+          print('ExpressionSelector: branch=current-speaker');
+        }
+        return current;
+      }
+    }
+
+    final tail = _findTailSpeakerInfo(gameStateValue);
+    if (tail != null) {
+      if (kEngineDebugMode) {
+        print('ExpressionSelector: branch=speaker-alias/tail');
+      }
+      return tail;
+    }
+
+    final fallback = _findOnStageFallbackSpeakerInfo(gameStateValue);
+    if (kEngineDebugMode) {
+      if (fallback == null) {
+        print('ExpressionSelector: branch=fallback-onstage -> none');
+      } else {
+        print(
+            'ExpressionSelector: branch=fallback-onstage -> ${fallback.scriptCharacterKey}/${fallback.characterId}');
+      }
+    }
+    return fallback;
   }
 
   /// 查找当前说话角色的信息
@@ -210,6 +235,111 @@ class ExpressionSelectorManager {
     }
 
     return null;
+  }
+
+  SpeakerInfo? _findTailSpeakerInfo(dynamic gameState) {
+    final tailAliasRaw = gameState.speakerAlias as String?;
+    final tailAlias = tailAliasRaw?.trim();
+    if (tailAlias == null || tailAlias.isEmpty) {
+      if (kEngineDebugMode) {
+        print('ExpressionSelector: tail speaker alias is empty');
+      }
+      return null;
+    }
+
+    final characterConfigs = gameManager.characterConfigs;
+    final cfg = characterConfigs[tailAlias];
+    final targetResourceId = cfg?.resourceId ?? tailAlias;
+
+    for (final entry in gameState.characters.entries) {
+      final state = entry.value;
+      final resourceId = state.resourceId as String;
+      if (resourceId == 'narrator' || state.isFadingOut == true) {
+        continue;
+      }
+      final matchByResource = resourceId == targetResourceId;
+      final matchByKey = entry.key == _targetAliasOrSlot(tailAlias, cfg);
+      if (!matchByResource && !matchByKey) {
+        continue;
+      }
+      return SpeakerInfo(
+        characterId: resourceId,
+        speakerName: cfg?.name ?? tailAlias,
+        currentPose: state.pose ?? 'pose1',
+        currentExpression: state.expression ?? 'happy',
+        scriptCharacterKey: tailAlias,
+      );
+    }
+
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionSelector: tail alias not found on stage alias=$tailAlias, targetResource=$targetResourceId');
+    }
+    return null;
+  }
+
+  SpeakerInfo? _findOnStageFallbackSpeakerInfo(dynamic gameState) {
+    final characterConfigs = gameManager.characterConfigs;
+    for (final entry in gameState.characters.entries) {
+      final state = entry.value;
+      final resourceId = state.resourceId as String;
+      if (resourceId == 'narrator' || state.isFadingOut == true) {
+        continue;
+      }
+
+      final scriptKey = _inferScriptCharacterKey(
+        entryKey: entry.key.toString(),
+        resourceId: resourceId,
+      );
+      final config = characterConfigs[scriptKey];
+      return SpeakerInfo(
+        characterId: resourceId,
+        speakerName: config?.name ?? scriptKey,
+        currentPose: state.pose ?? 'pose1',
+        currentExpression: state.expression ?? 'happy',
+        scriptCharacterKey: scriptKey,
+      );
+    }
+    return null;
+  }
+
+  String _inferScriptCharacterKey({
+    required String entryKey,
+    required String resourceId,
+  }) {
+    final characterConfigs = gameManager.characterConfigs;
+
+    if (characterConfigs.containsKey(entryKey)) {
+      return entryKey;
+    }
+
+    for (final cfgEntry in characterConfigs.entries) {
+      final alias = cfgEntry.key;
+      final cfg = cfgEntry.value;
+      if (_targetAliasOrSlot(alias, cfg) == entryKey) {
+        return alias;
+      }
+    }
+
+    for (final cfgEntry in characterConfigs.entries) {
+      if (cfgEntry.value.resourceId == resourceId) {
+        return cfgEntry.key;
+      }
+    }
+
+    return resourceId;
+  }
+
+  String _targetAliasOrSlot(String alias, dynamic cfg) {
+    final slotId = cfg?.slotId?.toString().trim();
+    if (slotId != null && slotId.isNotEmpty) {
+      return 'slot:$slotId';
+    }
+    final resourceId = cfg?.resourceId?.toString().trim();
+    if (resourceId != null && resourceId.isNotEmpty) {
+      return resourceId;
+    }
+    return alias;
   }
 
   /// 处理表情选择变更

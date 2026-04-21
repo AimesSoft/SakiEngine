@@ -95,6 +95,9 @@ class SayNode implements SksNode {
   final String? character;
   final String dialogue;
   final String? dialogueTag; // 对话行尾的扩展 token（项目层可自定义语义）
+  final String? tailCharacter; // 旁白行引号后角色控制：例如 "..." aru normal
+  final String? tailPose; // 旁白行尾部控制pose（可选）
+  final String? tailExpression; // 旁白行尾部控制expression（可选）
   final String? sourceFile; // 源脚本文件（不含扩展名）
   final int? sourceLine; // 源脚本行号（1-based）
   final String? pose;
@@ -110,6 +113,9 @@ class SayNode implements SksNode {
     this.character,
     required this.dialogue,
     this.dialogueTag,
+    this.tailCharacter,
+    this.tailPose,
+    this.tailExpression,
     this.sourceFile,
     this.sourceLine,
     this.pose,
@@ -172,7 +178,9 @@ class EndNvlMovieNode implements SksNode {}
 
 class FxNode implements SksNode {
   final String filterString;
-  FxNode(this.filterString);
+  final String? sourceFile; // 源脚本文件（不含扩展名）
+  final int? sourceLine; // 源脚本行号（1-based）
+  FxNode(this.filterString, {this.sourceFile, this.sourceLine});
 }
 
 class PlayMusicNode implements SksNode {
@@ -212,6 +220,9 @@ class ConditionalSayNode implements SksNode {
   final String dialogue;
   final String? character;
   final String? dialogueTag; // 对话行尾的扩展 token（项目层可自定义语义）
+  final String? tailCharacter; // 旁白行引号后角色控制：例如 "..." aru normal
+  final String? tailPose; // 旁白行尾部控制pose（可选）
+  final String? tailExpression; // 旁白行尾部控制expression（可选）
   final String? sourceFile; // 源脚本文件（不含扩展名）
   final int? sourceLine; // 源脚本行号（1-based）
   final String conditionVariable;
@@ -226,6 +237,9 @@ class ConditionalSayNode implements SksNode {
     required this.dialogue,
     this.character,
     this.dialogueTag,
+    this.tailCharacter,
+    this.tailPose,
+    this.tailExpression,
     this.sourceFile,
     this.sourceLine,
     required this.conditionVariable,

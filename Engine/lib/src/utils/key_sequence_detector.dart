@@ -274,6 +274,92 @@ class ScriptContentModifier {
     return token.isNotEmpty;
   }
 
+  static List<String> _tailTokensFromNarrationLine(String line) {
+    final trimmed = line.trim();
+    if (!trimmed.startsWith('"')) {
+      return const [];
+    }
+    final quoteEnd = trimmed.lastIndexOf('"');
+    if (quoteEnd <= 0 || quoteEnd >= trimmed.length - 1) {
+      return const [];
+    }
+    final tail = trimmed.substring(quoteEnd + 1).trim();
+    if (tail.isEmpty) {
+      return const [];
+    }
+    return tail.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
+  }
+
+  static bool _isNarrationTailLineForCharacter(
+    String line,
+    String? expectedCharacterId,
+  ) {
+    final tokens = _tailTokensFromNarrationLine(line);
+    if (tokens.length < 2) {
+      return false;
+    }
+    final alias = tokens.first;
+    return _isCharacterIdCompatible(
+      lineCharacterId: alias,
+      expectedCharacterId: expectedCharacterId,
+    );
+  }
+
+  static String _modifyNarrationTailLine(
+    String line,
+    String characterId,
+    String? newPose,
+    String? newExpression,
+  ) {
+    final trimmed = line.trim();
+    final quoteEnd = trimmed.lastIndexOf('"');
+    if (quoteEnd <= 0) {
+      return line;
+    }
+    final quoted = trimmed.substring(0, quoteEnd + 1);
+    final tokens = _tailTokensFromNarrationLine(trimmed);
+    if (tokens.isEmpty) {
+      final pose = newPose ?? 'pose1';
+      final expression = newExpression ?? 'normal';
+      return '$quoted $characterId $pose $expression';
+    }
+
+    final alias = tokens.first;
+    if (!_isCharacterIdCompatible(
+      lineCharacterId: alias,
+      expectedCharacterId: characterId,
+    )) {
+      return line;
+    }
+
+    final rest = tokens.sublist(1);
+    String? pose;
+    String? expression;
+    if (rest.isNotEmpty) {
+      if (rest.length == 1) {
+        if (rest[0].toLowerCase().startsWith('pose')) {
+          pose = rest[0];
+        } else {
+          expression = rest[0];
+        }
+      } else {
+        pose = rest[0];
+        expression = rest[1];
+      }
+    }
+
+    final nextPose = newPose ?? pose;
+    final nextExpression = newExpression ?? expression;
+    final nextTail = <String>[alias];
+    if (nextPose != null && nextPose.isNotEmpty) {
+      nextTail.add(nextPose);
+    }
+    if (nextExpression != null && nextExpression.isNotEmpty) {
+      nextTail.add(nextExpression);
+    }
+    return '$quoted ${nextTail.join(' ')}';
+  }
+
   /// 修改脚本文件中的对话行，添加差分信息
   ///
   /// [scriptFilePath] 脚本文件的完整路径
@@ -361,16 +447,32 @@ class ScriptContentModifier {
 
     // 检查不同的对话格式
     // 格式1: "对话内容" - 只有在没有指定expectedCharacterId时才匹配
-    if (trimmedLine.startsWith('"') &&
-        trimmedLine.endsWith('"') &&
-        expectsNarration) {
-      final dialogueContent = trimmedLine.substring(1, trimmedLine.length - 1);
-      if (_normalizeDialogueText(dialogueContent) ==
-          _normalizeDialogueText(trimmedDialogue)) {
-        if (kEngineDebugMode) {
-          print('ScriptModifier: 匹配格式1（纯对话）');
+    if (trimmedLine.startsWith('"')) {
+      final quoteEnd = trimmedLine.lastIndexOf('"');
+      if (quoteEnd > 0) {
+        final dialogueContent = trimmedLine.substring(1, quoteEnd);
+        if (_normalizeDialogueText(dialogueContent) ==
+            _normalizeDialogueText(trimmedDialogue)) {
+          if (_isNarratorCharacterId(expectedCharacterId)) {
+            if (kEngineDebugMode) {
+              final hasTail = quoteEnd < trimmedLine.length - 1;
+              print(hasTail
+                  ? 'ScriptModifier: 匹配格式1b（旁白+尾语法）'
+                  : 'ScriptModifier: 匹配格式1（纯对话）');
+            }
+            return true;
+          }
+          if (_isNarrationTailLineForCharacter(trimmedLine, expectedCharacterId)) {
+            if (kEngineDebugMode) {
+              print('ScriptModifier: 匹配格式1c（尾语法角色对话）');
+            }
+            return true;
+          }
+          if (kEngineDebugMode) {
+            print('ScriptModifier: 匹配格式1d（纯旁白，允许补尾语法）');
+          }
+          return true;
         }
-        return true;
       }
     }
 
@@ -465,6 +567,7 @@ class ScriptContentModifier {
   static String _modifyDialogueLine(
       String line, String characterId, String? newPose, String? newExpression) {
     final trimmedLine = line.trim();
+    final wantsNarration = _isNarratorCharacterId(characterId);
     final parts = trimmedLine.split(' ');
     final lineCharacterId = trimmedLine.contains('"') &&
             !trimmedLine.startsWith('"') &&
@@ -510,9 +613,25 @@ class ScriptContentModifier {
 
     // 如果是纯对话格式，添加角色、pose和表情信息
     if (trimmedLine.startsWith('"') && trimmedLine.endsWith('"')) {
+      if (wantsNarration) {
+        return trimmedLine;
+      }
       final pose = newPose ?? 'pose1';
       final expression = newExpression ?? 'normal';
-      return '$writeCharacterId $pose $expression $trimmedLine';
+      return '$trimmedLine $writeCharacterId $pose $expression';
+    }
+
+    if (trimmedLine.startsWith('"')) {
+      if (!wantsNarration) {
+        final pose = newPose ?? 'pose1';
+        final expression = newExpression ?? 'normal';
+        return '$trimmedLine $writeCharacterId $pose $expression';
+      }
+      final modifiedNarrationTail = _modifyNarrationTailLine(
+          trimmedLine, characterId, newPose, newExpression);
+      if (modifiedNarrationTail != trimmedLine) {
+        return modifiedNarrationTail;
+      }
     }
 
     // 其他情况，尝试智能添加

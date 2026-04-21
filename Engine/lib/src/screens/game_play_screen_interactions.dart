@@ -757,9 +757,11 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     final speakerInfo = manager.getCurrentSpeakerInfo();
     if (speakerInfo == null) {
       if (kEngineDebugMode) {
-        print('ExpressionWheel: no current speaker');
+        final state = _gameManager.currentState;
+        print(
+            'ExpressionWheel: no target speaker (speaker=${state.speaker}, speakerAlias=${state.speakerAlias}, characters=${state.characters.keys.join(',')})');
       }
-      _showNotificationMessage('没有当前说话角色');
+      _showNotificationMessage('没有当前可操作立绘');
       return;
     }
     if (kEngineDebugMode) {

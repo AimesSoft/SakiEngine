@@ -131,6 +131,81 @@ class SksParser {
     return null;
   }
 
+  ({
+    String? dialogueTag,
+    String? tailCharacter,
+    String? tailPose,
+    String? tailExpression
+  }) _parseDialogueTail(String? rawTail) {
+    final tail = rawTail?.trim() ?? '';
+    if (tail.isEmpty) {
+      return (
+        dialogueTag: null,
+        tailCharacter: null,
+        tailPose: null,
+        tailExpression: null,
+      );
+    }
+
+    final tokens =
+        tail.split(RegExp(r'\s+')).where((s) => s.trim().isNotEmpty).toList();
+    if (tokens.isEmpty) {
+      return (
+        dialogueTag: null,
+        tailCharacter: null,
+        tailPose: null,
+        tailExpression: null,
+      );
+    }
+
+    bool isToken(String value) => RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(value);
+    final allTokensValid = tokens.every(isToken);
+    if (!allTokensValid) {
+      return (
+        dialogueTag: null,
+        tailCharacter: null,
+        tailPose: null,
+        tailExpression: null,
+      );
+    }
+
+    // 兼容旧语法：单token仅作为dialogueTag，避免破坏既有项目语义（如头像tag）。
+    if (tokens.length == 1) {
+      final tag = _extractDialogueTag(tokens[0]);
+      return (
+        dialogueTag: tag,
+        tailCharacter: null,
+        tailPose: null,
+        tailExpression: null,
+      );
+    }
+
+    final tailCharacter = tokens[0];
+    String? tailPose;
+    String? tailExpression;
+    final rest = tokens.sublist(1);
+
+    if (rest.length == 1) {
+      // "..." aru normal
+      if (rest[0].toLowerCase().startsWith('pose')) {
+        tailPose = rest[0];
+      } else {
+        tailExpression = rest[0];
+      }
+    } else {
+      // "..." aru pose1 normal（第三个及之后的token拼回expression，容错）
+      tailPose = rest[0];
+      tailExpression = rest.sublist(1).join('_');
+    }
+
+    return (
+      dialogueTag: null,
+      tailCharacter: tailCharacter,
+      tailPose: tailPose,
+      tailExpression: tailExpression,
+    );
+  }
+
   Map<String, String> _parseApiParameters(String rawParams) {
     final params = <String, String>{};
     if (rawParams.trim().isEmpty) {
@@ -752,7 +827,11 @@ class SksParser {
           break;
         case 'fx':
           final filterString = parts.sublist(1).join(' ');
-          nodes.add(FxNode(filterString));
+          nodes.add(FxNode(
+            filterString,
+            sourceFile: _activeSourceFile,
+            sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
+          ));
           break;
         case 'play':
           _logMusicParse(
@@ -889,7 +968,7 @@ class SksParser {
 
     // 检查是否是时序差分切换语法: x [wakuwaku2,0.5,think] "我去。"
     final timedExpressionRegex = RegExp(
-      r'^(\w+)\s*\[([^,]+),([^,]+),([^\]]+)\]\s*"([^"]*)"(?:\s+([A-Za-z0-9_-]+))?\s*$',
+      r'^(\w+)\s*\[([^,]+),([^,]+),([^\]]+)\]\s*"([^"]*)"(?:\s+(.*))?\s*$',
     );
     final timedMatch = timedExpressionRegex.firstMatch(processedLine);
 
@@ -899,7 +978,7 @@ class SksParser {
       final delayStr = timedMatch.group(3)!.trim();
       final endExpression = timedMatch.group(4)!.trim();
       final dialogue = timedMatch.group(5)!;
-      final dialogueTag = _extractDialogueTag(timedMatch.group(6));
+      final tailMeta = _parseDialogueTail(timedMatch.group(6));
 
       final switchDelay = double.tryParse(delayStr);
       if (switchDelay == null || switchDelay <= 0) {
@@ -912,7 +991,10 @@ class SksParser {
       return SayNode(
         character: character,
         dialogue: _formatDialogueWithQuotes(dialogue, character),
-        dialogueTag: dialogueTag,
+        dialogueTag: tailMeta.dialogueTag,
+        tailCharacter: tailMeta.tailCharacter,
+        tailPose: tailMeta.tailPose,
+        tailExpression: tailMeta.tailExpression,
         sourceFile: _activeSourceFile,
         sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
         startExpression: startExpression,
@@ -924,14 +1006,14 @@ class SksParser {
     // 条件对话，支持可选行尾 tag：
     // xxx "dialogue" [tag] if var true/false
     final conditionalRegex = RegExp(
-      r'^(.*?)\s*"([^"]+)"(?:\s+([A-Za-z0-9_-]+))?\s+if\s+(\w+)\s+(true|false)\s*$',
+      r'^(.*?)\s*"([^"]+)"(?:\s+(.*?))?\s+if\s+(\w+)\s+(true|false)\s*$',
     );
     final conditionalMatch = conditionalRegex.firstMatch(processedLine);
 
     if (conditionalMatch != null) {
       final beforeQuote = conditionalMatch.group(1)!.trim();
       final dialogue = conditionalMatch.group(2)!;
-      final dialogueTag = _extractDialogueTag(conditionalMatch.group(3));
+      final tailMeta = _parseDialogueTail(conditionalMatch.group(3));
       final variableName = conditionalMatch.group(4)!;
       final conditionValue = conditionalMatch.group(5)! == 'true';
 
@@ -1023,7 +1105,10 @@ class SksParser {
       return ConditionalSayNode(
         dialogue: _formatDialogueWithQuotes(dialogue, character),
         character: character,
-        dialogueTag: dialogueTag,
+        dialogueTag: tailMeta.dialogueTag,
+        tailCharacter: tailMeta.tailCharacter,
+        tailPose: tailMeta.tailPose,
+        tailExpression: tailMeta.tailExpression,
         sourceFile: _activeSourceFile,
         sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
         conditionVariable: variableName,
@@ -1043,19 +1128,21 @@ class SksParser {
     // 1: 可选角色及属性
     // 2: 对话文本
     // 3: 可选行尾 tag
-    final sayRegex = RegExp(r'^(.*?)\s*"([^"]*)"(?:\s+([A-Za-z0-9_-]+))?\s*$');
+    final sayRegex = RegExp(r'^(.*?)\s*"([^"]*)"(?:\s+(.*))?\s*$');
     final match = sayRegex.firstMatch(processedLine);
 
     if (match == null) {
       // Simple narration check for lines that are just "dialogue"
-      final simpleNarrationRegex =
-          RegExp(r'^"([^"]*)"(?:\s+([A-Za-z0-9_-]+))?\s*$');
+      final simpleNarrationRegex = RegExp(r'^"([^"]*)"(?:\s+(.*))?\s*$');
       final simpleMatch = simpleNarrationRegex.firstMatch(processedLine);
       if (simpleMatch != null) {
-        final dialogueTag = _extractDialogueTag(simpleMatch.group(2));
+        final tailMeta = _parseDialogueTail(simpleMatch.group(2));
         return SayNode(
           dialogue: _formatDialogueWithQuotes(simpleMatch.group(1)!, null),
-          dialogueTag: dialogueTag,
+          dialogueTag: tailMeta.dialogueTag,
+          tailCharacter: tailMeta.tailCharacter,
+          tailPose: tailMeta.tailPose,
+          tailExpression: tailMeta.tailExpression,
           sourceFile: _activeSourceFile,
           sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
         );
@@ -1064,14 +1151,17 @@ class SksParser {
     }
 
     final dialogue = match.group(2)!;
-    final dialogueTag = _extractDialogueTag(match.group(3));
+    final tailMeta = _parseDialogueTail(match.group(3));
     final beforeQuote = match.group(1)!.trim();
 
     if (beforeQuote.isEmpty) {
       // Narration: "dialogue"
       return SayNode(
         dialogue: _formatDialogueWithQuotes(dialogue, null),
-        dialogueTag: dialogueTag,
+        dialogueTag: tailMeta.dialogueTag,
+        tailCharacter: tailMeta.tailCharacter,
+        tailPose: tailMeta.tailPose,
+        tailExpression: tailMeta.tailExpression,
         sourceFile: _activeSourceFile,
         sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
       );
@@ -1159,7 +1249,10 @@ class SksParser {
       return SayNode(
           character: character,
           dialogue: _formatDialogueWithQuotes(dialogue, character),
-          dialogueTag: dialogueTag,
+          dialogueTag: tailMeta.dialogueTag,
+          tailCharacter: tailMeta.tailCharacter,
+          tailPose: tailMeta.tailPose,
+          tailExpression: tailMeta.tailExpression,
           sourceFile: _activeSourceFile,
           sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
           pose: pose,
@@ -1172,7 +1265,10 @@ class SksParser {
     return SayNode(
         character: character,
         dialogue: _formatDialogueWithQuotes(dialogue, character),
-        dialogueTag: dialogueTag,
+        dialogueTag: tailMeta.dialogueTag,
+        tailCharacter: tailMeta.tailCharacter,
+        tailPose: tailMeta.tailPose,
+        tailExpression: tailMeta.tailExpression,
         sourceFile: _activeSourceFile,
         sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
         pose: pose,

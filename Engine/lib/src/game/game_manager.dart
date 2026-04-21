@@ -133,6 +133,10 @@ class GameManager {
     'SAKI_MUSIC_REGION_LOG',
     defaultValue: false,
   );
+  static const bool _fxDiagLogs = bool.fromEnvironment(
+    'SAKI_FX_DIAG',
+    defaultValue: true,
+  );
 
   final _gameStateController = StreamController<GameState>.broadcast();
   Stream<GameState> get gameStateStream => _gameStateController.stream;
@@ -1062,6 +1066,59 @@ class GameManager {
     return characterAlias;
   }
 
+  MapEntry<String, CharacterState>? _resolveTailTargetCharacterState(
+      String targetAlias) {
+    final config = _characterConfigs[targetAlias];
+    final targetKey =
+        _resolveCharacterRenderKey(targetAlias, characterConfig: config);
+    final direct = _currentState.characters[targetKey];
+    if (direct != null) {
+      return MapEntry<String, CharacterState>(targetKey, direct);
+    }
+
+    final expectedResourceId = config?.resourceId;
+    if (expectedResourceId != null && expectedResourceId.isNotEmpty) {
+      for (final entry in _currentState.characters.entries) {
+        if (entry.value.resourceId == expectedResourceId) {
+          return entry;
+        }
+      }
+    }
+    return null;
+  }
+
+  bool _applyNarrationTailCharacterDiff({
+    required String targetAlias,
+    String? pose,
+    String? expression,
+  }) {
+    final target = _resolveTailTargetCharacterState(targetAlias);
+    if (target == null) {
+      return false;
+    }
+
+    final targetKey = target.key;
+    final targetState = target.value;
+    final nextPose = pose ?? targetState.pose ?? 'pose1';
+    final nextExpression = expression ?? targetState.expression ?? 'normal';
+    final newCharacters = Map.of(_currentState.characters);
+    newCharacters[targetKey] = targetState.copyWith(
+      pose: nextPose,
+      expression: nextExpression,
+      clearAnimationProperties: false,
+    );
+    _currentState = _currentState.copyWith(
+      characters: newCharacters,
+      everShownCharacters: _everShownCharacters,
+    );
+    _gameStateController.add(_currentState);
+    if (kEngineDebugMode) {
+      print(
+          'GameManager: narration-tail apply target=$targetAlias key=$targetKey pose=$nextPose expression=$nextExpression');
+    }
+    return true;
+  }
+
   // 快进模式控制
   bool get isFastForwardMode => _isFastForwardMode;
   void setFastForwardMode(bool enabled) {
@@ -1577,6 +1634,13 @@ class GameManager {
             _script.children[nextIndex] is FxNode) {
           final fxNode = _script.children[nextIndex] as FxNode;
           sceneFilter = SceneFilter.fromString(fxNode.filterString);
+          if (_fxDiagLogs) {
+            debugPrint(
+              '[FX_DIAG] BackgroundNode(next FxNode) index=$nextIndex '
+              'source=${fxNode.sourceFile ?? "unknown"}:${fxNode.sourceLine ?? -1} '
+              'raw="${fxNode.filterString}" parsed=${sceneFilter?.type}/${sceneFilter?.intensity}/${sceneFilter?.animation}/${sceneFilter?.duration}',
+            );
+          }
         }
 
         // 检查是否是游戏开始时的初始背景设置
@@ -2068,6 +2132,7 @@ class GameManager {
 
       if (node is ConditionalSayNode) {
         final resolvedDialogue = _resolveScriptText(node.dialogue);
+        final tailSpeakerAlias = node.tailCharacter?.trim();
         // 检查条件是否满足
         final currentValue = GlobalVariableManager()
             .getBoolVariableSync(node.conditionVariable, defaultValue: false);
@@ -2083,7 +2148,8 @@ class GameManager {
         CharacterState? currentCharacterState;
 
         if (node.character != null) {
-          final targetResourceId = characterConfig?.resourceId ?? node.character!;
+          final targetResourceId =
+              characterConfig?.resourceId ?? node.character!;
           // 确定最终的角色key
           final finalCharacterKey = _resolveCharacterRenderKey(
             node.character,
@@ -2182,6 +2248,12 @@ class GameManager {
                   repeatCount: node.repeatCount);
             }
           }
+        } else if (tailSpeakerAlias != null && tailSpeakerAlias.isNotEmpty) {
+          _applyNarrationTailCharacterDiff(
+            targetAlias: tailSpeakerAlias,
+            pose: node.tailPose,
+            expression: node.tailExpression,
+          );
         }
 
         // 在 NVL 或 NVLN 模式下的特殊处理
@@ -2192,7 +2264,7 @@ class GameManager {
           }
           final newNvlDialogue = NvlDialogue(
             speaker: characterConfig?.name,
-            speakerAlias: node.character, // 新增：传递角色简写
+            speakerAlias: node.character ?? tailSpeakerAlias, // 新增：传递角色简写
             dialogue: resolvedDialogue,
             dialogueTag: node.dialogueTag,
             timestamp: DateTime.now(),
@@ -2250,7 +2322,7 @@ class GameManager {
               dialogue: resolvedDialogue,
               dialogueTag: node.dialogueTag,
               speaker: characterConfig?.name,
-              speakerAlias: node.character, // 传入角色简写
+              speakerAlias: node.character ?? tailSpeakerAlias, // 传入角色简写
               currentNode: null,
               clearDialogueAndSpeaker: false,
               forceNullSpeaker: node.character == null,
@@ -2306,6 +2378,7 @@ class GameManager {
         ////print('[GameManager] 处理SayNode: character=${node.character}, pose=${node.pose}, expression=${node.expression}, animation=${node.animation}');
         final resolvedDialogue = _resolveScriptText(node.dialogue);
         final characterConfig = _characterConfigs[node.character];
+        final tailSpeakerAlias = node.tailCharacter?.trim();
         ////print('[GameManager] 角色配置: $characterConfig');
         CharacterState? currentCharacterState;
         final followingMenuNodeIndex =
@@ -2314,7 +2387,8 @@ class GameManager {
             _activeNvlContext == _NvlContextMode.none;
 
         if (node.character != null) {
-          final targetResourceId = characterConfig?.resourceId ?? node.character!;
+          final targetResourceId =
+              characterConfig?.resourceId ?? node.character!;
           // 检查当前背景是否为CG，如果是CG则不更新角色立绘
           if (_isCurrentBackgroundCG()) {
             ////print('[GameManager] 当前背景为CG，跳过角色立绘更新');
@@ -2474,6 +2548,12 @@ class GameManager {
               }
             }
           }
+        } else if (tailSpeakerAlias != null && tailSpeakerAlias.isNotEmpty) {
+          _applyNarrationTailCharacterDiff(
+            targetAlias: tailSpeakerAlias,
+            pose: node.tailPose,
+            expression: node.tailExpression,
+          );
         }
 
         // 在 NVL 或 NVLN 模式下的特殊处理
@@ -2484,7 +2564,7 @@ class GameManager {
           }
           final newNvlDialogue = NvlDialogue(
             speaker: characterConfig?.name,
-            speakerAlias: node.character, // 新增：传递角色简写
+            speakerAlias: node.character ?? tailSpeakerAlias, // 新增：传递角色简写
             dialogue: resolvedDialogue,
             dialogueTag: node.dialogueTag,
             timestamp: DateTime.now(),
@@ -2544,7 +2624,7 @@ class GameManager {
               dialogue: resolvedDialogue,
               dialogueTag: node.dialogueTag,
               speaker: characterConfig?.name,
-              speakerAlias: node.character, // 传入角色简写
+              speakerAlias: node.character ?? tailSpeakerAlias, // 传入角色简写
               currentNode: null,
               clearDialogueAndSpeaker: false,
               forceNullSpeaker: node.character == null,
@@ -2760,12 +2840,30 @@ class GameManager {
 
       if (node is FxNode) {
         final filter = SceneFilter.fromString(node.filterString);
+        if (_fxDiagLogs) {
+          debugPrint(
+            '[FX_DIAG] FxNode execute index=$_scriptIndex '
+            'source=${node.sourceFile ?? "unknown"}:${node.sourceLine ?? -1} '
+            'raw="${node.filterString}" parsed=${filter?.type}/${filter?.intensity}/${filter?.animation}/${filter?.duration} '
+            'before=${_currentState.sceneFilter?.type}/${_currentState.sceneFilter?.intensity}/${_currentState.sceneFilter?.animation}/${_currentState.sceneFilter?.duration}',
+          );
+        }
         if (filter != null) {
           _currentState = _currentState.copyWith(
             sceneFilter: filter,
             everShownCharacters: _everShownCharacters,
           );
           _gameStateController.add(_currentState);
+          if (_fxDiagLogs) {
+            debugPrint(
+              '[FX_DIAG] FxNode applied index=$_scriptIndex '
+              'after=${_currentState.sceneFilter?.type}/${_currentState.sceneFilter?.intensity}/${_currentState.sceneFilter?.animation}/${_currentState.sceneFilter?.duration}',
+            );
+          }
+        } else if (_fxDiagLogs) {
+          debugPrint(
+            '[FX_DIAG] FxNode ignored index=$_scriptIndex because parse result is null',
+          );
         }
         _scriptIndex++;
         continue;
@@ -4300,11 +4398,11 @@ class GameState {
       speaker: forceNullSpeaker
           ? null
           : (clearDialogueAndSpeaker ? null : (speaker ?? this.speaker)),
-      speakerAlias: forceNullSpeaker
+      speakerAlias: clearDialogueAndSpeaker
           ? null
-          : (clearDialogueAndSpeaker
-              ? null
-              : (speakerAlias ?? this.speakerAlias)), // 新增：角色简写处理
+          : (forceNullSpeaker
+              ? speakerAlias
+              : (speakerAlias ?? this.speakerAlias)), // 允许“无说话人”场景显式携带角色简写
       currentNode:
           forceNullCurrentNode ? null : (currentNode ?? this.currentNode),
       isNvlMode: isNvlMode ?? this.isNvlMode,
