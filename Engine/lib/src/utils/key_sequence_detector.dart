@@ -476,6 +476,75 @@ class ScriptContentModifier {
     return line;
   }
 
+  static String _replaceLeadingCharacterId(
+    String line,
+    String oldCharacterId,
+    String newCharacterId,
+  ) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty || trimmed.startsWith('"')) {
+      return line;
+    }
+    final quoteIndex = trimmed.indexOf('"');
+    if (quoteIndex <= 0) {
+      return line;
+    }
+    final beforeQuote = trimmed.substring(0, quoteIndex).trimRight();
+    final tokens = beforeQuote.split(RegExp(r'\s+'));
+    if (tokens.isEmpty) {
+      return line;
+    }
+    final lineCharacterId = tokens.first;
+    if (!_isCharacterIdCompatible(
+      lineCharacterId: lineCharacterId,
+      expectedCharacterId: oldCharacterId,
+    )) {
+      return line;
+    }
+    final replacedPrefix = beforeQuote.replaceFirst(lineCharacterId, newCharacterId);
+    return '$replacedPrefix${trimmed.substring(quoteIndex)}';
+  }
+
+  static String _modifySceneOrMovieBackground(String line, String newBackground) {
+    final trimmed = line.trim();
+    final prefix = trimmed.startsWith('scene ') ? 'scene ' : 'movie ';
+    if (!trimmed.startsWith(prefix)) {
+      return line;
+    }
+
+    final params = trimmed.substring(prefix.length).trim();
+    if (params.isEmpty) {
+      return '$prefix$newBackground';
+    }
+
+    final tokens = params.split(RegExp(r'\s+'));
+    final keywordSet = {
+      'timer',
+      'with',
+      'an',
+      'repeat',
+      'fx',
+    };
+    int keywordIndex = -1;
+    for (int i = 0; i < tokens.length; i++) {
+      if (keywordSet.contains(tokens[i])) {
+        keywordIndex = i;
+        break;
+      }
+    }
+
+    final tail = keywordIndex >= 0 ? tokens.sublist(keywordIndex).join(' ') : '';
+    if (tail.isEmpty) {
+      return '$prefix$newBackground';
+    }
+    return '$prefix$newBackground $tail';
+  }
+
+  static bool _isSceneOrMovieLine(String line) {
+    final trimmed = line.trimLeft();
+    return trimmed.startsWith('scene ') || trimmed.startsWith('movie ');
+  }
+
   /// 修改指定对话行的pose和表情信息
   /// 支持同时修改pose和expression
   static Future<bool> modifyDialogueLineWithPose({
@@ -639,6 +708,162 @@ class ScriptContentModifier {
     } catch (e) {
       if (kEngineDebugMode) {
         print('ScriptModifier: 修改对话行失败: $e');
+      }
+      return false;
+    }
+  }
+
+  /// 按当前对话定位，替换角色ID但尽量保持pose/expression/文本不变
+  static Future<bool> modifyDialogueCharacterWithPose({
+    required String scriptFilePath,
+    required String targetDialogue,
+    required String oldCharacterId,
+    required String newCharacterId,
+    int? targetLineNumber,
+  }) async {
+    try {
+      final file = File(scriptFilePath);
+      if (!await file.exists()) {
+        return false;
+      }
+      final content = await file.readAsString();
+      final lines = content.split('\n');
+      bool modified = false;
+
+      if (targetLineNumber != null &&
+          targetLineNumber > 0 &&
+          targetLineNumber <= lines.length) {
+        final idx = targetLineNumber - 1;
+        final originalLine = lines[idx];
+        final trimmedLine = originalLine.trim();
+        if (_isTargetDialogueLine(trimmedLine, targetDialogue, oldCharacterId)) {
+          final changed =
+              _replaceLeadingCharacterId(trimmedLine, oldCharacterId, newCharacterId);
+          if (changed != trimmedLine) {
+            lines[idx] = originalLine.replaceFirst(trimmedLine, changed);
+            modified = true;
+          }
+        }
+
+        if (!modified) {
+          const nearbyWindow = 24;
+          final start = (idx - nearbyWindow).clamp(0, lines.length - 1);
+          final end = (idx + nearbyWindow).clamp(0, lines.length - 1);
+          for (int i = start; i <= end; i++) {
+            final originalLine = lines[i];
+            final trimmedLine = originalLine.trim();
+            if (!_isTargetDialogueLine(trimmedLine, targetDialogue, oldCharacterId)) {
+              continue;
+            }
+            final changed = _replaceLeadingCharacterId(
+                trimmedLine, oldCharacterId, newCharacterId);
+            if (changed == trimmedLine) {
+              continue;
+            }
+            lines[i] = originalLine.replaceFirst(trimmedLine, changed);
+            modified = true;
+            break;
+          }
+        }
+      }
+
+      if (!modified) {
+        for (int i = 0; i < lines.length; i++) {
+          final originalLine = lines[i];
+          final trimmedLine = originalLine.trim();
+          if (!_isTargetDialogueLine(trimmedLine, targetDialogue, oldCharacterId)) {
+            continue;
+          }
+          final changed =
+              _replaceLeadingCharacterId(trimmedLine, oldCharacterId, newCharacterId);
+          if (changed == trimmedLine) {
+            continue;
+          }
+          lines[i] = originalLine.replaceFirst(trimmedLine, changed);
+          modified = true;
+          break;
+        }
+      }
+
+      if (!modified) {
+        return false;
+      }
+      await _writeScriptFile(file, lines.join('\n'));
+      return true;
+    } catch (e) {
+      if (kEngineDebugMode) {
+        print('ScriptModifier: 修改对话角色失败: $e');
+      }
+      return false;
+    }
+  }
+
+  /// 在当前对话附近最近的scene/movie命令上替换背景参数
+  static Future<bool> modifyBackgroundNearDialogue({
+    required String scriptFilePath,
+    required String newBackground,
+    int? targetLineNumber,
+    int searchWindow = 120,
+  }) async {
+    try {
+      final file = File(scriptFilePath);
+      if (!await file.exists()) {
+        return false;
+      }
+      final content = await file.readAsString();
+      final lines = content.split('\n');
+      if (lines.isEmpty) {
+        return false;
+      }
+
+      int? targetIndex;
+      if (targetLineNumber != null &&
+          targetLineNumber > 0 &&
+          targetLineNumber <= lines.length) {
+        targetIndex = targetLineNumber - 1;
+      }
+
+      int? bestIndex;
+      int bestDistance = 1 << 30;
+      if (targetIndex != null) {
+        final start = (targetIndex - searchWindow).clamp(0, lines.length - 1);
+        final end = (targetIndex + searchWindow).clamp(0, lines.length - 1);
+        for (int i = start; i <= end; i++) {
+          if (!_isSceneOrMovieLine(lines[i])) {
+            continue;
+          }
+          final distance = (i - targetIndex).abs();
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = i;
+          }
+        }
+      }
+
+      if (bestIndex == null) {
+        for (int i = lines.length - 1; i >= 0; i--) {
+          if (_isSceneOrMovieLine(lines[i])) {
+            bestIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (bestIndex == null) {
+        return false;
+      }
+
+      final originalLine = lines[bestIndex];
+      final changed = _modifySceneOrMovieBackground(originalLine.trim(), newBackground);
+      if (changed == originalLine.trim()) {
+        return false;
+      }
+      lines[bestIndex] = originalLine.replaceFirst(originalLine.trim(), changed);
+      await _writeScriptFile(file, lines.join('\n'));
+      return true;
+    } catch (e) {
+      if (kEngineDebugMode) {
+        print('ScriptModifier: 修改背景失败: $e');
       }
       return false;
     }

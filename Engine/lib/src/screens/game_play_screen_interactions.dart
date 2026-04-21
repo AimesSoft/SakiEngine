@@ -1,6 +1,8 @@
 part of 'game_play_screen.dart';
 
 extension _GamePlayScreenInteractions on _GamePlayScreenState {
+  static const Duration _commandMenuOpenDelay = Duration(milliseconds: 120);
+
   Future<void> _loadMouseRollbackBehavior() async {
     try {
       await _settingsManager.init();
@@ -356,7 +358,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         if (mounted) {
           // 检查是否可以显示表情选择器
           final canShow = show &&
-              !_showExpressionWheel &&
+              !_isAnyCommandMenuOpen &&
               _expressionSelectorManager!.canShowExpressionSelector(
                 showSaveOverlay: _showSaveOverlay,
                 showLoadOverlay: _showLoadOverlay,
@@ -384,10 +386,12 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     final isMetaKey = logicalKey == LogicalKeyboardKey.metaLeft ||
         logicalKey == LogicalKeyboardKey.metaRight ||
         logicalKey == LogicalKeyboardKey.meta;
+    final isCommandC = logicalKey == LogicalKeyboardKey.keyC;
+    final isCommandB = logicalKey == LogicalKeyboardKey.keyB;
 
-    if (kEngineDebugMode && isMetaKey) {
+    if (kEngineDebugMode && (isMetaKey || isCommandC || isCommandB)) {
       print(
-          'ExpressionWheel: Meta key event type=${event.runtimeType}, key=${logicalKey.debugName}, isMetaPressed=${HardwareKeyboard.instance.isMetaPressed}, internalPressed=$_isMetaKeyPressed, visible=$_showExpressionWheel');
+          'ExpressionWheel: key event type=${event.runtimeType}, key=${logicalKey.debugName}, isMetaPressed=${HardwareKeyboard.instance.isMetaPressed}, internalPressed=$_isMetaKeyPressed, mode=$_activeCommandMenuMode, visible=$_isAnyCommandMenuOpen');
     }
 
     if (isMetaKey) {
@@ -396,10 +400,11 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
           return true;
         }
         _isMetaKeyPressed = true;
+        _activeCommandMenuMode = _CommandDebugMenuMode.expression;
         if (kEngineDebugMode) {
-          print('ExpressionWheel: schedule open in 120ms');
+          print('ExpressionWheel: schedule expression wheel open in 120ms');
         }
-        _scheduleExpressionWheelOpen();
+        _scheduleCommandMenuOpen(_CommandDebugMenuMode.expression);
         return true;
       }
 
@@ -415,38 +420,80 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         _expressionWheelOpenTimer?.cancel();
         if (_showExpressionWheel) {
           if (kEngineDebugMode) {
-            print('ExpressionWheel: keyUp apply selection');
+            print('ExpressionWheel: keyUp apply expression selection');
           }
           unawaited(_applyExpressionWheelSelectionAndClose());
+        } else if (_showCharacterWheel) {
+          if (kEngineDebugMode) {
+            print('ExpressionWheel: keyUp apply character selection');
+          }
+          unawaited(_applyCharacterWheelSelectionAndClose());
+        } else if (_showBackgroundGridMenu) {
+          if (kEngineDebugMode) {
+            print('ExpressionWheel: keyUp apply background selection');
+          }
+          unawaited(_applyBackgroundGridSelectionAndClose());
         } else {
           if (kEngineDebugMode) {
-            print('ExpressionWheel: keyUp clear state (wheel not visible)');
+            print('ExpressionWheel: keyUp clear state (menu not visible)');
           }
-          _clearExpressionWheelState();
+          _clearCommandMenuState();
         }
         return true;
       }
     }
 
-    if (_showExpressionWheel) {
-      // 轮盘开启时阻断其他键盘输入，避免误推进剧情。
+    if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
+        _isMetaKeyPressed &&
+        isCommandC) {
+      _activeCommandMenuMode = _CommandDebugMenuMode.character;
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: switch mode -> character');
+      }
+      _scheduleCommandMenuOpen(_CommandDebugMenuMode.character);
+      return true;
+    }
+
+    if ((event is KeyDownEvent || event is KeyRepeatEvent) &&
+        _isMetaKeyPressed &&
+        isCommandB) {
+      _activeCommandMenuMode = _CommandDebugMenuMode.background;
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: switch mode -> background');
+      }
+      _scheduleCommandMenuOpen(_CommandDebugMenuMode.background);
+      return true;
+    }
+
+    if (_isAnyCommandMenuOpen) {
+      // 命令菜单开启时阻断其他键盘输入，避免误推进剧情。
       return true;
     }
     return false;
   }
 
-  void _scheduleExpressionWheelOpen() {
+  void _scheduleCommandMenuOpen(_CommandDebugMenuMode mode) {
     _expressionWheelOpenTimer?.cancel();
-    _expressionWheelOpenTimer = Timer(const Duration(milliseconds: 120), () {
+    _expressionWheelOpenTimer = Timer(_commandMenuOpenDelay, () {
       if (kEngineDebugMode) {
-        print('ExpressionWheel: open timer fired');
+        print('ExpressionWheel: open timer fired mode=$mode');
       }
-      unawaited(_openExpressionWheelIfPossible());
+      switch (mode) {
+        case _CommandDebugMenuMode.expression:
+          unawaited(_openExpressionWheelIfPossible());
+          break;
+        case _CommandDebugMenuMode.character:
+          unawaited(_openCharacterWheelIfPossible());
+          break;
+        case _CommandDebugMenuMode.background:
+          unawaited(_openBackgroundGridIfPossible());
+          break;
+      }
     });
   }
 
   bool _canShowExpressionWheel() {
-    return !_showExpressionWheel &&
+    return !_isAnyCommandMenuOpen &&
         !_showSaveOverlay &&
         !_showLoadOverlay &&
         !_showReviewOverlay &&
@@ -457,6 +504,101 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         !_showExpressionSelector &&
         !_isShowingMenu &&
         _gameManager.currentState.movieFile == null;
+  }
+
+  Future<void> _openCharacterWheelIfPossible() async {
+    if (!_isMetaKeyPressed || !mounted) {
+      if (kEngineDebugMode) {
+        print(
+            'ExpressionWheel: character open aborted (metaPressed=$_isMetaKeyPressed, mounted=$mounted)');
+      }
+      return;
+    }
+    if (!_canShowExpressionWheel()) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: character open blocked by overlays');
+      }
+      return;
+    }
+
+    final options = await _buildCharacterWheelOptions();
+    if (options.isEmpty) {
+      _showNotificationMessage('当前场景没有可切换角色');
+      return;
+    }
+
+    final current = _resolveCurrentCharacterWheelId(options);
+    if (!mounted || !_isMetaKeyPressed) {
+      return;
+    }
+
+    _setStateIfMounted(() {
+      _showExpressionWheel = false;
+      _showBackgroundGridMenu = false;
+      _expressionWheelSpeakerInfo = null;
+      _expressionWheelExpressions = const [];
+      _expressionWheelImagePaths = const {};
+      _expressionWheelHighlightedExpression = null;
+
+      _characterWheelOptions = options;
+      _characterWheelCurrentId = current;
+      _characterWheelHighlightedId = current ?? options.first.id;
+      _expressionWheelCenter = _lastPointerPosition;
+      _showCharacterWheel = true;
+      _activeCommandMenuMode = _CommandDebugMenuMode.character;
+    });
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionWheel: character wheel opened options=${options.length}, current=$_characterWheelCurrentId');
+    }
+  }
+
+  Future<void> _openBackgroundGridIfPossible() async {
+    if (!_isMetaKeyPressed || !mounted) {
+      if (kEngineDebugMode) {
+        print(
+            'ExpressionWheel: background open aborted (metaPressed=$_isMetaKeyPressed, mounted=$mounted)');
+      }
+      return;
+    }
+    if (!_canShowExpressionWheel()) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: background open blocked by overlays');
+      }
+      return;
+    }
+
+    final options = await _buildBackgroundGridOptions();
+    if (options.isEmpty) {
+      _showNotificationMessage('未找到可用背景资源');
+      return;
+    }
+    final currentBackground = _gameManager.currentState.background ?? '';
+    final current = _resolveCurrentBackgroundOptionId(options, currentBackground);
+
+    if (!mounted || !_isMetaKeyPressed) {
+      return;
+    }
+
+    _setStateIfMounted(() {
+      _showExpressionWheel = false;
+      _showCharacterWheel = false;
+      _expressionWheelSpeakerInfo = null;
+      _expressionWheelExpressions = const [];
+      _expressionWheelImagePaths = const {};
+      _expressionWheelHighlightedExpression = null;
+
+      _backgroundGridOptions = options;
+      _backgroundGridCurrentId = current;
+      _backgroundGridHighlightedId = current ?? options.first.id;
+      _expressionWheelCenter = _lastPointerPosition;
+      _showBackgroundGridMenu = true;
+      _activeCommandMenuMode = _CommandDebugMenuMode.background;
+    });
+    if (kEngineDebugMode) {
+      print(
+          'ExpressionWheel: background grid opened options=${options.length}, current=$_backgroundGridCurrentId');
+    }
   }
 
   Future<void> _openExpressionWheelIfPossible() async {
@@ -499,6 +641,11 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
 
     final expressions =
         await _loadExpressionWheelExpressions(speakerInfo.characterId);
+    final expressionImagePaths = await _buildExpressionImagePaths(
+      speakerInfo.characterId,
+      speakerInfo.currentPose,
+      expressions,
+    );
     if (expressions.isEmpty) {
       if (kEngineDebugMode) {
         print('ExpressionWheel: no layers for ${speakerInfo.characterId}');
@@ -529,9 +676,19 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     _setStateIfMounted(() {
       _expressionWheelSpeakerInfo = speakerInfo;
       _expressionWheelExpressions = expressions;
+      _expressionWheelImagePaths = expressionImagePaths;
       _expressionWheelHighlightedExpression = highlightedExpression;
+      _characterWheelOptions = const [];
+      _characterWheelCurrentId = null;
+      _characterWheelHighlightedId = null;
+      _backgroundGridOptions = const [];
+      _backgroundGridCurrentId = null;
+      _backgroundGridHighlightedId = null;
       _expressionWheelCenter = _lastPointerPosition;
       _showExpressionWheel = true;
+      _showCharacterWheel = false;
+      _showBackgroundGridMenu = false;
+      _activeCommandMenuMode = _CommandDebugMenuMode.expression;
     });
     if (kEngineDebugMode) {
       print('ExpressionWheel: opened highlight=$highlightedExpression');
@@ -563,10 +720,220 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     return result;
   }
 
+  Future<Map<String, String>> _buildExpressionImagePaths(
+    String characterId,
+    String currentPose,
+    List<String> expressions,
+  ) async {
+    final result = <String, String>{};
+    for (final expression in expressions) {
+      final resolved = await _resolveExpressionPreviewImage(
+        characterId: characterId,
+        currentPose: currentPose,
+        expression: expression,
+      );
+      if (resolved != null && resolved.isNotEmpty) {
+        result[expression] = resolved;
+      }
+    }
+    return result;
+  }
+
+  Future<String?> _resolveExpressionPreviewImage({
+    required String characterId,
+    required String currentPose,
+    required String expression,
+  }) async {
+    final isPose = expression.toLowerCase().startsWith('pose');
+    final pose = isPose ? expression : currentPose;
+    final exp = isPose ? 'normal' : expression;
+
+    final candidates = <String>[
+      'characters/$characterId-$pose',
+      'characters/$characterId-$exp',
+      'characters/$characterId-$pose-$exp',
+      'characters/$characterId-$expression',
+    ];
+    for (final candidate in candidates) {
+      final found = await AssetManager().findAsset(candidate);
+      if (found != null && found.isNotEmpty) {
+        return found;
+      }
+    }
+    return null;
+  }
+
+  Future<List<CommandWheelOption>> _buildCharacterWheelOptions() async {
+    final options = <CommandWheelOption>[];
+    final seen = <String>{};
+    final state = _gameManager.currentState;
+    final configEntries = _gameManager.characterConfigs.entries.toList();
+
+    for (final entry in configEntries) {
+      final characterKey = entry.key;
+      final cfg = entry.value;
+      if (cfg.resourceId == 'narrator') {
+        continue;
+      }
+      if (!seen.add(characterKey)) {
+        continue;
+      }
+      final preview = await _resolveCharacterPreviewImage(
+        resourceId: cfg.resourceId,
+        pose: _resolveCurrentPoseForResource(cfg.resourceId),
+      );
+      options.add(
+        CommandWheelOption(
+          id: characterKey,
+          label: cfg.name.isNotEmpty ? cfg.name : characterKey,
+          imagePath: preview,
+        ),
+      );
+    }
+
+    for (final entry in state.characters.entries) {
+      final characterState = entry.value;
+      final resourceId = characterState.resourceId;
+      if (resourceId == 'narrator') {
+        continue;
+      }
+      final key = _resolveCharacterKeyByResourceId(resourceId) ?? entry.key;
+      if (!seen.add(key)) {
+        continue;
+      }
+      final preview = await _resolveCharacterPreviewImage(
+        resourceId: resourceId,
+        pose: characterState.pose ?? 'pose1',
+      );
+      options.add(
+        CommandWheelOption(
+          id: key,
+          label: _resolveCharacterDisplayName(key, resourceId),
+          imagePath: preview,
+        ),
+      );
+    }
+
+    options.sort((a, b) => a.label.compareTo(b.label));
+    return options;
+  }
+
+  String? _resolveCharacterKeyByResourceId(String resourceId) {
+    for (final entry in _gameManager.characterConfigs.entries) {
+      if (entry.value.resourceId == resourceId) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
+  String _resolveCharacterDisplayName(String characterKey, String resourceId) {
+    final cfg = _gameManager.characterConfigs[characterKey];
+    if (cfg != null && cfg.name.isNotEmpty) {
+      return cfg.name;
+    }
+    return characterKey.isNotEmpty ? characterKey : resourceId;
+  }
+
+  String _resolveCurrentPoseForResource(String resourceId) {
+    final state = _gameManager.currentState;
+    for (final entry in state.characters.entries) {
+      if (entry.value.resourceId == resourceId) {
+        return entry.value.pose ?? 'pose1';
+      }
+    }
+    return 'pose1';
+  }
+
+  Future<String?> _resolveCharacterPreviewImage({
+    required String resourceId,
+    required String pose,
+  }) async {
+    final candidates = <String>[
+      'characters/$resourceId-$pose',
+      'characters/$resourceId-normal',
+      'characters/$resourceId-pose1',
+      'characters/$resourceId',
+      'items/$resourceId',
+    ];
+    for (final candidate in candidates) {
+      final found = await AssetManager().findAsset(candidate);
+      if (found != null && found.isNotEmpty) {
+        return found;
+      }
+    }
+    return null;
+  }
+
+  String? _resolveCurrentCharacterWheelId(List<CommandWheelOption> options) {
+    final currentSpeakerAlias = _gameManager.currentState.speakerAlias;
+    final currentSpeakerName = _gameManager.currentState.speaker;
+    if (currentSpeakerAlias != null &&
+        currentSpeakerAlias.isNotEmpty &&
+        options.any((o) => o.id == currentSpeakerAlias)) {
+      return currentSpeakerAlias;
+    }
+    if (currentSpeakerName != null && currentSpeakerName.isNotEmpty) {
+      for (final entry in _gameManager.characterConfigs.entries) {
+        if (entry.value.name == currentSpeakerName &&
+            options.any((o) => o.id == entry.key)) {
+          return entry.key;
+        }
+      }
+    }
+    return options.isNotEmpty ? options.first.id : null;
+  }
+
+  Future<List<CommandWheelOption>> _buildBackgroundGridOptions() async {
+    final files = await AssetManager().listAssets('assets/images/backgrounds/', '');
+    final supported = <String>{'.png', '.jpg', '.jpeg', '.webp', '.avif', '.bmp'};
+    final options = <CommandWheelOption>[];
+    for (final fileName in files) {
+      final lower = fileName.toLowerCase();
+      if (!supported.any((ext) => lower.endsWith(ext))) {
+        continue;
+      }
+      final base = fileName.substring(0, fileName.length - fileName.split('.').last.length - 1);
+      final resolved = await AssetManager().findAsset('backgrounds/$base');
+      options.add(
+        CommandWheelOption(
+          id: base,
+          label: base,
+          imagePath: resolved,
+        ),
+      );
+    }
+    options.sort((a, b) => a.label.compareTo(b.label));
+    return options;
+  }
+
+  String? _resolveCurrentBackgroundOptionId(
+    List<CommandWheelOption> options,
+    String currentBackgroundRaw,
+  ) {
+    if (currentBackgroundRaw.isEmpty) {
+      return options.isNotEmpty ? options.first.id : null;
+    }
+    final normalized = currentBackgroundRaw
+        .split('/')
+        .last
+        .split('.')
+        .first
+        .trim();
+    for (final option in options) {
+      if (option.id == normalized ||
+          option.id == currentBackgroundRaw ||
+          currentBackgroundRaw.contains(option.id)) {
+        return option.id;
+      }
+    }
+    return options.isNotEmpty ? options.first.id : null;
+  }
+
   Future<void> _applyExpressionWheelSelectionAndClose() async {
     final speakerInfo = _expressionWheelSpeakerInfo;
     final selectedExpression = _expressionWheelHighlightedExpression;
-    _clearExpressionWheelState();
+    _clearCommandMenuState();
     if (kEngineDebugMode) {
       print(
           'ExpressionWheel: apply requested selected=$selectedExpression speaker=${speakerInfo?.speakerName}/${speakerInfo?.characterId}');
@@ -616,13 +983,113 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     );
   }
 
-  void _clearExpressionWheelState() {
+  Future<void> _applyCharacterWheelSelectionAndClose() async {
+    final selectedCharacterKey = _characterWheelHighlightedId;
+    _clearCommandMenuState();
+    if (selectedCharacterKey == null || selectedCharacterKey.isEmpty) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: apply character skipped (empty selection)');
+      }
+      return;
+    }
+    final success =
+        await _applyCharacterChangeForCurrentDialogue(selectedCharacterKey);
+    if (success) {
+      _showNotificationMessage('已切换角色: $selectedCharacterKey');
+      await _handleHotReload();
+    } else {
+      _showNotificationMessage('角色切换失败');
+    }
+  }
+
+  Future<void> _applyBackgroundGridSelectionAndClose() async {
+    final selectedBackground = _backgroundGridHighlightedId;
+    _clearCommandMenuState();
+    if (selectedBackground == null || selectedBackground.isEmpty) {
+      if (kEngineDebugMode) {
+        print('ExpressionWheel: apply background skipped (empty selection)');
+      }
+      return;
+    }
+    final success =
+        await _applyBackgroundChangeForCurrentDialogue(selectedBackground);
+    if (success) {
+      _showNotificationMessage('已切换背景: $selectedBackground');
+      await _handleHotReload();
+    } else {
+      _showNotificationMessage('背景切换失败');
+    }
+  }
+
+  Future<bool> _applyCharacterChangeForCurrentDialogue(
+      String selectedCharacterKey) async {
+    final sourceScriptFile = _gameManager.currentDialogueSourceScriptFile;
+    final scriptFileForWrite =
+        (sourceScriptFile != null && sourceScriptFile.trim().isNotEmpty)
+            ? sourceScriptFile
+            : _gameManager.currentScriptFile;
+    final scriptPath =
+        await ScriptContentModifier.getCurrentScriptFilePath(scriptFileForWrite);
+    if (scriptPath == null) {
+      return false;
+    }
+
+    final targetDialogue = _gameManager.currentDialogueText;
+    final targetLine = _gameManager.currentDialogueSourceLine;
+    if (targetDialogue.trim().isEmpty) {
+      return false;
+    }
+    final currentSpeaker = _expressionSelectorManager?.getCurrentSpeakerInfo();
+    final fallbackCharacter = currentSpeaker?.scriptCharacterKey ??
+        _gameManager.currentState.speakerAlias ??
+        selectedCharacterKey;
+
+    return ScriptContentModifier.modifyDialogueCharacterWithPose(
+      scriptFilePath: scriptPath,
+      targetDialogue: targetDialogue,
+      oldCharacterId: fallbackCharacter,
+      newCharacterId: selectedCharacterKey,
+      targetLineNumber: targetLine,
+    );
+  }
+
+  Future<bool> _applyBackgroundChangeForCurrentDialogue(
+      String selectedBackground) async {
+    final sourceScriptFile = _gameManager.currentDialogueSourceScriptFile;
+    final scriptFileForWrite =
+        (sourceScriptFile != null && sourceScriptFile.trim().isNotEmpty)
+            ? sourceScriptFile
+            : _gameManager.currentScriptFile;
+    final scriptPath =
+        await ScriptContentModifier.getCurrentScriptFilePath(scriptFileForWrite);
+    if (scriptPath == null) {
+      return false;
+    }
+    final targetLine = _gameManager.currentDialogueSourceLine;
+    return ScriptContentModifier.modifyBackgroundNearDialogue(
+      scriptFilePath: scriptPath,
+      targetLineNumber: targetLine,
+      newBackground: selectedBackground,
+    );
+  }
+
+  void _clearCommandMenuState() {
     _expressionWheelOpenTimer?.cancel();
     _setStateIfMounted(() {
       _showExpressionWheel = false;
+      _showCharacterWheel = false;
+      _showBackgroundGridMenu = false;
+      _activeCommandMenuMode = null;
       _expressionWheelSpeakerInfo = null;
       _expressionWheelExpressions = const [];
+      _expressionWheelImagePaths = const {};
       _expressionWheelHighlightedExpression = null;
+      _characterWheelOptions = const [];
+      _characterWheelCurrentId = null;
+      _characterWheelHighlightedId = null;
+      _backgroundGridOptions = const [];
+      _backgroundGridCurrentId = null;
+      _backgroundGridHighlightedId = null;
       _expressionWheelCenter = null;
     });
     if (kEngineDebugMode) {
@@ -684,7 +1151,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showExpressionWheel;
+            _isAnyCommandMenuOpen;
         // 禁用在视频播放时的快进功能
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
         return !hasOverlayOpen && !isPlayingMovie;
@@ -727,7 +1194,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showExpressionWheel;
+            _isAnyCommandMenuOpen;
         // 禁用在视频播放时的快进功能
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
         return !hasOverlayOpen && !isPlayingMovie;
@@ -751,7 +1218,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showExpressionWheel;
+            _isAnyCommandMenuOpen;
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
         if (hasOverlayOpen || isPlayingMovie) {
           return;
@@ -774,7 +1241,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showExpressionWheel;
+            _isAnyCommandMenuOpen;
 
         // 检查是否正在播放视频
         final isPlayingMovie = _gameManager.currentState.movieFile != null;
@@ -809,7 +1276,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showExpressionWheel ||
+            _isAnyCommandMenuOpen ||
             _isFastForwarding; // 快进时不能自动播放
         // 禁用在视频播放时的自动播放功能
         final isPlayingMovie = _gameManager.currentState.movieFile != null;

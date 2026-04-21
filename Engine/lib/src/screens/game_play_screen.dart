@@ -46,6 +46,8 @@ import 'package:sakiengine/src/widgets/debug_panel_dialog.dart';
 import 'package:sakiengine/src/utils/character_auto_distribution.dart';
 import 'package:sakiengine/src/widgets/expression_selector_dialog.dart';
 import 'package:sakiengine/src/widgets/expression_radial_wheel.dart';
+import 'package:sakiengine/src/widgets/command_grid_menu.dart';
+import 'package:sakiengine/src/widgets/command_radial_wheel.dart';
 import 'package:sakiengine/src/widgets/floating_script_editor_overlay.dart';
 import 'package:sakiengine/src/utils/expression_selector_manager.dart';
 import 'package:sakiengine/src/utils/expression_offset_manager.dart';
@@ -63,6 +65,12 @@ import 'package:sakiengine/src/utils/dialogue_shake_effect.dart'; // 新增：�
 import 'package:sakiengine/src/rendering/image_sampling.dart';
 
 part 'game_play_screen_interactions.dart';
+
+enum _CommandDebugMenuMode {
+  expression,
+  character,
+  background,
+}
 
 class GamePlayScreen extends StatefulWidget {
   final SaveSlot? saveSlotToLoad;
@@ -99,8 +107,11 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   bool _showDebugPanel = false; // 调试面板显示状态
   bool _showExpressionSelector = false; // 表情选择器显示状态
   bool _showExpressionWheel = false; // 差分快捷轮盘显示状态（Debug）
+  bool _showCharacterWheel = false; // 角色切换轮盘显示状态（Debug）
+  bool _showBackgroundGridMenu = false; // 背景选择网格菜单显示状态（Debug）
   bool _showFloatingScriptEditor = false; // 悬浮脚本编辑器显示状态（Debug）
   bool _isMetaKeyPressed = false; // Command/Meta按键按住状态（Debug）
+  _CommandDebugMenuMode? _activeCommandMenuMode;
   HotKey? _reloadHotKey;
   HotKey? _developerPanelHotKey; // Shift+D快捷键
   HotKey? _floatingScriptEditorHotKey; // Shift+P 快捷键
@@ -119,7 +130,14 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   Timer? _expressionWheelOpenTimer;
   SpeakerInfo? _expressionWheelSpeakerInfo;
   List<String> _expressionWheelExpressions = const [];
+  Map<String, String> _expressionWheelImagePaths = const {};
   String? _expressionWheelHighlightedExpression;
+  List<CommandWheelOption> _characterWheelOptions = const [];
+  String? _characterWheelCurrentId;
+  String? _characterWheelHighlightedId;
+  List<CommandWheelOption> _backgroundGridOptions = const [];
+  String? _backgroundGridCurrentId;
+  String? _backgroundGridHighlightedId;
   Offset? _lastPointerPosition;
   Offset? _expressionWheelCenter;
 
@@ -143,6 +161,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   bool _isInitialLoading = true;
   Uint8List? _frozenSaveThumbnailFrame;
 
+  bool get _isAnyCommandMenuOpen =>
+      _showExpressionWheel || _showCharacterWheel || _showBackgroundGridMenu;
+
   bool get _hasThumbnailBlockingOverlayOpen {
     return _showSaveOverlay ||
         _showLoadOverlay ||
@@ -152,7 +173,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
         _showDeveloperPanel ||
         _showDebugPanel ||
         _showExpressionSelector ||
-        _showExpressionWheel;
+        _isAnyCommandMenuOpen;
   }
 
   Future<Uint8List?> _captureSaveThumbnailFromBoundary() async {
@@ -484,7 +505,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   _showDeveloperPanel ||
                   _showDebugPanel ||
                   _showExpressionSelector ||
-                  _showExpressionWheel;
+                  _isAnyCommandMenuOpen;
               // 选项界面允许“回滚->观看记录”，但仍视为推进输入的阻断态。
               final hasOverlayOpenExceptMenu = _showSaveOverlay ||
                   _showLoadOverlay ||
@@ -493,7 +514,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   _showDeveloperPanel ||
                   _showDebugPanel ||
                   _showExpressionSelector ||
-                  _showExpressionWheel;
+                  _isAnyCommandMenuOpen;
 
               if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
                 if (!hasOverlayOpen &&
@@ -622,7 +643,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                             _showDeveloperPanel ||
                             _showDebugPanel ||
                             _showExpressionSelector ||
-                            _showExpressionWheel;
+                            _isAnyCommandMenuOpen;
 
                         // 检查是否正在播放视频
                         final isPlayingMovie = gameState.movieFile != null;
@@ -716,6 +737,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                               currentExpression: _expressionWheelSpeakerInfo!
                                   .currentExpression,
                               expressions: _expressionWheelExpressions,
+                              expressionImagePaths: _expressionWheelImagePaths,
                               center: _expressionWheelCenter ??
                                   Offset(
                                     MediaQuery.of(context).size.width / 2,
@@ -724,6 +746,38 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                               onHighlightedExpressionChanged: (expression) {
                                 _expressionWheelHighlightedExpression =
                                     expression;
+                              },
+                            ),
+                          if (kEngineDebugMode &&
+                              _showCharacterWheel &&
+                              _characterWheelOptions.isNotEmpty)
+                            CommandRadialWheel(
+                              title: '切换角色',
+                              options: _characterWheelOptions,
+                              currentOptionId: _characterWheelCurrentId,
+                              center: _expressionWheelCenter ??
+                                  Offset(
+                                    MediaQuery.of(context).size.width / 2,
+                                    MediaQuery.of(context).size.height / 2,
+                                  ),
+                              onHighlightedOptionChanged: (optionId) {
+                                _characterWheelHighlightedId = optionId;
+                              },
+                            ),
+                          if (kEngineDebugMode &&
+                              _showBackgroundGridMenu &&
+                              _backgroundGridOptions.isNotEmpty)
+                            CommandGridMenu(
+                              title: '切换背景',
+                              options: _backgroundGridOptions,
+                              currentOptionId: _backgroundGridCurrentId,
+                              center: _expressionWheelCenter ??
+                                  Offset(
+                                    MediaQuery.of(context).size.width / 2,
+                                    MediaQuery.of(context).size.height / 2,
+                                  ),
+                              onHighlightedOptionChanged: (optionId) {
+                                _backgroundGridHighlightedId = optionId;
                               },
                             ),
                           if (kEngineDebugMode && _showFloatingScriptEditor)
