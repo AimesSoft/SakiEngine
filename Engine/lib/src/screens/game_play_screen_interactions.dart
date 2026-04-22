@@ -51,7 +51,14 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       // 忽略自动存档失败，保持返回流程可用
     }
 
-    // 停止所有音效，保留音乐
+    // 返回主菜单时清理游戏内音频，避免游戏BGM残留到主菜单。
+    try {
+      await MusicManager().clearBackgroundMusic(fadeOut: false);
+    } catch (_) {
+      // 忽略停止背景音乐失败，保持返回流程可用
+    }
+
+    // 停止所有音效
     _gameManager.stopAllSounds();
 
     if (mounted && widget.onReturnToMenu != null) {
