@@ -1099,12 +1099,16 @@ class GameManager {
       return false;
     }
 
+    final targetConfig = _characterConfigs[targetAlias];
     final targetKey = target.key;
     final targetState = target.value;
     final nextPose = pose ?? targetState.pose ?? 'pose1';
     final nextExpression = expression ?? targetState.expression ?? 'normal';
+    final nextResourceId =
+        targetConfig?.resourceId ?? targetState.resourceId;
     final newCharacters = Map.of(_currentState.characters);
     newCharacters[targetKey] = targetState.copyWith(
+      resourceId: nextResourceId,
       pose: nextPose,
       expression: nextExpression,
       clearAnimationProperties: false,

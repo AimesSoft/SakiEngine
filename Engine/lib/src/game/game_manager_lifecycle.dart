@@ -296,7 +296,7 @@ extension _GameManagerLifecycle on GameManager {
 
           if (_savedSnapshot!.dialogueHistory.length >= 2) {
             final previousDialogueState = _savedSnapshot!
-                .dialogueHistory[_savedSnapshot!.dialogueHistory.length - 2]
+                .dialogueHistory[_savedSnapshot!.dialogueHistory.length - 1]
                 .stateSnapshot
                 .currentState;
             rollbackCharacters = Map<String, CharacterState>.from(
