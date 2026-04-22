@@ -658,32 +658,118 @@ class ScriptContentModifier {
         ? lineCharacterId
         : characterId;
 
+    ({
+      String? pose,
+      String? expression,
+      String? position,
+      String? animation,
+      String? repeatRaw
+    }) parseCharacterPrefixAttrs(List<String> attrs) {
+      final baseTokens = <String>[];
+      String? position;
+      String? animation;
+      String? repeatRaw;
+
+      var i = 0;
+      while (i < attrs.length) {
+        final token = attrs[i];
+        final lower = token.toLowerCase();
+        if (lower == 'at' && i + 1 < attrs.length) {
+          position = attrs[i + 1];
+          i += 2;
+          continue;
+        }
+        if (lower == 'an' && i + 1 < attrs.length) {
+          animation = attrs[i + 1];
+          i += 2;
+          continue;
+        }
+        if (lower == 'repeat' && i + 1 < attrs.length) {
+          repeatRaw = attrs[i + 1];
+          i += 2;
+          continue;
+        }
+        baseTokens.add(token);
+        i++;
+      }
+
+      String? pose;
+      String? expression;
+      if (baseTokens.isNotEmpty) {
+        var lastPoseIndex = -1;
+        for (var j = 0; j < baseTokens.length; j++) {
+          if (baseTokens[j].toLowerCase().startsWith('pose')) {
+            lastPoseIndex = j;
+          }
+        }
+
+        if (lastPoseIndex >= 0) {
+          pose = baseTokens[lastPoseIndex];
+          if (lastPoseIndex + 1 < baseTokens.length) {
+            expression = baseTokens[lastPoseIndex + 1];
+          } else if (lastPoseIndex > 0) {
+            expression = baseTokens[lastPoseIndex - 1];
+          }
+        } else if (baseTokens.length == 1) {
+          expression = baseTokens[0];
+        } else {
+          pose = baseTokens[0];
+          expression = baseTokens[1];
+        }
+      }
+
+      return (
+        pose: pose,
+        expression: expression,
+        position: position,
+        animation: animation,
+        repeatRaw: repeatRaw,
+      );
+    }
+
     // 如果已经包含该角色的信息，更新它
     if (lineCharacterId != null &&
         _isCharacterIdCompatible(
           lineCharacterId: lineCharacterId,
           expectedCharacterId: characterId,
         )) {
-      // 识别不同格式
-      if (parts.length >= 4 && parts[3].startsWith('"')) {
-        // 格式: character pose expression "dialogue"
-        if (newPose != null) parts[1] = newPose;
-        if (newExpression != null) parts[2] = newExpression;
-        parts[0] = writeCharacterId;
-        return parts.join(' ');
-      } else if (parts.length >= 3 && parts[2].startsWith('"')) {
-        // 格式: character expression "dialogue" 或 character pose "dialogue"
-        // 需要扩展为三段式
-        final dialoguePart = parts.sublist(2).join(' ');
-        final currentPose = newPose ?? 'pose1'; // 默认pose
-        final currentExpression = newExpression ?? parts[1]; // 保持原有或使用新的
-        return '$writeCharacterId $currentPose $currentExpression $dialoguePart';
-      } else if (parts.length >= 2 && parts[1].startsWith('"')) {
-        // 格式: character "dialogue"
-        // 插入pose和表情
-        final pose = newPose ?? 'pose1';
-        final expression = newExpression ?? 'normal';
-        return '$writeCharacterId $pose $expression ${parts.sublist(1).join(' ')}';
+      final quoteIndex = trimmedLine.indexOf('"');
+      if (quoteIndex > 0) {
+        final beforeQuote = trimmedLine.substring(0, quoteIndex).trimRight();
+        final quotedPart = trimmedLine.substring(quoteIndex);
+        final prefixTokens = beforeQuote
+            .split(RegExp(r'\s+'))
+            .where((s) => s.isNotEmpty)
+            .toList();
+        final parsed = parseCharacterPrefixAttrs(
+          prefixTokens.length > 1 ? prefixTokens.sublist(1) : const [],
+        );
+
+        final pose = (newPose ?? parsed.pose ?? 'pose1').trim();
+        final expression = (newExpression ?? parsed.expression ?? 'normal').trim();
+        final rebuiltPrefix = <String>[writeCharacterId];
+        if (pose.isNotEmpty) {
+          rebuiltPrefix.add(pose);
+        }
+        if (expression.isNotEmpty) {
+          rebuiltPrefix.add(expression);
+        }
+        if (parsed.position != null && parsed.position!.trim().isNotEmpty) {
+          rebuiltPrefix
+            ..add('at')
+            ..add(parsed.position!.trim());
+        }
+        if (parsed.animation != null && parsed.animation!.trim().isNotEmpty) {
+          rebuiltPrefix
+            ..add('an')
+            ..add(parsed.animation!.trim());
+        }
+        if (parsed.repeatRaw != null && parsed.repeatRaw!.trim().isNotEmpty) {
+          rebuiltPrefix
+            ..add('repeat')
+            ..add(parsed.repeatRaw!.trim());
+        }
+        return '${rebuiltPrefix.join(' ')} $quotedPart';
       }
     }
 
