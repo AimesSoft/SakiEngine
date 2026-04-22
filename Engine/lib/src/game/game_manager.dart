@@ -1066,17 +1066,48 @@ class GameManager {
     return characterAlias;
   }
 
+  ({
+    String alias,
+    CharacterConfig config,
+  })? _resolveCharacterIdentityByAliasOrResourceId(String aliasOrResourceId) {
+    final normalized = aliasOrResourceId.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+
+    final byAlias = _characterConfigs[normalized];
+    if (byAlias != null) {
+      return (
+        alias: normalized,
+        config: byAlias,
+      );
+    }
+
+    for (final entry in _characterConfigs.entries) {
+      if (entry.value.resourceId == normalized) {
+        return (
+          alias: entry.key,
+          config: entry.value,
+        );
+      }
+    }
+    return null;
+  }
+
   MapEntry<String, CharacterState>? _resolveTailTargetCharacterState(
       String targetAlias) {
-    final config = _characterConfigs[targetAlias];
+    final identity =
+        _resolveCharacterIdentityByAliasOrResourceId(targetAlias);
+    final resolvedAlias = identity?.alias ?? targetAlias;
+    final config = identity?.config;
     final targetKey =
-        _resolveCharacterRenderKey(targetAlias, characterConfig: config);
+        _resolveCharacterRenderKey(resolvedAlias, characterConfig: config);
     final direct = _currentState.characters[targetKey];
     if (direct != null) {
       return MapEntry<String, CharacterState>(targetKey, direct);
     }
 
-    final expectedResourceId = config?.resourceId;
+    final expectedResourceId = config?.resourceId ?? targetAlias;
     if (expectedResourceId != null && expectedResourceId.isNotEmpty) {
       for (final entry in _currentState.characters.entries) {
         if (entry.value.resourceId == expectedResourceId) {
@@ -1099,7 +1130,8 @@ class GameManager {
       return false;
     }
 
-    final targetConfig = _characterConfigs[targetAlias];
+    final targetConfig =
+        _resolveCharacterIdentityByAliasOrResourceId(targetAlias)?.config;
     final targetKey = target.key;
     final targetState = target.value;
     final nextPose = pose ?? targetState.pose ?? 'pose1';
