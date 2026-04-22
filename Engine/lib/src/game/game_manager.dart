@@ -1091,6 +1091,8 @@ class GameManager {
     required String targetAlias,
     String? pose,
     String? expression,
+    String? animation,
+    int? repeatCount,
   }) {
     final target = _resolveTailTargetCharacterState(targetAlias);
     if (target == null) {
@@ -1112,9 +1114,16 @@ class GameManager {
       everShownCharacters: _everShownCharacters,
     );
     _gameStateController.add(_currentState);
+    if (!_isFastForwardMode && animation != null && animation.isNotEmpty) {
+      _playCharacterAnimation(
+        targetKey,
+        animation,
+        repeatCount: repeatCount,
+      );
+    }
     if (kEngineDebugMode) {
       print(
-          'GameManager: narration-tail apply target=$targetAlias key=$targetKey pose=$nextPose expression=$nextExpression');
+          'GameManager: narration-tail apply target=$targetAlias key=$targetKey pose=$nextPose expression=$nextExpression animation=$animation repeat=$repeatCount');
     }
     return true;
   }
@@ -2253,6 +2262,8 @@ class GameManager {
             targetAlias: tailSpeakerAlias,
             pose: node.tailPose,
             expression: node.tailExpression,
+            animation: node.tailAnimation,
+            repeatCount: node.tailRepeatCount,
           );
         }
 
@@ -2553,6 +2564,8 @@ class GameManager {
             targetAlias: tailSpeakerAlias,
             pose: node.tailPose,
             expression: node.tailExpression,
+            animation: node.tailAnimation,
+            repeatCount: node.tailRepeatCount,
           );
         }
 

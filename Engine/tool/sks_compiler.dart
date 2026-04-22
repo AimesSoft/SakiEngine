@@ -173,7 +173,8 @@ class _SksCompiler {
     for (final source in sources) {
       textByAssetPath[source.assetPath] = source.content;
       if (source.isLabelScript) {
-        labelScriptsByAssetPath[source.assetPath] = parser.parse(source.content);
+        labelScriptsByAssetPath[source.assetPath] =
+            parser.parse(source.content);
       }
     }
 
@@ -196,7 +197,8 @@ class _SksCompiler {
   Future<List<_SksSource>> _collectSksSources() async {
     final scriptRoots = <Directory>[];
     await for (final entity in options.gameDir.list(followLinks: false)) {
-      if (entity is Directory && p.basename(entity.path).startsWith('GameScript')) {
+      if (entity is Directory &&
+          p.basename(entity.path).startsWith('GameScript')) {
         scriptRoots.add(entity);
       }
     }
@@ -205,7 +207,8 @@ class _SksCompiler {
     final results = <_SksSource>[];
 
     for (final root in scriptRoots) {
-      await for (final entity in root.list(recursive: true, followLinks: false)) {
+      await for (final entity
+          in root.list(recursive: true, followLinks: false)) {
         if (entity is! File) {
           continue;
         }
@@ -316,6 +319,8 @@ class _SksCompiler {
           'tailCharacter: ${_nullableString(node.tailCharacter)}, '
           'tailPose: ${_nullableString(node.tailPose)}, '
           'tailExpression: ${_nullableString(node.tailExpression)}, '
+          'tailAnimation: ${_nullableString(node.tailAnimation)}, '
+          'tailRepeatCount: ${_nullableInt(node.tailRepeatCount)}, '
           'sourceFile: ${_nullableString(node.sourceFile)}, '
           'sourceLine: ${_nullableInt(node.sourceLine)}, '
           'pose: ${_nullableString(node.pose)}, expression: ${_nullableString(node.expression)}, '
@@ -385,6 +390,8 @@ class _SksCompiler {
           'tailCharacter: ${_nullableString(node.tailCharacter)}, '
           'tailPose: ${_nullableString(node.tailPose)}, '
           'tailExpression: ${_nullableString(node.tailExpression)}, '
+          'tailAnimation: ${_nullableString(node.tailAnimation)}, '
+          'tailRepeatCount: ${_nullableInt(node.tailRepeatCount)}, '
           'sourceFile: ${_nullableString(node.sourceFile)}, '
           'sourceLine: ${_nullableInt(node.sourceLine)}, '
           'conditionVariable: ${_str(node.conditionVariable)}, '

@@ -98,6 +98,8 @@ class SayNode implements SksNode {
   final String? tailCharacter; // 旁白行引号后角色控制：例如 "..." aru normal
   final String? tailPose; // 旁白行尾部控制pose（可选）
   final String? tailExpression; // 旁白行尾部控制expression（可选）
+  final String? tailAnimation; // 旁白行尾部控制动画（an语法）
+  final int? tailRepeatCount; // 旁白行尾部动画重复次数（repeat语法）
   final String? sourceFile; // 源脚本文件（不含扩展名）
   final int? sourceLine; // 源脚本行号（1-based）
   final String? pose;
@@ -116,6 +118,8 @@ class SayNode implements SksNode {
     this.tailCharacter,
     this.tailPose,
     this.tailExpression,
+    this.tailAnimation,
+    this.tailRepeatCount,
     this.sourceFile,
     this.sourceLine,
     this.pose,
@@ -223,6 +227,8 @@ class ConditionalSayNode implements SksNode {
   final String? tailCharacter; // 旁白行引号后角色控制：例如 "..." aru normal
   final String? tailPose; // 旁白行尾部控制pose（可选）
   final String? tailExpression; // 旁白行尾部控制expression（可选）
+  final String? tailAnimation; // 旁白行尾部控制动画（an语法）
+  final int? tailRepeatCount; // 旁白行尾部动画重复次数（repeat语法）
   final String? sourceFile; // 源脚本文件（不含扩展名）
   final int? sourceLine; // 源脚本行号（1-based）
   final String conditionVariable;
@@ -240,6 +246,8 @@ class ConditionalSayNode implements SksNode {
     this.tailCharacter,
     this.tailPose,
     this.tailExpression,
+    this.tailAnimation,
+    this.tailRepeatCount,
     this.sourceFile,
     this.sourceLine,
     required this.conditionVariable,

@@ -135,7 +135,9 @@ class SksParser {
     String? dialogueTag,
     String? tailCharacter,
     String? tailPose,
-    String? tailExpression
+    String? tailExpression,
+    String? tailAnimation,
+    int? tailRepeatCount
   }) _parseDialogueTail(String? rawTail) {
     final tail = rawTail?.trim() ?? '';
     if (tail.isEmpty) {
@@ -144,6 +146,8 @@ class SksParser {
         tailCharacter: null,
         tailPose: null,
         tailExpression: null,
+        tailAnimation: null,
+        tailRepeatCount: null,
       );
     }
 
@@ -155,6 +159,8 @@ class SksParser {
         tailCharacter: null,
         tailPose: null,
         tailExpression: null,
+        tailAnimation: null,
+        tailRepeatCount: null,
       );
     }
 
@@ -166,6 +172,8 @@ class SksParser {
         tailCharacter: null,
         tailPose: null,
         tailExpression: null,
+        tailAnimation: null,
+        tailRepeatCount: null,
       );
     }
 
@@ -177,25 +185,70 @@ class SksParser {
         tailCharacter: null,
         tailPose: null,
         tailExpression: null,
+        tailAnimation: null,
+        tailRepeatCount: null,
       );
     }
 
     ({
       String? tailCharacter,
       String? tailPose,
-      String? tailExpression
+      String? tailExpression,
+      String? tailAnimation,
+      int? tailRepeatCount
     }) parseTailControl(List<String> controlTokens) {
       if (controlTokens.isEmpty) {
         return (
           tailCharacter: null,
           tailPose: null,
           tailExpression: null,
+          tailAnimation: null,
+          tailRepeatCount: null,
         );
       }
-      final tailCharacter = controlTokens[0];
+      final baseTokens = <String>[];
+      String? tailAnimation;
+      int? tailRepeatCount;
+
+      var i = 0;
+      while (i < controlTokens.length) {
+        final token = controlTokens[i];
+        if (token == 'repeat') {
+          if (i + 1 < controlTokens.length) {
+            tailRepeatCount = int.tryParse(controlTokens[i + 1]);
+            i += 2;
+            continue;
+          }
+          i++;
+          continue;
+        }
+        if (token == 'an') {
+          if (i + 1 < controlTokens.length) {
+            tailAnimation = controlTokens[i + 1];
+            i += 2;
+            continue;
+          }
+          i++;
+          continue;
+        }
+        baseTokens.add(token);
+        i++;
+      }
+
+      if (baseTokens.isEmpty) {
+        return (
+          tailCharacter: null,
+          tailPose: null,
+          tailExpression: null,
+          tailAnimation: tailAnimation,
+          tailRepeatCount: tailRepeatCount,
+        );
+      }
+
+      final tailCharacter = baseTokens[0];
       String? tailPose;
       String? tailExpression;
-      final rest = controlTokens.sublist(1);
+      final rest = baseTokens.sublist(1);
 
       if (rest.length == 1) {
         if (rest[0].toLowerCase().startsWith('pose')) {
@@ -212,6 +265,8 @@ class SksParser {
         tailCharacter: tailCharacter,
         tailPose: tailPose,
         tailExpression: tailExpression,
+        tailAnimation: tailAnimation,
+        tailRepeatCount: tailRepeatCount,
       );
     }
 
@@ -223,6 +278,8 @@ class SksParser {
         tailCharacter: parsed.tailCharacter,
         tailPose: parsed.tailPose,
         tailExpression: parsed.tailExpression,
+        tailAnimation: parsed.tailAnimation,
+        tailRepeatCount: parsed.tailRepeatCount,
       );
     }
 
@@ -237,6 +294,8 @@ class SksParser {
         tailCharacter: parsed.tailCharacter,
         tailPose: parsed.tailPose,
         tailExpression: parsed.tailExpression,
+        tailAnimation: parsed.tailAnimation,
+        tailRepeatCount: parsed.tailRepeatCount,
       );
     }
 
@@ -248,6 +307,8 @@ class SksParser {
         tailCharacter: parsed.tailCharacter,
         tailPose: parsed.tailPose,
         tailExpression: parsed.tailExpression,
+        tailAnimation: parsed.tailAnimation,
+        tailRepeatCount: parsed.tailRepeatCount,
       );
     }
 
@@ -257,6 +318,8 @@ class SksParser {
       tailCharacter: parsed.tailCharacter,
       tailPose: parsed.tailPose,
       tailExpression: parsed.tailExpression,
+      tailAnimation: parsed.tailAnimation,
+      tailRepeatCount: parsed.tailRepeatCount,
     );
   }
 
@@ -1049,6 +1112,8 @@ class SksParser {
         tailCharacter: tailMeta.tailCharacter,
         tailPose: tailMeta.tailPose,
         tailExpression: tailMeta.tailExpression,
+        tailAnimation: tailMeta.tailAnimation,
+        tailRepeatCount: tailMeta.tailRepeatCount,
         sourceFile: _activeSourceFile,
         sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
         startExpression: startExpression,
@@ -1163,6 +1228,8 @@ class SksParser {
         tailCharacter: tailMeta.tailCharacter,
         tailPose: tailMeta.tailPose,
         tailExpression: tailMeta.tailExpression,
+        tailAnimation: tailMeta.tailAnimation,
+        tailRepeatCount: tailMeta.tailRepeatCount,
         sourceFile: _activeSourceFile,
         sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
         conditionVariable: variableName,
@@ -1197,6 +1264,8 @@ class SksParser {
           tailCharacter: tailMeta.tailCharacter,
           tailPose: tailMeta.tailPose,
           tailExpression: tailMeta.tailExpression,
+          tailAnimation: tailMeta.tailAnimation,
+          tailRepeatCount: tailMeta.tailRepeatCount,
           sourceFile: _activeSourceFile,
           sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
         );
@@ -1216,6 +1285,8 @@ class SksParser {
         tailCharacter: tailMeta.tailCharacter,
         tailPose: tailMeta.tailPose,
         tailExpression: tailMeta.tailExpression,
+        tailAnimation: tailMeta.tailAnimation,
+        tailRepeatCount: tailMeta.tailRepeatCount,
         sourceFile: _activeSourceFile,
         sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
       );
@@ -1307,6 +1378,8 @@ class SksParser {
           tailCharacter: tailMeta.tailCharacter,
           tailPose: tailMeta.tailPose,
           tailExpression: tailMeta.tailExpression,
+          tailAnimation: tailMeta.tailAnimation,
+          tailRepeatCount: tailMeta.tailRepeatCount,
           sourceFile: _activeSourceFile,
           sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
           pose: pose,
@@ -1323,6 +1396,8 @@ class SksParser {
         tailCharacter: tailMeta.tailCharacter,
         tailPose: tailMeta.tailPose,
         tailExpression: tailMeta.tailExpression,
+        tailAnimation: tailMeta.tailAnimation,
+        tailRepeatCount: tailMeta.tailRepeatCount,
         sourceFile: _activeSourceFile,
         sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
         pose: pose,
