@@ -333,17 +333,24 @@ class _TopSquarePreview extends StatelessWidget {
           child: ClipRect(
             child: Align(
               alignment: Alignment.topCenter,
-              child: SmartImage.asset(
-                imagePath,
-                width: size,
-                fit: BoxFit.fitWidth,
-                errorWidget: Container(
-                  color: const Color(0xFF1E1E1E),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    Icons.broken_image_outlined,
-                    size: size * 0.48,
-                    color: Colors.white38,
+              child: OverflowBox(
+                alignment: Alignment.topCenter,
+                minWidth: size,
+                maxWidth: size,
+                minHeight: 0,
+                maxHeight: double.infinity,
+                child: SmartImage.asset(
+                  imagePath,
+                  width: size,
+                  fit: BoxFit.fitWidth,
+                  errorWidget: Container(
+                    color: const Color(0xFF1E1E1E),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      Icons.broken_image_outlined,
+                      size: size * 0.48,
+                      color: Colors.white38,
+                    ),
                   ),
                 ),
               ),

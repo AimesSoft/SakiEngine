@@ -295,20 +295,26 @@ class ScriptContentModifier {
     String? expectedCharacterId,
   ) {
     final tokens = _tailTokensFromNarrationLine(line);
-    if (tokens.length < 2) {
+    if (tokens.isEmpty) {
       return false;
     }
-    String alias;
-    if (tokens.length >= 3 && !tokens[1].toLowerCase().startsWith('pose')) {
-      // 兼容： "..." sad aru normal（前缀tag + 角色控制）
-      alias = tokens[1];
-    } else {
-      alias = tokens.first;
+    if (_isNarratorCharacterId(expectedCharacterId)) {
+      return true;
     }
-    return _isCharacterIdCompatible(
-      lineCharacterId: alias,
+    if (_isCharacterIdCompatible(
+      lineCharacterId: tokens.first,
       expectedCharacterId: expectedCharacterId,
-    );
+    )) {
+      return true;
+    }
+    if (tokens.length >= 2 &&
+        _isCharacterIdCompatible(
+          lineCharacterId: tokens[1],
+          expectedCharacterId: expectedCharacterId,
+        )) {
+      return true;
+    }
+    return false;
   }
 
   static String _modifyNarrationTailLine(
@@ -324,45 +330,88 @@ class ScriptContentModifier {
     }
     final quoted = trimmed.substring(0, quoteEnd + 1);
     final tokens = _tailTokensFromNarrationLine(trimmed);
+    final wantsNarration = _isNarratorCharacterId(characterId);
+
     if (tokens.isEmpty) {
+      if (wantsNarration) {
+        return line;
+      }
       final pose = newPose ?? 'pose1';
       final expression = newExpression ?? 'normal';
       return '$quoted $characterId $pose $expression';
     }
 
-    final hasLeadingTag =
-        tokens.length >= 3 && !tokens[1].toLowerCase().startsWith('pose');
-    final leadingTag = hasLeadingTag ? tokens.first : null;
-    final alias = hasLeadingTag ? tokens[1] : tokens.first;
-    if (!_isCharacterIdCompatible(
-      lineCharacterId: alias,
-      expectedCharacterId: characterId,
-    )) {
+    int aliasIndex = -1;
+    if (!wantsNarration) {
+      if (_isCharacterIdCompatible(
+        lineCharacterId: tokens.first,
+        expectedCharacterId: characterId,
+      )) {
+        aliasIndex = 0;
+      } else if (tokens.length >= 2 &&
+          _isCharacterIdCompatible(
+            lineCharacterId: tokens[1],
+            expectedCharacterId: characterId,
+          )) {
+        // 兼容： "..." tag alias ...
+        aliasIndex = 1;
+      }
+    }
+
+    if (aliasIndex < 0) {
+      // 兼容：只有 dialogueTag 的行（例如 "..." fuzu），补全角色尾语法。
+      if (!wantsNarration && tokens.length == 1) {
+        final nextPose = newPose ?? 'pose1';
+        final nextExpression = newExpression ?? 'normal';
+        return '$quoted ${tokens.first} $characterId $nextPose $nextExpression';
+      }
       return line;
     }
 
-    final rest = tokens.sublist(hasLeadingTag ? 2 : 1);
+    final leadingTokens = tokens.sublist(0, aliasIndex);
+    final alias = tokens[aliasIndex];
+    final rest = tokens.sublist(aliasIndex + 1);
+    String? animation;
+    String? repeatRaw;
+    final baseTokens = <String>[];
+    for (var i = 0; i < rest.length; i++) {
+      final token = rest[i];
+      final lower = token.toLowerCase();
+      if (lower == 'an' && i + 1 < rest.length) {
+        animation = rest[i + 1];
+        i++;
+        continue;
+      }
+      if (lower == 'repeat' && i + 1 < rest.length) {
+        repeatRaw = rest[i + 1];
+        i++;
+        continue;
+      }
+      baseTokens.add(token);
+    }
+
     String? pose;
     String? expression;
-    if (rest.isNotEmpty) {
-      if (rest.length == 1) {
-        if (rest[0].toLowerCase().startsWith('pose')) {
-          pose = rest[0];
+    final extraTokens = <String>[];
+    if (baseTokens.isNotEmpty) {
+      if (baseTokens.length == 1) {
+        if (baseTokens[0].toLowerCase().startsWith('pose')) {
+          pose = baseTokens[0];
         } else {
-          expression = rest[0];
+          expression = baseTokens[0];
         }
       } else {
-        pose = rest[0];
-        expression = rest[1];
+        pose = baseTokens[0];
+        expression = baseTokens[1];
+        if (baseTokens.length > 2) {
+          extraTokens.addAll(baseTokens.sublist(2));
+        }
       }
     }
 
     final nextPose = newPose ?? pose;
     final nextExpression = newExpression ?? expression;
-    final nextTail = <String>[];
-    if (leadingTag != null && leadingTag.isNotEmpty) {
-      nextTail.add(leadingTag);
-    }
+    final nextTail = <String>[...leadingTokens];
     nextTail.add(alias);
     if (nextPose != null && nextPose.isNotEmpty) {
       nextTail.add(nextPose);
@@ -370,6 +419,20 @@ class ScriptContentModifier {
     if (nextExpression != null && nextExpression.isNotEmpty) {
       nextTail.add(nextExpression);
     }
+    if (extraTokens.isNotEmpty) {
+      nextTail.addAll(extraTokens);
+    }
+    if (animation != null && animation.isNotEmpty) {
+      nextTail
+        ..add('an')
+        ..add(animation);
+    }
+    if (repeatRaw != null && repeatRaw.isNotEmpty) {
+      nextTail
+        ..add('repeat')
+        ..add(repeatRaw);
+    }
+
     return '$quoted ${nextTail.join(' ')}';
   }
 
@@ -625,26 +688,13 @@ class ScriptContentModifier {
     }
 
     // 如果是纯对话格式，添加角色、pose和表情信息
-    if (trimmedLine.startsWith('"') && trimmedLine.endsWith('"')) {
-      if (wantsNarration) {
-        return trimmedLine;
-      }
-      final pose = newPose ?? 'pose1';
-      final expression = newExpression ?? 'normal';
-      return '$trimmedLine $writeCharacterId $pose $expression';
-    }
-
     if (trimmedLine.startsWith('"')) {
-      if (!wantsNarration) {
-        final pose = newPose ?? 'pose1';
-        final expression = newExpression ?? 'normal';
-        return '$trimmedLine $writeCharacterId $pose $expression';
-      }
       final modifiedNarrationTail = _modifyNarrationTailLine(
-          trimmedLine, characterId, newPose, newExpression);
-      if (modifiedNarrationTail != trimmedLine) {
+          trimmedLine, writeCharacterId, newPose, newExpression);
+      if (modifiedNarrationTail != line && modifiedNarrationTail != trimmedLine) {
         return modifiedNarrationTail;
       }
+      return trimmedLine;
     }
 
     // 其他情况，尝试智能添加
