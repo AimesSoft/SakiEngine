@@ -1083,19 +1083,105 @@ class SksParser {
       }
     }
 
-    // 检查是否是时序差分切换语法: x [wakuwaku2,0.5,think] "我去。"
+    ({
+      String? pose,
+      String? position,
+      String? inlineApiToken,
+      String? animation,
+      int? repeatCount
+    }) parseTimedPrefixAttributes(String raw) {
+      final result = (
+        pose: null as String?,
+        position: null as String?,
+        inlineApiToken: null as String?,
+        animation: null as String?,
+        repeatCount: null as int?,
+      );
+      final attrs =
+          raw.split(RegExp(r'\s+')).where((s) => s.trim().isNotEmpty).toList();
+      if (attrs.isEmpty) {
+        return result;
+      }
+
+      int atIndex = -1;
+      int anIndex = -1;
+      int repeatIndex = -1;
+      for (int i = 0; i < attrs.length; i++) {
+        if (attrs[i] == 'at') {
+          atIndex = i;
+        } else if (attrs[i] == 'an') {
+          anIndex = i;
+        } else if (attrs[i] == 'repeat') {
+          repeatIndex = i;
+          break;
+        }
+      }
+
+      int? repeatCount;
+      if (repeatIndex >= 0 && repeatIndex + 1 < attrs.length) {
+        repeatCount = int.tryParse(attrs[repeatIndex + 1]);
+      }
+
+      final endIndex = repeatIndex >= 0 ? repeatIndex : attrs.length;
+
+      String? animation;
+      List<String> regularAttrs;
+      String? position;
+      if (anIndex >= 0 && anIndex < endIndex) {
+        if (anIndex + 1 < endIndex) {
+          animation = attrs[anIndex + 1];
+        }
+        if (atIndex >= 0 && atIndex < anIndex) {
+          regularAttrs = attrs.sublist(0, atIndex);
+          if (atIndex + 1 < anIndex) {
+            position = attrs[atIndex + 1];
+          }
+        } else {
+          regularAttrs = attrs.sublist(0, anIndex);
+        }
+      } else if (atIndex >= 0 && atIndex < endIndex) {
+        regularAttrs = attrs.sublist(0, atIndex);
+        if (atIndex + 1 < endIndex) {
+          position = attrs[atIndex + 1];
+        }
+      } else {
+        regularAttrs = attrs.sublist(0, endIndex);
+      }
+
+      String? pose;
+      String? inlineApiToken;
+      for (final attr in regularAttrs) {
+        if (_isInlineApiToken(attr)) {
+          inlineApiToken = attr;
+        } else if (attr.startsWith('pose') || attr.contains('pose')) {
+          pose = attr;
+        }
+      }
+
+      return (
+        pose: pose,
+        position: position,
+        inlineApiToken: inlineApiToken,
+        animation: animation,
+        repeatCount: repeatCount,
+      );
+    }
+
+    // 检查是否是时序差分切换语法: x [wakuwaku2,0.5,think] an jump "我去。"
     final timedExpressionRegex = RegExp(
-      r'^(\w+)\s*\[([^,]+),([^,]+),([^\]]+)\]\s*"([^"]*)"(?:\s+(.*))?\s*$',
+      r'^(\w+)(?:\s+([^\[]+?))?\s*\[([^,]+),([^,]+),([^\]]+)\]\s*(.*?)\s*"([^"]*)"(?:\s+(.*))?\s*$',
     );
     final timedMatch = timedExpressionRegex.firstMatch(processedLine);
 
     if (timedMatch != null) {
       final character = timedMatch.group(1)!.trim();
-      final startExpression = timedMatch.group(2)!.trim();
-      final delayStr = timedMatch.group(3)!.trim();
-      final endExpression = timedMatch.group(4)!.trim();
-      final dialogue = timedMatch.group(5)!;
-      final tailMeta = _parseDialogueTail(timedMatch.group(6));
+      final beforeBracketAttrsRaw = timedMatch.group(2)?.trim() ?? '';
+      final startExpression = timedMatch.group(3)!.trim();
+      final delayStr = timedMatch.group(4)!.trim();
+      final endExpression = timedMatch.group(5)!.trim();
+      final afterBracketAttrsRaw = timedMatch.group(6)?.trim() ?? '';
+      final dialogue = timedMatch.group(7)!;
+      final tailMeta = _parseDialogueTail(timedMatch.group(8));
 
       final switchDelay = double.tryParse(delayStr);
       if (switchDelay == null || switchDelay <= 0) {
@@ -1103,11 +1189,23 @@ class SksParser {
         return null;
       }
 
+      final beforeAttrs = parseTimedPrefixAttributes(beforeBracketAttrsRaw);
+      final afterAttrs = parseTimedPrefixAttributes(afterBracketAttrsRaw);
+
+      final pose = afterAttrs.pose ?? beforeAttrs.pose;
+      final position = afterAttrs.position ?? beforeAttrs.position;
+      final inlineApiToken =
+          afterAttrs.inlineApiToken ?? beforeAttrs.inlineApiToken;
+      final animation = afterAttrs.animation ?? beforeAttrs.animation;
+      final repeatCount = afterAttrs.repeatCount ?? beforeAttrs.repeatCount;
+
       //print('[SksParser] 解析时序差分切换: $character [$startExpression,$switchDelay,$endExpression] "$dialogue"');
 
       return SayNode(
         character: character,
         dialogue: _formatDialogueWithQuotes(dialogue, character),
+        pose: pose,
+        inlineApiToken: inlineApiToken,
         dialogueTag: tailMeta.dialogueTag,
         tailCharacter: tailMeta.tailCharacter,
         tailPose: tailMeta.tailPose,
@@ -1116,6 +1214,9 @@ class SksParser {
         tailRepeatCount: tailMeta.tailRepeatCount,
         sourceFile: _activeSourceFile,
         sourceLine: _activeSourceLine > 0 ? _activeSourceLine : null,
+        position: position,
+        animation: animation,
+        repeatCount: repeatCount,
         startExpression: startExpression,
         switchDelay: switchDelay,
         endExpression: endExpression,
