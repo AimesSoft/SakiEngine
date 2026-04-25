@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
+import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/config/game_path_resolver.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
@@ -20,19 +21,18 @@ class UISoundManager {
   String? _projectName;
   final Random _random = Random();
   bool _initialized = false;
+  bool _uiSoundsResolved = false;
+  final List<String> _hoverSounds = <String>[];
+  String? _clickSound;
 
-  static const String _soundPrefix = 'Assets/gui/';
-  static const String _soundExtension = '.mp3';
-
-  static const String buttonHover1 = 'button_1';
-  static const String buttonHover2 = 'button_2';
-  static const String buttonHover3 = 'button_3';
-  static const String buttonClick = 'main_in';
-
-  static const List<String> _hoverSounds = <String>[
-    buttonHover1,
-    buttonHover2,
-    buttonHover3,
+  static const String _uiSoundDirectory = 'Assets/gui';
+  static const List<String> _supportedSoundExtensions = <String>[
+    '.mp3',
+    '.ogg',
+    '.wav',
+    '.flac',
+    '.m4a',
+    '.aac',
   ];
 
   bool get isSoundEnabled => _dataManager.isSoundEnabled;
@@ -60,6 +60,7 @@ class UISoundManager {
       }
     }
 
+    await _resolveUiSounds();
     await _updateVolume();
     _initialized = true;
   }
@@ -71,16 +72,17 @@ class UISoundManager {
     }
   }
 
-  String _buildSoundPath(String soundName) {
-    return '$_soundPrefix$soundName$_soundExtension';
-  }
-
   Future<void> playButtonHover() async {
     if (!isSoundEnabled) return;
 
     try {
-      final String soundName = _hoverSounds[_random.nextInt(_hoverSounds.length)];
-      await _playSound(soundName);
+      await _ensureReady();
+      if (_hoverSounds.isEmpty) {
+        return;
+      }
+
+      final String assetPath = _hoverSounds[_random.nextInt(_hoverSounds.length)];
+      await _playSound(assetPath);
     } catch (e) {
       if (kEngineDebugMode && !_isExpectedInterruptionError(e)) {
         print('[UISoundManager] playButtonHover failed: $e');
@@ -92,7 +94,12 @@ class UISoundManager {
     if (!isSoundEnabled) return;
 
     try {
-      await _playSound(buttonClick);
+      await _ensureReady();
+      final clickSound = _clickSound;
+      if (clickSound == null || clickSound.isEmpty) {
+        return;
+      }
+      await _playSound(clickSound);
     } catch (e) {
       if (kEngineDebugMode && !_isExpectedInterruptionError(e)) {
         print('[UISoundManager] playButtonClick failed: $e');
@@ -100,7 +107,7 @@ class UISoundManager {
     }
   }
 
-  Future<void> _playSound(String soundName) async {
+  Future<void> _playSound(String assetPath) async {
     if (_players.isEmpty) {
       await initialize();
       if (_players.isEmpty) {
@@ -116,7 +123,6 @@ class UISoundManager {
 
     await player.setVolume(isSoundEnabled ? soundVolume : 0.0);
 
-    final String assetPath = _buildSoundPath(soundName);
     await player.stop();
     await player.setLoopMode(LoopMode.off);
     await _setPlayerSource(player, assetPath);
@@ -134,7 +140,104 @@ class UISoundManager {
       player.dispose();
     }
     _players.clear();
+    _hoverSounds.clear();
+    _clickSound = null;
+    _uiSoundsResolved = false;
     _initialized = false;
+  }
+
+  Future<void> _ensureReady() async {
+    if (_players.isEmpty || !_initialized) {
+      await initialize();
+      return;
+    }
+    await _resolveUiSounds();
+  }
+
+  Future<void> _resolveUiSounds() async {
+    if (_uiSoundsResolved) {
+      return;
+    }
+    _uiSoundsResolved = true;
+
+    final Set<String> files = <String>{};
+    for (final extension in _supportedSoundExtensions) {
+      try {
+        final entries = await AssetManager().listAssets(_uiSoundDirectory, extension);
+        files.addAll(entries);
+      } catch (e) {
+        if (kEngineDebugMode) {
+          print(
+              '[UISoundManager] listAssets failed: dir=$_uiSoundDirectory ext=$extension error=$e');
+        }
+      }
+    }
+
+    final List<String> audioAssets = files.map(_buildUiSoundPath).toList()..sort();
+    if (audioAssets.isEmpty) {
+      return;
+    }
+
+    final hoverCandidates = _pickHoverCandidates(audioAssets);
+    final clickCandidate = _pickClickCandidate(audioAssets, hoverCandidates);
+
+    _hoverSounds
+      ..clear()
+      ..addAll(hoverCandidates);
+    _clickSound = clickCandidate;
+  }
+
+  String _buildUiSoundPath(String fileName) {
+    if (fileName.startsWith('Assets/') || fileName.startsWith('assets/')) {
+      return fileName;
+    }
+    return '$_uiSoundDirectory/$fileName';
+  }
+
+  List<String> _pickHoverCandidates(List<String> audioAssets) {
+    final List<String> hoverSounds = audioAssets.where((assetPath) {
+      final stem = _soundStemLower(assetPath);
+      return stem.contains('hover') ||
+          stem.startsWith('button') ||
+          stem.contains('rollover') ||
+          stem.contains('cursor') ||
+          stem.contains('focus');
+    }).toList();
+
+    if (hoverSounds.isNotEmpty) {
+      return hoverSounds;
+    }
+    return List<String>.from(audioAssets);
+  }
+
+  String? _pickClickCandidate(
+    List<String> audioAssets,
+    List<String> hoverCandidates,
+  ) {
+    for (final assetPath in audioAssets) {
+      final stem = _soundStemLower(assetPath);
+      if (stem.contains('click') ||
+          stem.contains('confirm') ||
+          stem.contains('select') ||
+          stem.contains('press') ||
+          stem.contains('enter') ||
+          stem.contains('ok') ||
+          stem.contains('main')) {
+        return assetPath;
+      }
+    }
+
+    for (final assetPath in audioAssets) {
+      if (!hoverCandidates.contains(assetPath)) {
+        return assetPath;
+      }
+    }
+
+    return audioAssets.first;
+  }
+
+  String _soundStemLower(String assetPath) {
+    return p.basenameWithoutExtension(assetPath).toLowerCase();
   }
 
   Future<void> _setPlayerSource(AudioPlayer player, String assetPath) async {

@@ -618,6 +618,535 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     _appendLog('默认项目已更新为: $game');
   }
 
+  Future<void> _showEditProjectVersionDialog() async {
+    if (_busy) {
+      return;
+    }
+    final game = _selectedGame;
+    if (game == null) {
+      return;
+    }
+
+    final pubspecFile = File(
+      _joinPath(
+        _joinPath(_joinPath(_repoRoot.path, 'Game'), game),
+        'pubspec.yaml',
+      ),
+    );
+    if (!pubspecFile.existsSync()) {
+      _appendLog('版本编辑失败: 未找到 pubspec.yaml (${pubspecFile.path})');
+      return;
+    }
+
+    final versionController = TextEditingController(
+      text: _readGameVersion(pubspecFile),
+    );
+    var saving = false;
+    String? message;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: !saving,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('编辑版本号 - $game'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    TextField(
+                      controller: versionController,
+                      enabled: !saving,
+                      decoration: const InputDecoration(
+                        labelText: 'version',
+                        hintText: '1.0.0+1',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '将写入 Game/$game/pubspec.yaml 的 version 字段',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (message != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          message!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: saving
+                      ? null
+                      : () {
+                          Navigator.of(dialogContext).pop();
+                        },
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          final nextVersion = versionController.text.trim();
+                          if (nextVersion.isEmpty ||
+                              nextVersion.contains(' ')) {
+                            setDialogState(() {
+                              message = '版本号不能为空且不能包含空格（示例: 1.0.0+1）';
+                            });
+                            return;
+                          }
+                          setDialogState(() {
+                            saving = true;
+                            message = null;
+                          });
+
+                          final updated = await _updateGamePubspecVersion(
+                            pubspecFile: pubspecFile,
+                            newVersion: nextVersion,
+                          );
+                          if (!mounted) {
+                            return;
+                          }
+                          if (!updated) {
+                            setDialogState(() {
+                              saving = false;
+                              message = '未找到可更新的 version 字段';
+                            });
+                            return;
+                          }
+                          _appendLog('已更新项目版本: $game -> $nextVersion');
+                          Navigator.of(dialogContext).pop();
+                        },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    versionController.dispose();
+  }
+
+  Future<void> _showEditConfigsDialog() async {
+    if (_busy) {
+      return;
+    }
+    final game = _selectedGame;
+    if (game == null) {
+      return;
+    }
+
+    final configsFile = File(
+      _joinPath(
+        _joinPath(
+          _joinPath(_joinPath(_repoRoot.path, 'Game'), game),
+          'GameScript',
+        ),
+        'configs/configs.sks',
+      ),
+    );
+    if (!configsFile.existsSync()) {
+      _appendLog('配置编辑失败: 未找到 configs.sks (${configsFile.path})');
+      return;
+    }
+
+    late final _ConfigsVisualDocument document;
+    try {
+      document = _parseConfigsSks(configsFile.readAsLinesSync());
+    } catch (e) {
+      _appendLog('配置编辑失败: 解析 configs.sks 出错: $e');
+      return;
+    }
+
+    final entries = document.entries
+        .map(
+          (entry) => _ConfigEntryDraft(
+            key: TextEditingController(text: entry.key),
+            value: TextEditingController(text: entry.value),
+            inlineComment: entry.inlineComment,
+          ),
+        )
+        .toList();
+
+    void disposeDrafts() {
+      for (final draft in entries) {
+        draft.key.dispose();
+        draft.value.dispose();
+      }
+    }
+
+    var saving = false;
+    String? message;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: !saving,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('可视化编辑 configs.sks - $game'),
+              content: SizedBox(
+                width: 860,
+                height: 520,
+                child: Column(
+                  children: <Widget>[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        configsFile.path,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outlineVariant,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          children: <Widget>[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerHighest,
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(7),
+                                ),
+                              ),
+                              child: const Row(
+                                children: <Widget>[
+                                  Expanded(
+                                    flex: 3,
+                                    child: Text(
+                                      '配置键',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    flex: 7,
+                                    child: Text(
+                                      '配置值',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 40),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: ListView.separated(
+                                padding: const EdgeInsets.all(10),
+                                itemCount: entries.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 8),
+                                itemBuilder: (context, index) {
+                                  final draft = entries[index];
+                                  return Row(
+                                    children: <Widget>[
+                                      Expanded(
+                                        flex: 3,
+                                        child: TextField(
+                                          controller: draft.key,
+                                          enabled: !saving,
+                                          decoration: const InputDecoration(
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                            hintText: '例如: base_dialogue',
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        flex: 7,
+                                        child: TextField(
+                                          controller: draft.value,
+                                          enabled: !saving,
+                                          decoration: const InputDecoration(
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                            hintText: '例如: size=24',
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      IconButton(
+                                        onPressed: saving
+                                            ? null
+                                            : () {
+                                                setDialogState(() {
+                                                  final removed = entries
+                                                      .removeAt(index);
+                                                  removed.key.dispose();
+                                                  removed.value.dispose();
+                                                });
+                                              },
+                                        tooltip: '删除',
+                                        icon: const Icon(Icons.delete_outline),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: saving
+                            ? null
+                            : () {
+                                setDialogState(() {
+                                  entries.add(
+                                    _ConfigEntryDraft(
+                                      key: TextEditingController(),
+                                      value: TextEditingController(),
+                                      inlineComment: '',
+                                    ),
+                                  );
+                                });
+                              },
+                        icon: const Icon(Icons.add),
+                        label: const Text('新增配置项'),
+                      ),
+                    ),
+                    if (message != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            message!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: saving
+                      ? null
+                      : () {
+                          Navigator.of(dialogContext).pop();
+                        },
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          if (entries.isEmpty) {
+                            setDialogState(() {
+                              message = '至少需要保留 1 条配置项';
+                            });
+                            return;
+                          }
+                          final seen = <String>{};
+                          final nextEntries = <_ConfigEntry>[];
+                          for (final draft in entries) {
+                            final key = draft.key.text.trim();
+                            final value = draft.value.text.trim();
+                            if (key.isEmpty) {
+                              setDialogState(() {
+                                message = '配置键不能为空';
+                              });
+                              return;
+                            }
+                            if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(key)) {
+                              setDialogState(() {
+                                message = '配置键仅支持字母/数字/_/-';
+                              });
+                              return;
+                            }
+                            if (value.isEmpty) {
+                              setDialogState(() {
+                                message = '配置值不能为空';
+                              });
+                              return;
+                            }
+                            if (!seen.add(key)) {
+                              setDialogState(() {
+                                message = '存在重复配置键: $key';
+                              });
+                              return;
+                            }
+                            nextEntries.add(
+                              _ConfigEntry(
+                                key: key,
+                                value: value,
+                                inlineComment: draft.inlineComment,
+                              ),
+                            );
+                          }
+
+                          setDialogState(() {
+                            saving = true;
+                            message = null;
+                          });
+                          await _saveConfigsSks(
+                            file: configsFile,
+                            headerLines: document.headerLines,
+                            trailingLines: document.trailingLines,
+                            entries: nextEntries,
+                          );
+                          if (!mounted) {
+                            return;
+                          }
+                          _appendLog('已更新 configs.sks: ${configsFile.path}');
+                          Navigator.of(dialogContext).pop();
+                        },
+                  child: const Text('保存'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    disposeDrafts();
+  }
+
+  Future<bool> _updateGamePubspecVersion({
+    required File pubspecFile,
+    required String newVersion,
+  }) async {
+    final lines = await pubspecFile.readAsLines();
+    final versionPattern = RegExp(r'^(\s*version:\s*)(.+?)(\s*(#.*)?)$');
+    var updated = false;
+    for (var i = 0; i < lines.length; i++) {
+      final match = versionPattern.firstMatch(lines[i]);
+      if (match == null) {
+        continue;
+      }
+      final prefix = match.group(1)!;
+      final suffix = match.group(3) ?? '';
+      lines[i] = '$prefix$newVersion$suffix';
+      updated = true;
+      break;
+    }
+    if (!updated) {
+      return false;
+    }
+    await pubspecFile.writeAsString('${lines.join('\n')}\n');
+    return true;
+  }
+
+  _ConfigsVisualDocument _parseConfigsSks(List<String> lines) {
+    final headerLines = <String>[];
+    final trailingLines = <String>[];
+    final entries = <_ConfigEntry>[];
+    var seenEntry = false;
+
+    for (final original in lines) {
+      final line = original.trim();
+      final lineWithoutComment = line.split('//').first.trimRight();
+      final separatorIndex = lineWithoutComment.indexOf(':');
+      final canParseEntry =
+          line.isNotEmpty &&
+          !line.startsWith('//') &&
+          separatorIndex > 0 &&
+          separatorIndex < lineWithoutComment.length - 1;
+
+      if (canParseEntry) {
+        seenEntry = true;
+        final key = lineWithoutComment.substring(0, separatorIndex).trim();
+        final value = lineWithoutComment.substring(separatorIndex + 1).trim();
+        var inlineComment = '';
+        final commentIndex = line.indexOf('//');
+        if (commentIndex >= 0) {
+          inlineComment = line.substring(commentIndex + 2).trim();
+        }
+        entries.add(
+          _ConfigEntry(key: key, value: value, inlineComment: inlineComment),
+        );
+      } else {
+        if (!seenEntry) {
+          headerLines.add(original);
+        } else {
+          trailingLines.add(original);
+        }
+      }
+    }
+
+    if (entries.isEmpty) {
+      throw const _TaskFailure('configs.sks 中未找到可编辑配置项');
+    }
+
+    return _ConfigsVisualDocument(
+      headerLines: headerLines,
+      trailingLines: trailingLines,
+      entries: entries,
+    );
+  }
+
+  Future<void> _saveConfigsSks({
+    required File file,
+    required List<String> headerLines,
+    required List<String> trailingLines,
+    required List<_ConfigEntry> entries,
+  }) async {
+    final output = <String>[];
+    if (headerLines.isNotEmpty) {
+      output.addAll(headerLines);
+    } else {
+      output.add('//config// SakiEngine 配置文件');
+    }
+
+    for (final entry in entries) {
+      var line = '${entry.key}: ${entry.value}';
+      if (entry.inlineComment.trim().isNotEmpty) {
+        line = '$line // ${entry.inlineComment.trim()}';
+      }
+      output.add(line);
+    }
+
+    if (trailingLines.isNotEmpty) {
+      output.addAll(trailingLines);
+    }
+    await file.writeAsString('${output.join('\n')}\n');
+  }
+
   Future<int> _runNodeBridge(List<String> bridgeArgs) {
     return _runCommand(
       executable: 'node',
@@ -1208,6 +1737,13 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
           game: game,
         );
       }
+      if (_buildMode == BuildMode.release) {
+        await _packageReleaseBuildAsZip(
+          gameDir: gameDir,
+          outputDir: outputDir,
+          game: game,
+        );
+      }
 
       _appendLog('构建完成: $game -> $platform');
       await _openBuildOutputInFileManager(gameDir, platform);
@@ -1568,6 +2104,81 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     } else {
       _appendLog('提示: 自动打开目录失败，请手动查看: ${targetDir.path}');
     }
+  }
+
+  Future<void> _packageReleaseBuildAsZip({
+    required Directory gameDir,
+    required Directory outputDir,
+    required String game,
+  }) async {
+    if (!outputDir.existsSync()) {
+      throw _TaskFailure('构建产物目录不存在，无法打包 zip: ${outputDir.path}');
+    }
+
+    final gameName = _sanitizeFileNamePart(
+      _readGameDisplayName(gameDir, fallback: game),
+    );
+    final version = _sanitizeFileNamePart(
+      _readGameVersion(File(_joinPath(gameDir.path, 'pubspec.yaml'))),
+    );
+    final buildDate = _formatBuildDate(DateTime.now());
+    final archiveName = '$gameName-$version-$buildDate.zip';
+    final archiveFile = File(_joinPath(outputDir.parent.path, archiveName));
+
+    if (archiveFile.existsSync()) {
+      await archiveFile.delete();
+    }
+
+    _appendLog('发布构建完成，正在打包 zip: $archiveName');
+
+    int zipCode;
+    if (Platform.isWindows) {
+      final sourcePath = _escapePowerShellSingleQuoted(outputDir.path);
+      final archivePath = _escapePowerShellSingleQuoted(archiveFile.path);
+      final command =
+          "Compress-Archive -Path '$sourcePath' -DestinationPath '$archivePath' -Force";
+      if (await _isCommandAvailable('powershell')) {
+        zipCode = await _runCommand(
+          executable: 'powershell',
+          arguments: <String>[
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-Command',
+            command,
+          ],
+          workingDirectory: outputDir.parent.path,
+        );
+      } else if (await _isCommandAvailable('pwsh')) {
+        zipCode = await _runCommand(
+          executable: 'pwsh',
+          arguments: <String>['-NoProfile', '-Command', command],
+          workingDirectory: outputDir.parent.path,
+        );
+      } else {
+        throw _TaskFailure('未找到 PowerShell，无法自动打包 zip');
+      }
+    } else {
+      if (!await _isCommandAvailable('zip')) {
+        throw _TaskFailure('未找到 zip 命令，无法自动打包构建产物');
+      }
+      zipCode = await _runCommand(
+        executable: 'zip',
+        arguments: <String>[
+          '-r',
+          '-q',
+          archiveFile.path,
+          _basename(outputDir.path),
+        ],
+        workingDirectory: outputDir.parent.path,
+      );
+    }
+
+    if (zipCode != 0 || !archiveFile.existsSync()) {
+      throw _TaskFailure('自动打包 zip 失败');
+    }
+
+    _appendLog('已生成发布压缩包: ${archiveFile.path}');
   }
 
   Future<bool> _launchRunInSystemTerminal({
@@ -1963,6 +2574,74 @@ endlocal
     return "'${value.replaceAll("'", "'\"'\"'")}'";
   }
 
+  String _escapePowerShellSingleQuoted(String value) {
+    return value.replaceAll("'", "''");
+  }
+
+  String _readGameDisplayName(Directory gameDir, {required String fallback}) {
+    final configFile = File(_joinPath(gameDir.path, 'game_config.txt'));
+    if (!configFile.existsSync()) {
+      return fallback;
+    }
+
+    try {
+      final lines = configFile
+          .readAsLinesSync()
+          .map((line) => line.trim())
+          .where((line) => line.isNotEmpty)
+          .toList();
+      if (lines.isNotEmpty) {
+        return lines.first;
+      }
+    } catch (_) {
+      // ignore and fallback.
+    }
+    return fallback;
+  }
+
+  String _readGameVersion(File pubspecFile) {
+    if (!pubspecFile.existsSync()) {
+      return '0.0.0';
+    }
+
+    try {
+      final versionPattern = RegExp(r'^\s*version:\s*(.+?)\s*$');
+      for (final line in pubspecFile.readAsLinesSync()) {
+        final match = versionPattern.firstMatch(line);
+        if (match == null) {
+          continue;
+        }
+
+        var version = match.group(1)!.replaceAll(RegExp(r'\s+#.*$'), '').trim();
+        if ((version.startsWith('"') && version.endsWith('"')) ||
+            (version.startsWith("'") && version.endsWith("'"))) {
+          version = version.substring(1, version.length - 1).trim();
+        }
+        if (version.isNotEmpty) {
+          return version;
+        }
+      }
+    } catch (_) {
+      // ignore and fallback.
+    }
+    return '0.0.0';
+  }
+
+  String _formatBuildDate(DateTime time) {
+    final year = time.year.toString().padLeft(4, '0');
+    final month = time.month.toString().padLeft(2, '0');
+    final day = time.day.toString().padLeft(2, '0');
+    return '$year$month$day';
+  }
+
+  String _sanitizeFileNamePart(String value) {
+    final sanitized = value
+        .trim()
+        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+        .replaceAll(RegExp(r'\s+'), '_');
+    return sanitized.isEmpty ? 'unknown' : sanitized;
+  }
+
   String _relativePath(String fullPath, String basePath) {
     final full = _normalizePath(fullPath);
     final base = _normalizePath(basePath).replaceAll(RegExp(r'/$'), '');
@@ -2208,6 +2887,30 @@ endlocal
             onPressed: _busy ? null : _showCreateProjectDialog,
             icon: const Icon(Icons.add_box_outlined),
             label: const Text('创建新项目'),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy || _selectedGame == null
+                      ? null
+                      : _showEditProjectVersionDialog,
+                  icon: const Icon(Icons.new_releases_outlined),
+                  label: const Text('编辑版本号'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy || _selectedGame == null
+                      ? null
+                      : _showEditConfigsDialog,
+                  icon: const Icon(Icons.tune_outlined),
+                  label: const Text('编辑 configs'),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Text('默认项目: $defaultLabel'),
@@ -2638,6 +3341,42 @@ class _AssetRewriteResult {
   const _AssetRewriteResult({
     required this.totalAssets,
     required this.mediaAssets,
+  });
+}
+
+class _ConfigEntry {
+  final String key;
+  final String value;
+  final String inlineComment;
+
+  const _ConfigEntry({
+    required this.key,
+    required this.value,
+    required this.inlineComment,
+  });
+}
+
+class _ConfigEntryDraft {
+  final TextEditingController key;
+  final TextEditingController value;
+  final String inlineComment;
+
+  const _ConfigEntryDraft({
+    required this.key,
+    required this.value,
+    required this.inlineComment,
+  });
+}
+
+class _ConfigsVisualDocument {
+  final List<String> headerLines;
+  final List<String> trailingLines;
+  final List<_ConfigEntry> entries;
+
+  const _ConfigsVisualDocument({
+    required this.headerLines,
+    required this.trailingLines,
+    required this.entries,
   });
 }
 
