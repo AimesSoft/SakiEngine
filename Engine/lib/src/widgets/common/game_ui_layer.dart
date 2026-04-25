@@ -172,19 +172,32 @@ class GameUILayerState extends State<GameUILayer> {
         widget.gameManager.currentScriptIndex;
     final shouldShowNormalDialogue =
         dialogueForDialogueBox != null && !widget.gameState.isNvlMode;
+    final enableDialogueSwitcherAnimation =
+        widget.gameModule.enableDialogueSwitcherAnimation &&
+        !widget.gameState.isFastForwarding;
+    final enableDialogueSwitcherSlideAnimation =
+        enableDialogueSwitcherAnimation &&
+        widget.gameModule.enableDialogueSwitcherSlideAnimation;
 
     final stackContent = Stack(
       children: [
         // 对话框 - 使用 AnimatedSwitcher 为对话框切换添加过渡动画
         HideableUI(
           child: AnimatedSwitcher(
-            duration: widget.gameState.isFastForwarding
-                ? Duration.zero // 快进模式下跳过动画
-                : const Duration(milliseconds: 300),
+            duration: enableDialogueSwitcherAnimation
+                ? const Duration(milliseconds: 300)
+                : Duration.zero,
             transitionBuilder: (Widget child, Animation<double> animation) {
-              // 快进模式下跳过滑动动画，直接显示
-              if (widget.gameState.isFastForwarding) {
+              // 关闭切换动画时直接显示
+              if (!enableDialogueSwitcherAnimation) {
                 return child;
+              }
+
+              if (!enableDialogueSwitcherSlideAnimation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: child,
+                );
               }
 
               return FadeTransition(

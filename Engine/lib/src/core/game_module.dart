@@ -220,6 +220,14 @@ abstract class GameModule {
 
   /// 是否显示快捷菜单
   bool get showQuickMenu => true;
+
+  /// 是否启用普通对话框切换动画（Fade/Slide）。
+  /// 返回 `false` 时，对话框切换将无过渡、立即更新。
+  bool get enableDialogueSwitcherAnimation => true;
+
+  /// 是否启用普通对话框切换时的位移动画（Slide）。
+  /// 返回 `false` 时仍会保留淡入淡出，但不会产生上下位移。
+  bool get enableDialogueSwitcherSlideAnimation => true;
 }
 
 /// 默认游戏模块实现 - 使用src/下的默认组件
@@ -469,6 +477,12 @@ class DefaultGameModule implements GameModule {
 
   @override
   bool get showQuickMenu => true;
+
+  @override
+  bool get enableDialogueSwitcherAnimation => true;
+
+  @override
+  bool get enableDialogueSwitcherSlideAnimation => true;
 
   @override
   bool shouldUseUnderscoreNextArrow({String? speaker, String? speakerAlias}) {
