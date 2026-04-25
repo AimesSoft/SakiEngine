@@ -1358,7 +1358,9 @@ class _DirectCgDisplayState extends State<DirectCgDisplay>
         double overallAlpha;
         if (widget.isFadingOut) {
           overallAlpha = 1.0 - progressValue;
-        } else if (widget.enableFadeIn && !_hasShownOnce) {
+        } else if (widget.enableFadeIn && !_hasShownOnce && !hasPrevious) {
+          // Avoid one-frame transparency flash when a second diff arrives
+          // before the first fade-in completes (e.g. timed [x,0.3,y] syntax).
           overallAlpha = progressValue;
         } else {
           overallAlpha = 1.0;

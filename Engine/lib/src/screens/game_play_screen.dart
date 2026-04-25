@@ -1423,6 +1423,7 @@ class _CompositeCharacterWidget extends StatefulWidget {
 
 class _CompositeCharacterWidgetState extends State<_CompositeCharacterWidget> {
   ui.Image? _currentImage;
+  int _loadRequestId = 0;
 
   @override
   void initState() {
@@ -1450,6 +1451,7 @@ class _CompositeCharacterWidgetState extends State<_CompositeCharacterWidget> {
   }
 
   Future<void> _loadComposite() async {
+    final requestId = ++_loadRequestId;
     //print('[_CompositeCharacterWidget] 开始加载合成图像 - 角色: ${widget.characterKey}, resourceId: ${widget.resourceId}, pose: ${widget.pose}, expression: ${widget.expression}');
 
     final image = await CharacterCompositeCache.instance.preload(
@@ -1460,7 +1462,7 @@ class _CompositeCharacterWidgetState extends State<_CompositeCharacterWidget> {
 
     //print('[_CompositeCharacterWidget] 合成图像加载完成 - 角色: ${widget.characterKey}, 结果: ${image != null ? "成功" : "失败"}');
 
-    if (!mounted) return;
+    if (!mounted || requestId != _loadRequestId) return;
     setState(() {
       _currentImage = image;
     });
