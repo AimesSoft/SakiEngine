@@ -94,6 +94,7 @@ class BackgroundNode implements SksNode {
 class SayNode implements SksNode {
   final String? character;
   final String dialogue;
+  final String? inlineApiToken; // 引号前角色参数中的 api token（项目层可自定义语义）
   final String? dialogueTag; // 对话行尾的扩展 token（项目层可自定义语义）
   final String? tailCharacter; // 旁白行引号后角色控制：例如 "..." aru normal
   final String? tailPose; // 旁白行尾部控制pose（可选）
@@ -114,6 +115,7 @@ class SayNode implements SksNode {
   SayNode({
     this.character,
     required this.dialogue,
+    this.inlineApiToken,
     this.dialogueTag,
     this.tailCharacter,
     this.tailPose,
@@ -223,6 +225,7 @@ class BoolNode implements SksNode {
 class ConditionalSayNode implements SksNode {
   final String dialogue;
   final String? character;
+  final String? inlineApiToken; // 引号前角色参数中的 api token（项目层可自定义语义）
   final String? dialogueTag; // 对话行尾的扩展 token（项目层可自定义语义）
   final String? tailCharacter; // 旁白行引号后角色控制：例如 "..." aru normal
   final String? tailPose; // 旁白行尾部控制pose（可选）
@@ -242,6 +245,7 @@ class ConditionalSayNode implements SksNode {
   ConditionalSayNode({
     required this.dialogue,
     this.character,
+    this.inlineApiToken,
     this.dialogueTag,
     this.tailCharacter,
     this.tailPose,

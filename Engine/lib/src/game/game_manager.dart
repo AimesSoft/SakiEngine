@@ -1164,6 +1164,213 @@ class GameManager {
     return true;
   }
 
+  ({
+    String apiName,
+    Map<String, String> params,
+  })? _parseInlineApiToken(String rawToken) {
+    final trimmed = rawToken.trim();
+    if (trimmed.length <= 3 || !trimmed.toLowerCase().startsWith('api')) {
+      return null;
+    }
+
+    final payload = trimmed.substring(3).trim();
+    if (payload.isEmpty) {
+      return null;
+    }
+
+    final params = <String, String>{};
+
+    // 语法1: api<name>(k=v,k2=v2)
+    final leftParenIndex = payload.indexOf('(');
+    if (leftParenIndex > 0 && payload.endsWith(')')) {
+      final apiName = payload.substring(0, leftParenIndex).trim();
+      if (apiName.isEmpty) {
+        return null;
+      }
+      final content = payload.substring(leftParenIndex + 1, payload.length - 1);
+      _parseInlineApiPairs(content, params);
+      return (
+        apiName: apiName,
+        params: params,
+      );
+    }
+
+    // 语法2: api<name>?k=v&k2=v2
+    final queryIndex = payload.indexOf('?');
+    if (queryIndex > 0) {
+      final apiName = payload.substring(0, queryIndex).trim();
+      if (apiName.isEmpty) {
+        return null;
+      }
+      final query = payload.substring(queryIndex + 1).trim();
+      _parseInlineApiQuery(query, params);
+      return (
+        apiName: apiName,
+        params: params,
+      );
+    }
+
+    // 语法3: api<name>:k=v,color=#fff
+    final colonIndex = payload.indexOf(':');
+    if (colonIndex > 0) {
+      final apiName = payload.substring(0, colonIndex).trim();
+      if (apiName.isEmpty) {
+        return null;
+      }
+      final content = payload.substring(colonIndex + 1).trim();
+      _parseInlineApiPairs(content, params);
+      return (
+        apiName: apiName,
+        params: params,
+      );
+    }
+
+    // 语法4: api<name>
+    return (
+      apiName: payload,
+      params: params,
+    );
+  }
+
+  void _parseInlineApiPairs(String raw, Map<String, String> out) {
+    if (raw.trim().isEmpty) {
+      return;
+    }
+    bool capturedBareValue = false;
+    final segments = raw.split(RegExp(r'[;,]'));
+    for (final segment in segments) {
+      final trimmed = segment.trim();
+      if (trimmed.isEmpty) {
+        continue;
+      }
+      final eqIndex = trimmed.indexOf('=');
+      if (eqIndex <= 0) {
+        if (!capturedBareValue) {
+          capturedBareValue = true;
+          out['value'] = _trimWrappingQuotes(trimmed);
+        }
+        continue;
+      }
+      final key = trimmed.substring(0, eqIndex).trim().toLowerCase();
+      final value = _trimWrappingQuotes(trimmed.substring(eqIndex + 1).trim());
+      if (key.isEmpty) {
+        continue;
+      }
+      out[key] = value;
+    }
+  }
+
+  void _parseInlineApiQuery(String raw, Map<String, String> out) {
+    if (raw.trim().isEmpty) {
+      return;
+    }
+    final segments = raw.split('&');
+    for (final segment in segments) {
+      final trimmed = segment.trim();
+      if (trimmed.isEmpty) {
+        continue;
+      }
+      final eqIndex = trimmed.indexOf('=');
+      if (eqIndex <= 0) {
+        final key = Uri.decodeQueryComponent(trimmed).trim().toLowerCase();
+        if (key.isNotEmpty) {
+          out[key] = 'true';
+        }
+        continue;
+      }
+      final key =
+          Uri.decodeQueryComponent(trimmed.substring(0, eqIndex)).trim().toLowerCase();
+      final value =
+          Uri.decodeQueryComponent(trimmed.substring(eqIndex + 1)).trim();
+      if (key.isEmpty) {
+        continue;
+      }
+      out[key] = value;
+    }
+  }
+
+  String _trimWrappingQuotes(String value) {
+    if (value.length < 2) {
+      return value;
+    }
+    final first = value[0];
+    final last = value[value.length - 1];
+    if ((first == '"' && last == '"') || (first == "'" && last == "'")) {
+      return value.substring(1, value.length - 1);
+    }
+    return value;
+  }
+
+  Future<void> _applyInlineApiTokenForSay({
+    required String? inlineApiToken,
+    required String? characterAlias,
+    required String? tailCharacterAlias,
+  }) async {
+    final token = inlineApiToken?.trim();
+    if (token == null || token.isEmpty) {
+      return;
+    }
+
+    final parsed = _parseInlineApiToken(token);
+    if (parsed == null) {
+      return;
+    }
+
+    final params = <String, String>{};
+    params.addAll(parsed.params);
+
+    final targetAlias = (characterAlias ?? '').trim().isNotEmpty
+        ? characterAlias!.trim()
+        : ((tailCharacterAlias ?? '').trim().isNotEmpty
+            ? tailCharacterAlias!.trim()
+            : null);
+    if (targetAlias != null && targetAlias.isNotEmpty) {
+      params.putIfAbsent('target', () => targetAlias);
+      params.putIfAbsent('character', () => targetAlias);
+      final target = _resolveTailTargetCharacterState(targetAlias);
+      if (target != null) {
+        params.putIfAbsent('target_key', () => target.key);
+        params.putIfAbsent('render_key', () => target.key);
+        params.putIfAbsent('resource_id', () => target.value.resourceId);
+      }
+    }
+
+    final executor = onScriptApiExecute;
+    if (executor == null) {
+      return;
+    }
+
+    final result = await executor(
+      apiName: parsed.apiName,
+      params: params,
+      gameState: _currentState,
+      scriptIndex: _scriptIndex,
+    );
+
+    if (!result.handled) {
+      return;
+    }
+
+    if (result.nextState != null) {
+      _currentState = result.nextState!;
+      _gameStateController.add(_currentState);
+    }
+
+    final waitDuration = result.waitDuration;
+    if (waitDuration != null && waitDuration > Duration.zero) {
+      if (kEngineDebugMode) {
+        print(
+            '[GameManager] inline api token ${parsed.apiName} 返回了 waitDuration=$waitDuration，当前按即时模式忽略延时。');
+      }
+      return;
+    }
+
+    if (result.stateAfterWait != null) {
+      _currentState = result.stateAfterWait!;
+      _gameStateController.add(_currentState);
+    }
+  }
+
   // 快进模式控制
   bool get isFastForwardMode => _isFastForwardMode;
   void setFastForwardMode(bool enabled) {
@@ -2303,6 +2510,12 @@ class GameManager {
           );
         }
 
+        await _applyInlineApiTokenForSay(
+          inlineApiToken: node.inlineApiToken,
+          characterAlias: node.character,
+          tailCharacterAlias: tailSpeakerAlias,
+        );
+
         // 在 NVL 或 NVLN 模式下的特殊处理
         if (_activeNvlContext != _NvlContextMode.none) {
           final shouldRevealOverlay = _showNvlOverlayOnNextDialogue;
@@ -2604,6 +2817,12 @@ class GameManager {
             repeatCount: node.tailRepeatCount,
           );
         }
+
+        await _applyInlineApiTokenForSay(
+          inlineApiToken: node.inlineApiToken,
+          characterAlias: node.character,
+          tailCharacterAlias: tailSpeakerAlias,
+        );
 
         // 在 NVL 或 NVLN 模式下的特殊处理
         if (_activeNvlContext != _NvlContextMode.none) {
@@ -4299,6 +4518,7 @@ class GameState {
   final Set<String> everShownCharacters;
   final SceneFilter? sceneFilter;
   final List<String>? sceneLayers; // 新增：多图层支持
+  final String? sceneTopRightStatusText; // 场景右上角状态文本（项目层可自定义）
   final MusicRegion? currentMusicRegion; // 新增：当前音乐区间
   final Map<String, double>? sceneAnimationProperties; // 新增：场景动画属性
   final String? sceneAnimation; // 新增：当前场景动画名称
@@ -4343,6 +4563,7 @@ class GameState {
     this.everShownCharacters = const {},
     this.sceneFilter,
     this.sceneLayers,
+    this.sceneTopRightStatusText,
     this.currentMusicRegion,
     this.sceneAnimationProperties,
     this.sceneAnimation,
@@ -4400,6 +4621,8 @@ class GameState {
     bool clearSceneFilter = false,
     List<String>? sceneLayers,
     bool clearSceneLayers = false,
+    String? sceneTopRightStatusText,
+    bool clearSceneTopRightStatusText = false,
     MusicRegion? currentMusicRegion,
     Map<String, double>? sceneAnimationProperties,
     bool clearSceneAnimation = false,
@@ -4463,6 +4686,9 @@ class GameState {
       everShownCharacters: everShownCharacters ?? this.everShownCharacters,
       sceneFilter: clearSceneFilter ? null : (sceneFilter ?? this.sceneFilter),
       sceneLayers: clearSceneLayers ? null : (sceneLayers ?? this.sceneLayers),
+      sceneTopRightStatusText: clearSceneTopRightStatusText
+          ? null
+          : (sceneTopRightStatusText ?? this.sceneTopRightStatusText),
       currentMusicRegion: currentMusicRegion ?? this.currentMusicRegion,
       sceneAnimationProperties: clearSceneAnimation
           ? null
@@ -4542,6 +4768,8 @@ class CharacterState {
   final String? pose;
   final String? expression;
   final String? positionId;
+  final String? maskType; // 可编程蒙版类型（例如 silhouette）
+  final String? maskColor; // 可编程蒙版颜色（字符串，支持 #RRGGBB/#AARRGGBB）
   final Map<String, double>? animationProperties;
   final bool isFadingOut;
 
@@ -4550,6 +4778,8 @@ class CharacterState {
     this.pose,
     this.expression,
     this.positionId,
+    this.maskType,
+    this.maskColor,
     this.animationProperties,
     this.isFadingOut = false,
   });
@@ -4559,6 +4789,9 @@ class CharacterState {
     String? pose,
     String? expression,
     String? positionId,
+    String? maskType,
+    String? maskColor,
+    bool clearMask = false,
     Map<String, double>? animationProperties,
     bool clearAnimationProperties = false,
     bool? isFadingOut,
@@ -4568,6 +4801,8 @@ class CharacterState {
       pose: pose ?? this.pose,
       expression: expression ?? this.expression,
       positionId: positionId ?? this.positionId,
+      maskType: clearMask ? null : (maskType ?? this.maskType),
+      maskColor: clearMask ? null : (maskColor ?? this.maskColor),
       animationProperties: clearAnimationProperties
           ? null
           : (animationProperties ?? this.animationProperties),

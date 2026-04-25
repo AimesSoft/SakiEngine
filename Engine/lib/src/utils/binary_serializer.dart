@@ -7,7 +7,7 @@ import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 
 /// 二进制序列化工具类，用于将游戏数据序列化为二进制格式
 class BinarySerializer {
-  static const int _version = 13; // 增加版本号以支持对话来源行号追踪
+  static const int _version = 15; // 增加版本号以支持角色蒙版状态持久化
   static const String _magicNumber = 'SAKI';
 
   /// 将SaveSlot序列化为二进制数据
@@ -244,6 +244,7 @@ class BinarySerializer {
     buffer.addAll(_writeNullableString(state.scriptOverlayLineWidthRatios));
     buffer.add(state.scriptOverlayStretchEachLine ? 1 : 0);
     buffer.addAll(_writeInt32(state.scriptOverlayRevision));
+    buffer.addAll(_writeNullableString(state.sceneTopRightStatusText));
 
     return Uint8List.fromList(buffer);
   }
@@ -272,7 +273,7 @@ class BinarySerializer {
     final characters = <String, CharacterState>{};
     for (int i = 0; i < charactersLength; i++) {
       final key = reader.readString();
-      final value = _deserializeCharacterState(reader);
+      final value = _deserializeCharacterState(reader, version);
       characters[key] = value;
     }
 
@@ -282,7 +283,7 @@ class BinarySerializer {
       final cgCharactersLength = reader.readInt32();
       for (int i = 0; i < cgCharactersLength; i++) {
         final key = reader.readString();
-        final value = _deserializeCharacterState(reader);
+        final value = _deserializeCharacterState(reader, version);
         cgCharacters[key] = value;
       }
     }
@@ -319,6 +320,7 @@ class BinarySerializer {
     String? scriptOverlayLineWidthRatios;
     bool scriptOverlayStretchEachLine = false;
     int scriptOverlayRevision = 0;
+    String? sceneTopRightStatusText;
     if (version != null && version >= 8) {
       scriptOverlayText = reader.readNullableString();
       scriptOverlayBackgroundColor = reader.readNullableString();
@@ -338,6 +340,9 @@ class BinarySerializer {
         }
       }
       scriptOverlayRevision = reader.readInt32();
+      if (version >= 14) {
+        sceneTopRightStatusText = reader.readNullableString();
+      }
     }
 
     return GameState(
@@ -365,6 +370,7 @@ class BinarySerializer {
       scriptOverlayLineWidthRatios: scriptOverlayLineWidthRatios,
       scriptOverlayStretchEachLine: scriptOverlayStretchEachLine,
       scriptOverlayRevision: scriptOverlayRevision,
+      sceneTopRightStatusText: sceneTopRightStatusText,
     );
   }
 
@@ -426,22 +432,35 @@ class BinarySerializer {
     buffer.addAll(_writeNullableString(state.pose));
     buffer.addAll(_writeNullableString(state.expression));
     buffer.addAll(_writeNullableString(state.positionId));
+    buffer.addAll(_writeNullableString(state.maskType));
+    buffer.addAll(_writeNullableString(state.maskColor));
 
     return Uint8List.fromList(buffer);
   }
 
   /// 反序列化CharacterState
-  static CharacterState _deserializeCharacterState(_BinaryReader reader) {
+  static CharacterState _deserializeCharacterState(
+    _BinaryReader reader, [
+    int? version,
+  ]) {
     final resourceId = reader.readString();
     final pose = reader.readNullableString();
     final expression = reader.readNullableString();
     final positionId = reader.readNullableString();
+    String? maskType;
+    String? maskColor;
+    if (version != null && version >= 15) {
+      maskType = reader.readNullableString();
+      maskColor = reader.readNullableString();
+    }
 
     return CharacterState(
       resourceId: resourceId,
       pose: pose,
       expression: expression,
       positionId: positionId,
+      maskType: maskType,
+      maskColor: maskColor,
     );
   }
 

@@ -40,6 +40,7 @@ import 'package:sakiengine/src/effects/scene_filter.dart';
 import 'package:sakiengine/src/effects/mouse_parallax.dart';
 import 'package:sakiengine/src/rendering/scene_layer.dart';
 import 'package:sakiengine/src/utils/character_composite_cache.dart';
+import 'package:sakiengine/src/utils/color_parser.dart';
 import 'package:sakiengine/src/widgets/developer_panel.dart';
 import 'package:sakiengine/src/utils/cg_image_compositor.dart';
 import 'package:sakiengine/src/widgets/debug_panel_dialog.dart';
@@ -1305,6 +1306,16 @@ class _GamePlayScreenState extends State<GamePlayScreen>
       );
 
       Widget finalWidget = characterWidget;
+
+      final maskType = (characterState.maskType ?? '').trim().toLowerCase();
+      if (maskType == 'silhouette') {
+        final parsedMaskColor =
+            parseColor(characterState.maskColor?.trim()) ?? const Color(0xFFFFFFFF);
+        finalWidget = ColorFiltered(
+          colorFilter: ColorFilter.mode(parsedMaskColor, BlendMode.srcIn),
+          child: finalWidget,
+        );
+      }
 
       if (alpha < 1.0) {
         finalWidget = Opacity(opacity: alpha, child: finalWidget);

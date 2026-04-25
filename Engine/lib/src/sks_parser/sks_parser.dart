@@ -1140,6 +1140,7 @@ class SksParser {
       String? pose;
       String? expression;
       String? position;
+      String? inlineApiToken;
       String? animation;
       int? repeatCount;
 
@@ -1211,7 +1212,9 @@ class SksParser {
 
             // 解析普通属性
             for (final attr in regularAttrs) {
-              if (attr.startsWith('pose') || attr.contains('pose')) {
+              if (_isInlineApiToken(attr)) {
+                inlineApiToken = attr;
+              } else if (attr.startsWith('pose') || attr.contains('pose')) {
                 pose = attr;
               } else {
                 expression = attr;
@@ -1224,6 +1227,7 @@ class SksParser {
       return ConditionalSayNode(
         dialogue: _formatDialogueWithQuotes(dialogue, character),
         character: character,
+        inlineApiToken: inlineApiToken,
         dialogueTag: tailMeta.dialogueTag,
         tailCharacter: tailMeta.tailCharacter,
         tailPose: tailMeta.tailPose,
@@ -1302,6 +1306,7 @@ class SksParser {
     String? pose;
     String? expression;
     String? position;
+    String? inlineApiToken;
     int? repeatCount;
 
     // 解析pose、expression、position、animation和repeat属性
@@ -1364,7 +1369,9 @@ class SksParser {
 
       // 解析普通属性
       for (final attr in regularAttrs) {
-        if (attr.startsWith('pose') || attr.contains('pose')) {
+        if (_isInlineApiToken(attr)) {
+          inlineApiToken = attr;
+        } else if (attr.startsWith('pose') || attr.contains('pose')) {
           pose = attr;
         } else {
           expression = attr;
@@ -1374,6 +1381,7 @@ class SksParser {
       return SayNode(
           character: character,
           dialogue: _formatDialogueWithQuotes(dialogue, character),
+          inlineApiToken: inlineApiToken,
           dialogueTag: tailMeta.dialogueTag,
           tailCharacter: tailMeta.tailCharacter,
           tailPose: tailMeta.tailPose,
@@ -1392,6 +1400,7 @@ class SksParser {
     return SayNode(
         character: character,
         dialogue: _formatDialogueWithQuotes(dialogue, character),
+        inlineApiToken: inlineApiToken,
         dialogueTag: tailMeta.dialogueTag,
         tailCharacter: tailMeta.tailCharacter,
         tailPose: tailMeta.tailPose,
@@ -1403,5 +1412,13 @@ class SksParser {
         pose: pose,
         expression: expression,
         position: position);
+  }
+
+  bool _isInlineApiToken(String token) {
+    final trimmed = token.trim();
+    if (trimmed.isEmpty) {
+      return false;
+    }
+    return trimmed.toLowerCase().startsWith('api');
   }
 }
