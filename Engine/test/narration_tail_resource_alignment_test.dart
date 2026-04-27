@@ -10,6 +10,7 @@ void main() {
   Future<String> _rewriteSingleLine({
     required String line,
     required String characterId,
+    String? writeCharacterId,
     String? newPose,
     String? newExpression,
   }) async {
@@ -24,6 +25,7 @@ void main() {
         scriptFilePath: scriptFile.path,
         targetDialogue: dialogue,
         characterId: characterId,
+        writeCharacterId: writeCharacterId,
         newPose: newPose,
         newExpression: newExpression,
         targetLineNumber: 1,
@@ -49,5 +51,20 @@ void main() {
 
     expect(updated, '"$dialogue" fuzu aru2 pose1 smile an jump');
     expect(updated.contains(' aru '), isFalse);
+  });
+
+  test(
+      'tail rewrite can match alias ar but still write current on-stage resource aru2',
+      () async {
+    final updated = await _rewriteSingleLine(
+      line: '"$dialogue" anxious ar pose1 happy',
+      characterId: 'ar',
+      writeCharacterId: 'aru2',
+      newPose: 'pose1',
+      newExpression: 'normal',
+    );
+
+    expect(updated, '"$dialogue" anxious aru2 pose1 normal');
+    expect(updated.contains(' anxious ar pose1 normal'), isFalse);
   });
 }

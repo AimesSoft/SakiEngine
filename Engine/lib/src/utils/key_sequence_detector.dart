@@ -322,6 +322,7 @@ class ScriptContentModifier {
     String characterId,
     String? newPose,
     String? newExpression,
+    {String? writeCharacterId,}
   ) {
     final trimmed = line.trim();
     final quoteEnd = trimmed.lastIndexOf('"');
@@ -330,7 +331,11 @@ class ScriptContentModifier {
     }
     final quoted = trimmed.substring(0, quoteEnd + 1);
     final tokens = _tailTokensFromNarrationLine(trimmed);
-    final wantsNarration = _isNarratorCharacterId(characterId);
+    final desiredCharacterId =
+        (writeCharacterId == null || writeCharacterId.trim().isEmpty)
+            ? characterId
+            : writeCharacterId.trim();
+    final wantsNarration = _isNarratorCharacterId(desiredCharacterId);
 
     if (tokens.isEmpty) {
       if (wantsNarration) {
@@ -338,7 +343,7 @@ class ScriptContentModifier {
       }
       final pose = newPose ?? 'pose1';
       final expression = newExpression ?? 'normal';
-      return '$quoted $characterId $pose $expression';
+      return '$quoted $desiredCharacterId $pose $expression';
     }
 
     int aliasIndex = -1;
@@ -363,13 +368,13 @@ class ScriptContentModifier {
       if (!wantsNarration && tokens.length == 1) {
         final nextPose = newPose ?? 'pose1';
         final nextExpression = newExpression ?? 'normal';
-        return '$quoted ${tokens.first} $characterId $nextPose $nextExpression';
+        return '$quoted ${tokens.first} $desiredCharacterId $nextPose $nextExpression';
       }
       return line;
     }
 
     final leadingTokens = tokens.sublist(0, aliasIndex);
-    final alias = tokens[aliasIndex];
+    final alias = desiredCharacterId;
     final rest = tokens.sublist(aliasIndex + 1);
     String? animation;
     String? repeatRaw;
@@ -641,22 +646,31 @@ class ScriptContentModifier {
 
   /// 修改对话行，添加或更新pose和表情信息
   static String _modifyDialogueLine(
-      String line, String characterId, String? newPose, String? newExpression) {
+    String line,
+    String characterId,
+    String? newPose,
+    String? newExpression, {
+    String? writeCharacterId,
+  }) {
     final trimmedLine = line.trim();
     final wantsNarration = _isNarratorCharacterId(characterId);
+    final desiredCharacterId =
+        (writeCharacterId == null || writeCharacterId.trim().isEmpty)
+            ? characterId
+            : writeCharacterId.trim();
     final parts = trimmedLine.split(' ');
     final lineCharacterId = trimmedLine.contains('"') &&
             !trimmedLine.startsWith('"') &&
             parts.isNotEmpty
         ? parts[0]
         : null;
-    final writeCharacterId = (lineCharacterId != null &&
+    final effectiveWriteCharacterId = (lineCharacterId != null &&
             _isCharacterIdCompatible(
               lineCharacterId: lineCharacterId,
               expectedCharacterId: characterId,
             ))
         ? lineCharacterId
-        : characterId;
+        : desiredCharacterId;
 
     ({
       String? pose,
@@ -747,7 +761,7 @@ class ScriptContentModifier {
 
         final pose = (newPose ?? parsed.pose ?? 'pose1').trim();
         final expression = (newExpression ?? parsed.expression ?? 'normal').trim();
-        final rebuiltPrefix = <String>[writeCharacterId];
+        final rebuiltPrefix = <String>[effectiveWriteCharacterId];
         if (pose.isNotEmpty) {
           rebuiltPrefix.add(pose);
         }
@@ -776,7 +790,12 @@ class ScriptContentModifier {
     // 如果是纯对话格式，添加角色、pose和表情信息
     if (trimmedLine.startsWith('"')) {
       final modifiedNarrationTail = _modifyNarrationTailLine(
-          trimmedLine, writeCharacterId, newPose, newExpression);
+        trimmedLine,
+        characterId,
+        newPose,
+        newExpression,
+        writeCharacterId: effectiveWriteCharacterId,
+      );
       if (modifiedNarrationTail != line && modifiedNarrationTail != trimmedLine) {
         return modifiedNarrationTail;
       }
@@ -788,7 +807,7 @@ class ScriptContentModifier {
       final quoteIndex = trimmedLine.indexOf('"');
       final pose = newPose ?? 'pose1';
       final expression = newExpression ?? 'normal';
-      return '${trimmedLine.substring(0, quoteIndex)}$writeCharacterId $pose $expression ${trimmedLine.substring(quoteIndex)}';
+      return '${trimmedLine.substring(0, quoteIndex)}$effectiveWriteCharacterId $pose $expression ${trimmedLine.substring(quoteIndex)}';
     }
 
     // 如果无法识别格式，返回原始行
@@ -906,6 +925,7 @@ class ScriptContentModifier {
     required String scriptFilePath,
     required String targetDialogue,
     required String characterId,
+    String? writeCharacterId,
     String? newPose,
     String? newExpression,
     int? targetLineNumber,
@@ -916,6 +936,7 @@ class ScriptContentModifier {
         print('ScriptModifier: 文件路径: $scriptFilePath');
         print('ScriptModifier: 目标对话: "$targetDialogue"');
         print('ScriptModifier: 角色ID: $characterId');
+        print('ScriptModifier: 写入角色ID: $writeCharacterId');
         print('ScriptModifier: 新pose: $newPose');
         print('ScriptModifier: 新expression: $newExpression');
         print('ScriptModifier: 目标行号: $targetLineNumber');
@@ -947,7 +968,13 @@ class ScriptContentModifier {
           }
           if (_isTargetDialogueLine(line, targetDialogue, characterId)) {
             final modifiedLine =
-                _modifyDialogueLine(line, characterId, newPose, newExpression);
+                _modifyDialogueLine(
+              line,
+              characterId,
+              newPose,
+              newExpression,
+              writeCharacterId: writeCharacterId,
+            );
             if (modifiedLine != line) {
               lines[targetIndex] =
                   originalLine.replaceFirst(line, modifiedLine);
@@ -984,7 +1011,13 @@ class ScriptContentModifier {
               continue;
             }
             final modifiedLine =
-                _modifyDialogueLine(line, characterId, newPose, newExpression);
+                _modifyDialogueLine(
+              line,
+              characterId,
+              newPose,
+              newExpression,
+              writeCharacterId: writeCharacterId,
+            );
             if (modifiedLine == line) {
               continue;
             }
@@ -1025,7 +1058,13 @@ class ScriptContentModifier {
             }
 
             final modifiedLine =
-                _modifyDialogueLine(line, characterId, newPose, newExpression);
+                _modifyDialogueLine(
+              line,
+              characterId,
+              newPose,
+              newExpression,
+              writeCharacterId: writeCharacterId,
+            );
             if (modifiedLine != line) {
               lines[i] = originalLine.replaceFirst(line, modifiedLine);
               modified = true;

@@ -415,8 +415,10 @@ class ExpressionSelectorManager {
       // 获取当前说话角色信息，确定用于脚本修改的characterKey
       final speakerInfo = getCurrentSpeakerInfo();
       final scriptCharacterKey = speakerInfo?.scriptCharacterKey ?? characterId;
+      final scriptWriteCharacterId = speakerInfo?.characterId ?? characterId;
       if (kEngineDebugMode) {
         print('ExpressionSelector: 脚本角色Key: $scriptCharacterKey');
+        print('ExpressionSelector: 脚本写入角色ID: $scriptWriteCharacterId');
         print(
             'ExpressionSelector: 当前对话来源 sourceScriptFile=$sourceScriptFile, sourceLine=$sourceLine');
         print('ExpressionSelector: 目标脚本文件名: $scriptFileForWrite');
@@ -427,6 +429,7 @@ class ExpressionSelectorManager {
         scriptFilePath: scriptPath,
         targetDialogue: dialogue,
         characterId: scriptCharacterKey,
+        writeCharacterId: scriptWriteCharacterId,
         newPose: pose,
         newExpression: expression,
         targetLineNumber: sourceLine,
