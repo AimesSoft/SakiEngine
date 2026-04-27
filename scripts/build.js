@@ -146,7 +146,7 @@ function isGameScriptEntry(entry) {
   );
 }
 
-function prepareReleasePubspecAssets(gameDir, cacheDir, pubspecPath) {
+function prepareReleasePubspecAssets(gameDir, cacheDir, pubspecPath, platform) {
   const pubspecRaw = fs.readFileSync(pubspecPath, 'utf8');
   const pubspecLines = pubspecRaw.split(/\r?\n/);
   const { assetsStart, assetsEnd } = parseAssetsSectionLines(pubspecLines);
@@ -214,20 +214,54 @@ function prepareReleasePubspecAssets(gameDir, cacheDir, pubspecPath) {
     );
   }
 
+  let releaseEntries;
+  if (platform === 'web') {
+    releaseEntries = [...unique];
+  } else {
+    releaseEntries = unique.filter((item) => {
+      const normalized = item.toLowerCase();
+      if (normalized.startsWith('gamescript/') || normalized.startsWith('gamescript_')) {
+        return false;
+      }
+      if (normalized.startsWith('assets/')) {
+        return false;
+      }
+      return true;
+    });
+    if (!releaseEntries.includes('.saki_cache/game.sakipak')) {
+      releaseEntries.push('.saki_cache/game.sakipak');
+    }
+  }
+
   const newLines = [
     ...pubspecLines.slice(0, assetsStart + 1),
-    ...unique.map((p) => `    - ${p}`),
+    ...releaseEntries.map((p) => `    - ${p}`),
     ...pubspecLines.slice(assetsEnd + 1),
   ];
   fs.writeFileSync(pubspecPath, `${newLines.join('\n')}\n`);
-  colorLog(
-    `已更新发布资源清单：总计 ${unique.length} 项，图片/视频 ${imageCount} 项，排除 GameScript*.sks`,
-    'yellow',
-  );
+  if (platform === 'web') {
+    colorLog(`已更新发布资源清单（Web 保留原始资源）：${releaseEntries.length} 项`, 'yellow');
+  } else {
+    colorLog(
+      `已更新发布资源清单：原始 ${unique.length} 项，发布 ${releaseEntries.length} 项（含 .saki_cache/game.sakipak）`,
+      'yellow',
+    );
+  }
 }
 
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
+}
+
+function generateSakiPack(gameDir, cacheDir) {
+  ensureDir(cacheDir);
+  const packPath = path.join(cacheDir, 'game.sakipak');
+  const legacyPackPath = path.join(gameDir, 'Assets', 'game.sakipak');
+  colorLog('正在生成 SakiPack 资源包...', 'yellow');
+  runCommand('node', [path.join(projectRoot, 'scripts', 'build_saki_pack.js'), gameDir, packPath], projectRoot);
+  if (fs.existsSync(legacyPackPath)) {
+    fs.rmSync(legacyPackPath, { force: true });
+  }
 }
 
 function listGameProjects() {
@@ -417,9 +451,10 @@ async function main() {
     fs.copyFileSync(gameBundleFile, engineCompiledLoader);
 
     colorLog('正在生成发布资源清单...', 'yellow');
+    generateSakiPack(gameDir, gameCacheDir);
     fs.copyFileSync(gamePubspecFile, gamePubspecBackupFile);
     pubspecBackedUp = true;
-    prepareReleasePubspecAssets(gameDir, gameCacheDir, gamePubspecFile);
+    prepareReleasePubspecAssets(gameDir, gameCacheDir, gamePubspecFile, platform);
 
     colorLog('正在获取依赖...', 'yellow');
     runFlutter(['pub', 'get'], gameDir);

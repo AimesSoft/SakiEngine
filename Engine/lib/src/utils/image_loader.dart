@@ -7,6 +7,7 @@ import 'package:flutter_avif/flutter_avif.dart';
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
+import 'package:sakiengine/src/config/saki_pack_store.dart';
 import 'package:sakiengine/src/utils/cg_image_compositor.dart';
 
 /// 图像加载器 - 支持多种图像格式包括AVIF和WebP
@@ -156,6 +157,25 @@ class ImageLoader {
   static Future<ui.Image?> _loadAvifImage(String assetPath) async {
     try {
       Uint8List bytes;
+      final isAbsolutePath =
+          assetPath.startsWith('/') || (assetPath.length > 2 && assetPath[1] == ':');
+      if (!kIsWeb && isAbsolutePath) {
+        final file = File(assetPath);
+        if (await file.exists()) {
+          bytes = await file.readAsBytes();
+          try {
+            final codec = await ui.instantiateImageCodec(bytes);
+            final frame = await codec.getNextFrame();
+            return frame.image;
+          } catch (_) {
+            final frames = await decodeAvif(bytes);
+            if (frames.isNotEmpty) {
+              return frames.first.image;
+            }
+            return null;
+          }
+        }
+      }
 
       // 在debug模式下，优先从外部文件系统获取数据
       if (GamePathResolver.shouldUseFileSystemAssets && !kIsWeb) {
@@ -263,6 +283,29 @@ class ImageLoader {
   /// 加载标准图像格式
   static Future<ui.Image?> _loadStandardImage(String assetPath) async {
     try {
+      final isAbsolutePath =
+          assetPath.startsWith('/') || (assetPath.length > 2 && assetPath[1] == ':');
+      if (!kIsWeb && isAbsolutePath) {
+        final file = File(assetPath);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final codec = await ui.instantiateImageCodec(bytes);
+          final frame = await codec.getNextFrame();
+          return frame.image;
+        }
+      }
+      if (!kIsWeb) {
+        final materialized =
+            await SakiPackStore.instance.resolvePathForPlayback(assetPath);
+        if (materialized != null &&
+            (materialized.startsWith('/') ||
+                (materialized.length > 2 && materialized[1] == ':'))) {
+          final bytes = await File(materialized).readAsBytes();
+          final codec = await ui.instantiateImageCodec(bytes);
+          final frame = await codec.getNextFrame();
+          return frame.image;
+        }
+      }
       final data = await rootBundle.load(assetPath);
       final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
       final frame = await codec.getNextFrame();

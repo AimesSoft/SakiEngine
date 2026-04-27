@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/config/game_path_resolver.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
+import 'package:sakiengine/src/config/saki_pack_store.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
 import 'package:sakiengine/src/utils/bundle_asset_path_probe.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
@@ -262,6 +263,21 @@ class UISoundManager {
     }
 
     final String resolved = _normalizeBundleAssetPath(trimmed);
+    final String? packPlaybackPath =
+        await SakiPackStore.instance.resolvePathForPlayback(resolved) ??
+            await SakiPackStore.instance.resolvePathForPlayback(trimmed);
+    if (packPlaybackPath != null) {
+      try {
+        await player.setFilePath(packPlaybackPath);
+        return;
+      } catch (e) {
+        if (kEngineDebugMode && !_isExpectedInterruptionError(e)) {
+          print(
+              '[UISoundManager] setFilePath(sakipack) failed: $packPlaybackPath, error=$e');
+        }
+      }
+    }
+
     final String? bundlePath = probeBundleAssetAbsolutePath(resolved);
     final bool? bundleExists = probeBundleAssetExists(resolved);
 

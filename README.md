@@ -185,6 +185,17 @@ flutter run -d macos --dart-define=SAKI_GAME_PATH="$PWD"
 
 `build.sh` 会直接在 `Game/<项目>` 目录构建，不再修改 `Engine/pubspec.yaml`。发布构建时会先将 `.sks` 预编译到 `Game/<项目>/.saki_cache/`（隐藏缓存目录，不提交 Git），并自动排除 `GameScript*` 原始脚本资源打包。
 
+#### 资源单包（SakiPack）
+
+发布构建流程会自动执行资源打包，生成：
+
+- `Game/<项目>/.saki_cache/game.sakipak`
+
+该文件会合并 `Assets/` 与 `GameScript*` 下的资源（以及 `default_game.txt`）为单个二进制包。  
+运行时引擎会优先从 `game.sakipak` 读取文本/图片资源；音频与视频会按需解包到临时文件后播放，对上层脚本仍保持原有虚拟路径（`Assets/...`）不变。
+
+调试模式（桌面 Debug）仍默认走文件系统直读，便于热更新与排查问题。
+
 #### Windows 用户注意事项
 
 Windows 推荐直接使用：

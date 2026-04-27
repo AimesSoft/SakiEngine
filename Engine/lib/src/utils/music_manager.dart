@@ -3,6 +3,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/utils/bundle_asset_path_probe.dart';
 import 'package:sakiengine/src/config/game_path_resolver.dart';
+import 'package:sakiengine/src/config/saki_pack_store.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
@@ -685,6 +686,32 @@ class MusicManager extends ChangeNotifier {
         return;
       }
       final resolved = _normalizeBundleAssetPath(trimmed);
+      final packPlaybackPath =
+          await SakiPackStore.instance.resolvePathForPlayback(resolved) ??
+              await SakiPackStore.instance.resolvePathForPlayback(trimmed);
+      if (packPlaybackPath != null) {
+        if (traceMusic) {
+          _musicSourceLog('try setFilePath(sakipack): "$packPlaybackPath"');
+        }
+        try {
+          await player.setFilePath(packPlaybackPath);
+          if (traceMusic) {
+            _musicSourceLog('setFilePath(sakipack) success: "$packPlaybackPath"');
+          }
+          return;
+        } catch (packError, packStackTrace) {
+          if (traceMusic) {
+            _musicSourceLog(
+              'setFilePath(sakipack) failed: "$packPlaybackPath", error=$packError',
+            );
+          }
+          if (kEngineDebugMode) {
+            print(
+                '[MusicManager] setFilePath(sakipack) failed: path=$packPlaybackPath, error=$packError');
+            print(packStackTrace);
+          }
+        }
+      }
       final absoluteBundlePath = probeBundleAssetAbsolutePath(resolved);
       final absoluteBundleExists = probeBundleAssetExists(resolved);
       if (traceMusic) {

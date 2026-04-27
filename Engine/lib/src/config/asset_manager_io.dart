@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/game/game_script_localization.dart';
 import 'package:sakiengine/src/sks_compiler/compiled_sks_bundle.dart';
 import 'package:sakiengine/src/sks_compiler/compiled_sks_registry.dart';
+import 'package:sakiengine/src/config/saki_pack_store.dart';
 
 class AssetManager {
   static const bool _forceAssetDiagnostics =
@@ -74,6 +75,17 @@ class AssetManager {
         final precompiled = compiledBundle.loadText(candidate);
         if (precompiled != null) {
           return precompiled;
+        }
+      }
+    }
+
+    final packStore = SakiPackStore.instance;
+    if (await packStore.ensureInitialized()) {
+      for (final candidate in candidates) {
+        final normalized = GameScriptLocalization.stripAssetsPrefix(candidate);
+        final fromPack = await packStore.loadText(normalized);
+        if (fromPack != null) {
+          return fromPack;
         }
       }
     }
@@ -171,6 +183,23 @@ class AssetManager {
         _listPrecompiledAssets(candidates: candidates, extension: extension);
     if (precompiledAssets.isNotEmpty) {
       return precompiledAssets;
+    }
+
+    final packStore = SakiPackStore.instance;
+    if (await packStore.ensureInitialized()) {
+      final fromPack = <String>[];
+      final seenPack = <String>{};
+      for (final candidate in candidates) {
+        final normalized = GameScriptLocalization.stripAssetsPrefix(candidate);
+        for (final fileName in packStore.listFileNames(normalized, extension)) {
+          if (seenPack.add(fileName)) {
+            fromPack.add(fileName);
+          }
+        }
+      }
+      if (fromPack.isNotEmpty) {
+        return fromPack;
+      }
     }
 
     if (_shouldLoadFromExternal()) {
@@ -311,6 +340,21 @@ class AssetManager {
         _assetDiag('findAsset 命中: "$name" -> "$result"');
       }
       return result;
+    }
+
+    final packStore = SakiPackStore.instance;
+    if (await packStore.ensureInitialized()) {
+      final resolvedVirtual = packStore.resolveVirtualAssetPath(name);
+      if (resolvedVirtual != null) {
+        final materialized = await packStore.materializeFilePath(resolvedVirtual);
+        if (materialized != null) {
+          _imageCache[name] = materialized;
+          return materialized;
+        } else {
+          _imageCache[name] = resolvedVirtual;
+          return resolvedVirtual;
+        }
+      }
     }
 
     if (_findAssetMissDiagCount < 200) {
@@ -525,6 +569,31 @@ class AssetManager {
       String characterId) async {
     final availableLayers = <String>[];
 
+    final packStore = SakiPackStore.instance;
+    if (await packStore.ensureInitialized()) {
+      final prefix = '$characterId-';
+      final imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.avif'];
+      final fromPack = packStore.listFileNames('Assets/images/characters', '');
+      for (final fileName in fromPack) {
+        final fileNameLower = fileName.toLowerCase();
+        final fileNameWithoutExt = p.basenameWithoutExtension(fileName);
+        if (!imageExtensions.any((ext) => fileNameLower.endsWith(ext))) {
+          continue;
+        }
+        if (!fileNameWithoutExt.startsWith(prefix)) {
+          continue;
+        }
+        final layerName = fileNameWithoutExt.substring(prefix.length);
+        if (layerName.isNotEmpty) {
+          availableLayers.add(layerName);
+        }
+      }
+      if (availableLayers.isNotEmpty) {
+        availableLayers.sort();
+        return availableLayers;
+      }
+    }
+
     try {
       final gamePath = await _getGamePath();
       if (gamePath.isEmpty) {
@@ -576,6 +645,31 @@ class AssetManager {
   static Future<List<String>> getAvailableCharacterLayers(
       String characterId) async {
     final availableLayers = <String>[];
+
+    final packStore = SakiPackStore.instance;
+    if (await packStore.ensureInitialized()) {
+      final prefix = '$characterId-';
+      final imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.avif'];
+      final fromPack = packStore.listFileNames('Assets/images/characters', '');
+      for (final fileName in fromPack) {
+        final fileNameLower = fileName.toLowerCase();
+        final fileNameWithoutExt = p.basenameWithoutExtension(fileName);
+        if (!imageExtensions.any((ext) => fileNameLower.endsWith(ext))) {
+          continue;
+        }
+        if (!fileNameWithoutExt.startsWith(prefix)) {
+          continue;
+        }
+        final layerName = fileNameWithoutExt.substring(prefix.length);
+        if (layerName.isNotEmpty) {
+          availableLayers.add(layerName);
+        }
+      }
+      if (availableLayers.isNotEmpty) {
+        availableLayers.sort();
+        return availableLayers;
+      }
+    }
 
     try {
       final gamePath = await _getGamePath();

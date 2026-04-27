@@ -78,6 +78,15 @@ class _AnimatedWebPImageState extends State<AnimatedWebPImage>
   /// 加载WebP字节数据，支持外部文件系统
   Future<Uint8List?> _loadWebPBytes() async {
     try {
+      final isAbsolutePath = widget.assetPath.startsWith('/') ||
+          (widget.assetPath.length > 2 && widget.assetPath[1] == ':');
+      if (!kIsWeb && isAbsolutePath) {
+        final file = createFile(widget.assetPath);
+        if (await file?.exists() == true) {
+          return await file!.readAsBytes();
+        }
+      }
+
       // Web平台直接从assets加载
       if (kIsWeb) {
         final data = await rootBundle.load(widget.assetPath);

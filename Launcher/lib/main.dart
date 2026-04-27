@@ -1548,9 +1548,19 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
       }
 
       await cacheBundle.copy(engineLoader.path);
+      if (runDevice != 'chrome') {
+        final packOk = await _generateSakiPack(
+          gameDir: gameDirectory,
+          cacheDir: cacheDir,
+        );
+        if (!packOk) {
+          throw _TaskFailure('SakiPack 资源打包失败');
+        }
+      }
       final summary = await _prepareReleasePubspec(
         gameDir: gameDirectory,
         pubspecFile: gamePubspec,
+        targetPlatform: runDevice == 'chrome' ? 'web' : runDevice,
       );
       _appendLog(
         '发布运行资源清单已生成: ${summary.totalAssets} 项，图片/视频 ${summary.mediaAssets} 项',
@@ -1564,8 +1574,6 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
       if (secondPubGet != 0) {
         throw _TaskFailure('更新发布资源后 pub get 失败');
       }
-
-      await _prepareProjectForExecution(game, generateIcons: true);
 
       return await _runCommand(
         executable: 'flutter',
@@ -1678,9 +1686,19 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
         }
 
         await cacheBundle.copy(engineLoader.path);
+        if (platform != 'web') {
+          final packOk = await _generateSakiPack(
+            gameDir: gameDir,
+            cacheDir: cacheDir,
+          );
+          if (!packOk) {
+            throw _TaskFailure('SakiPack 资源打包失败');
+          }
+        }
         final summary = await _prepareReleasePubspec(
           gameDir: gameDir,
           pubspecFile: gamePubspec,
+          targetPlatform: platform,
         );
         _appendLog(
           '发布资源清单已生成: ${summary.totalAssets} 项，图片/视频 ${summary.mediaAssets} 项',
@@ -1698,7 +1716,11 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
         _appendLog('演出模式构建: 跳过 .sks 预编译与发布资源裁剪，保留脚本直读能力');
       }
 
-      await _prepareProjectForExecution(game, generateIcons: true);
+      if (!useReleaseAssetPipeline) {
+        await _prepareProjectForExecution(game, generateIcons: true);
+      } else {
+        _appendLog('发布构建模式: 跳过二次 prepare-project，避免覆盖发布资源清单');
+      }
 
       if (platform == 'ios') {
         final iosDir = Directory(_joinPath(gameDir.path, 'ios'));
@@ -1761,6 +1783,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
   Future<_AssetRewriteResult> _prepareReleasePubspec({
     required Directory gameDir,
     required File pubspecFile,
+    required String targetPlatform,
   }) async {
     final lines = await pubspecFile.readAsLines();
     var assetsStart = -1;
@@ -1874,9 +1897,28 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
       throw _TaskFailure('检测到配置了 Assets/，但展开后没有图片/视频资源，已中止构建');
     }
 
+    List<String> finalEntries;
+    if (targetPlatform == 'web') {
+      finalEntries = deduped;
+    } else {
+      finalEntries = deduped.where((entry) {
+      final n = entry.toLowerCase();
+      if (n.startsWith('assets/')) {
+        return false;
+      }
+        if (n.startsWith('gamescript/') || n.startsWith('gamescript_')) {
+          return false;
+        }
+        return true;
+      }).toList(growable: true);
+      if (!finalEntries.contains('.saki_cache/game.sakipak')) {
+        finalEntries.add('.saki_cache/game.sakipak');
+      }
+    }
+
     final output = <String>[];
     output.addAll(lines.sublist(0, assetsStart + 1));
-    for (final entry in deduped) {
+    for (final entry in finalEntries) {
       output.add('    - $entry');
     }
     if (assetsEnd + 1 < lines.length) {
@@ -1885,9 +1927,31 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
 
     await pubspecFile.writeAsString('${output.join('\n')}\n');
     return _AssetRewriteResult(
-      totalAssets: deduped.length,
+      totalAssets: finalEntries.length,
       mediaAssets: mediaCount,
     );
+  }
+
+  Future<bool> _generateSakiPack({
+    required Directory gameDir,
+    required Directory cacheDir,
+  }) async {
+    cacheDir.createSync(recursive: true);
+    final outputFile = _joinPath(cacheDir.path, 'game.sakipak');
+    final legacyFile = File(_joinPath(_joinPath(gameDir.path, 'Assets'), 'game.sakipak'));
+    final code = await _runCommand(
+      executable: 'node',
+      arguments: <String>[
+        'scripts/build_saki_pack.js',
+        gameDir.path,
+        outputFile,
+      ],
+      workingDirectory: _repoRoot.path,
+    );
+    if (legacyFile.existsSync()) {
+      await legacyFile.delete();
+    }
+    return code == 0;
   }
 
   List<String> _buildArgsFor(String platform, BuildMode mode, String game) {
