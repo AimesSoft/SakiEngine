@@ -3246,22 +3246,20 @@ endlocal
             ),
           ),
           Expanded(
-            child: SelectionArea(
-              child: ListView.builder(
+            child: Scrollbar(
+              controller: _logScrollController,
+              child: SingleChildScrollView(
                 controller: _logScrollController,
                 padding: const EdgeInsets.all(12),
-                itemCount: _logs.length,
-                itemBuilder: (context, index) {
-                  return SelectableText.rich(
-                    _buildLogLineSpan(_logs[index]),
-                    style: TextStyle(
-                      color: bodyTextColor,
-                      fontFamily: 'monospace',
-                      fontSize: 12.5,
-                      height: 1.35,
-                    ),
-                  );
-                },
+                child: SelectableText.rich(
+                  _buildCombinedLogSpan(),
+                  style: TextStyle(
+                    color: bodyTextColor,
+                    fontFamily: 'monospace',
+                    fontSize: 12.5,
+                    height: 1.35,
+                  ),
+                ),
               ),
             ),
           ),
@@ -3282,6 +3280,17 @@ endlocal
         duration: Duration(seconds: 2),
       ),
     );
+  }
+
+  TextSpan _buildCombinedLogSpan() {
+    final children = <InlineSpan>[];
+    for (var i = 0; i < _logs.length; i++) {
+      children.add(_buildLogLineSpan(_logs[i]));
+      if (i != _logs.length - 1) {
+        children.add(const TextSpan(text: '\n'));
+      }
+    }
+    return TextSpan(children: children);
   }
 
   TextSpan _buildLogLineSpan(String line) {
