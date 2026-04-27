@@ -206,8 +206,9 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
   late final Directory _repoRoot;
 
   final List<String> _gameProjects = <String>[];
-  final List<String> _logs = <String>[];
+  final List<_LogSession> _logSessions = <_LogSession>[];
   final ScrollController _logScrollController = ScrollController();
+  int _nextLogSessionId = 1;
 
   String? _selectedGame;
   String? _defaultGame;
@@ -1218,9 +1219,69 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
                     TextField(
                       controller: colorController,
                       enabled: !submitting,
-                      decoration: const InputDecoration(
+                      onChanged: (_) {
+                        setDialogState(() {
+                          message = null;
+                        });
+                      },
+                      decoration: InputDecoration(
                         labelText: '主色调 (Hex)',
                         hintText: '137B8B',
+                        suffixIcon: IconButton(
+                          tooltip: '打开选色盘',
+                          onPressed: submitting
+                              ? null
+                              : () async {
+                                  final pickedColor =
+                                      await _showColorPickerDialog(
+                                        initialColor: _parseHexColor(
+                                          colorController.text.trim(),
+                                          fallback: const Color(0xFF137B8B),
+                                        ),
+                                      );
+                                  if (!mounted || pickedColor == null) {
+                                    return;
+                                  }
+                                  setDialogState(() {
+                                    colorController.text = _colorToHex(
+                                      pickedColor,
+                                    );
+                                    message = null;
+                                  });
+                                },
+                          icon: const Icon(Icons.palette_outlined),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            '颜色预览',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            width: 18,
+                            height: 18,
+                            decoration: BoxDecoration(
+                              color: _parseHexColor(
+                                colorController.text.trim(),
+                                fallback: const Color(0xFF137B8B),
+                              ),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: Theme.of(context).dividerColor,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -1322,6 +1383,217 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
         );
       },
     );
+  }
+
+  Future<Color?> _showColorPickerDialog({required Color initialColor}) async {
+    var hsv = HSVColor.fromColor(initialColor);
+    const pickerSize = 230.0;
+
+    return showDialog<Color>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final preview = hsv.toColor();
+            return AlertDialog(
+              title: const Text('选择主题色'),
+              content: SizedBox(
+                width: 440,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            color: preview,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Theme.of(context).dividerColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          '#${_colorToHex(preview)}',
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      '拖动色盘选择颜色（左: 饱和度/明度，右: 色相）',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        _buildPsColorSquare(
+                          hsv: hsv,
+                          size: pickerSize,
+                          onChanged: (saturation, value) {
+                            setDialogState(() {
+                              hsv = hsv.withSaturation(saturation).withValue(
+                                value,
+                              );
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                        _buildPsHueSlider(
+                          hue: hsv.hue,
+                          size: pickerSize,
+                          onChanged: (hue) {
+                            setDialogState(() {
+                              hsv = hsv.withHue(hue);
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'H ${hsv.hue.toStringAsFixed(0)}°  '
+                      'S ${(hsv.saturation * 100).toStringAsFixed(0)}%  '
+                      'V ${(hsv.value * 100).toStringAsFixed(0)}%',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: <Widget>[
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop(preview);
+                  },
+                  child: const Text('确定'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Color _parseHexColor(String input, {required Color fallback}) {
+    var value = input.trim();
+    if (value.startsWith('#')) {
+      value = value.substring(1);
+    }
+    if (!RegExp(r'^[0-9A-Fa-f]{6}$').hasMatch(value)) {
+      return fallback;
+    }
+    final parsed = int.tryParse(value, radix: 16);
+    if (parsed == null) {
+      return fallback;
+    }
+    return Color(0xFF000000 | parsed);
+  }
+
+  String _colorToHex(Color color) {
+    return (color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase();
+  }
+
+  Widget _buildPsColorSquare({
+    required HSVColor hsv,
+    required double size,
+    required void Function(double saturation, double value) onChanged,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanDown: (details) => _handlePsSquareDrag(
+        localPosition: details.localPosition,
+        size: size,
+        onChanged: onChanged,
+      ),
+      onPanUpdate: (details) => _handlePsSquareDrag(
+        localPosition: details.localPosition,
+        size: size,
+        onChanged: onChanged,
+      ),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(
+          painter: _PsColorSquarePainter(
+            hue: hsv.hue,
+            saturation: hsv.saturation,
+            value: hsv.value,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPsHueSlider({
+    required double hue,
+    required double size,
+    required ValueChanged<double> onChanged,
+  }) {
+    const sliderWidth = 24.0;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanDown: (details) => _handlePsHueDrag(
+        localPosition: details.localPosition,
+        size: size,
+        onChanged: onChanged,
+      ),
+      onPanUpdate: (details) => _handlePsHueDrag(
+        localPosition: details.localPosition,
+        size: size,
+        onChanged: onChanged,
+      ),
+      child: SizedBox(
+        width: sliderWidth,
+        height: size,
+        child: CustomPaint(
+          painter: _PsHueSliderPainter(
+            hue: hue,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handlePsSquareDrag({
+    required Offset localPosition,
+    required double size,
+    required void Function(double saturation, double value) onChanged,
+  }) {
+    final clampedX = localPosition.dx.clamp(0.0, size);
+    final clampedY = localPosition.dy.clamp(0.0, size);
+    final saturation = clampedX / size;
+    final value = 1 - (clampedY / size);
+    onChanged(saturation, value);
+  }
+
+  void _handlePsHueDrag({
+    required Offset localPosition,
+    required double size,
+    required ValueChanged<double> onChanged,
+  }) {
+    final clampedY = localPosition.dy.clamp(0.0, size);
+    final hue = (clampedY / size) * 360;
+    onChanged(hue.clamp(0, 360).toDouble());
   }
 
   Future<bool> _createProjectNonInteractive({
@@ -2449,7 +2721,11 @@ endlocal
     required String workingDirectory,
   }) async {
     final command = '$executable ${arguments.join(' ')}';
-    _appendLog('\$ $command');
+    _appendLog(
+      '\$ $command',
+      startNewSession: true,
+      sessionReason: '进程: $command',
+    );
     try {
       await Process.start(
         executable,
@@ -2471,7 +2747,11 @@ endlocal
     required String workingDirectory,
   }) async {
     final command = '$executable ${arguments.join(' ')}';
-    _appendLog('\$ $command');
+    _appendLog(
+      '\$ $command',
+      startNewSession: true,
+      sessionReason: '进程: $command',
+    );
     Process process;
     try {
       process = await Process.start(
@@ -2582,22 +2862,46 @@ endlocal
 
   void _clearLogs() {
     setState(() {
-      _logs.clear();
+      _logSessions.clear();
     });
   }
 
-  void _appendLog(String line) {
+  void _appendLog(
+    String line, {
+    bool startNewSession = false,
+    String? sessionReason,
+  }) {
     if (!mounted) {
       return;
     }
     final sanitized = line.replaceAll(RegExp(r'\x1B\[[0-9;]*m'), '');
+    final shouldSplitForHotReload = _isHotReloadBoundary(sanitized);
     final now = DateTime.now();
     final time =
         '${now.hour.toString().padLeft(2, '0')}:'
         '${now.minute.toString().padLeft(2, '0')}:'
         '${now.second.toString().padLeft(2, '0')}';
+
+    final mustCreateSession =
+        _logSessions.isEmpty || startNewSession || shouldSplitForHotReload;
+
     setState(() {
-      _logs.add('[$time] $sanitized');
+      if (mustCreateSession) {
+        final reason =
+            sessionReason ??
+            (shouldSplitForHotReload
+                ? _resolveHotReloadSessionReason(sanitized)
+                : '新进程');
+        _logSessions.add(
+          _LogSession(
+            id: _nextLogSessionId++,
+            reason: reason,
+            startedAt: DateTime.now(),
+            lines: <String>[],
+          ),
+        );
+      }
+      _logSessions.last.lines.add('[$time] $sanitized');
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2608,6 +2912,24 @@ endlocal
         _logScrollController.position.maxScrollExtent,
       );
     });
+  }
+
+  bool _isHotReloadBoundary(String line) {
+    final normalized = line.toLowerCase();
+    return normalized.contains('performing hot reload...') ||
+        normalized.contains('performing hot restart...') ||
+        normalized.contains('performing reassemble...');
+  }
+
+  String _resolveHotReloadSessionReason(String line) {
+    final normalized = line.toLowerCase();
+    if (normalized.contains('hot restart')) {
+      return '热重启';
+    }
+    if (normalized.contains('hot reload')) {
+      return '热重载';
+    }
+    return '热更新';
   }
 
   String _joinPath(String a, String b) {
@@ -3234,13 +3556,13 @@ endlocal
                   label: const Text('清空'),
                 ),
                 TextButton.icon(
-                  onPressed: _logs.isEmpty
+                  onPressed: _currentLogSessionLines.isEmpty
                       ? null
                       : () {
-                          unawaited(_copyAllLogs());
+                          unawaited(_copyCurrentRunLogs());
                         },
                   icon: const Icon(Icons.copy_all_outlined, size: 18),
-                  label: const Text('复制全部'),
+                  label: const Text('复制当前运行日志'),
                 ),
               ],
             ),
@@ -3251,13 +3573,28 @@ endlocal
               child: SingleChildScrollView(
                 controller: _logScrollController,
                 padding: const EdgeInsets.all(12),
-                child: SelectableText.rich(
-                  _buildCombinedLogSpan(),
-                  style: TextStyle(
-                    color: bodyTextColor,
-                    fontFamily: 'monospace',
-                    fontSize: 12.5,
-                    height: 1.35,
+                child: SelectionArea(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      for (
+                        var sessionIndex = 0;
+                        sessionIndex < _logSessions.length;
+                        sessionIndex++
+                      ) ...<Widget>[
+                        if (sessionIndex > 0)
+                          _buildSessionDivider(_logSessions[sessionIndex]),
+                        SelectableText.rich(
+                          _buildSessionLogSpan(_logSessions[sessionIndex]),
+                          style: TextStyle(
+                            color: bodyTextColor,
+                            fontFamily: 'monospace',
+                            fontSize: 12.5,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
@@ -3268,29 +3605,78 @@ endlocal
     );
   }
 
-  Future<void> _copyAllLogs() async {
-    final allLogs = _logs.join('\n');
-    await Clipboard.setData(ClipboardData(text: allLogs));
+  Future<void> _copyCurrentRunLogs() async {
+    final currentLogs = _currentLogSessionLines.join('\n');
+    await Clipboard.setData(ClipboardData(text: currentLogs));
     if (!mounted) {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('终端日志已复制到剪贴板'),
+        content: Text('当前运行日志已复制到剪贴板'),
         duration: Duration(seconds: 2),
       ),
     );
   }
 
-  TextSpan _buildCombinedLogSpan() {
+  List<String> get _currentLogSessionLines {
+    if (_logSessions.isEmpty) {
+      return const <String>[];
+    }
+    return _logSessions.last.lines;
+  }
+
+  TextSpan _buildSessionLogSpan(_LogSession session) {
     final children = <InlineSpan>[];
-    for (var i = 0; i < _logs.length; i++) {
-      children.add(_buildLogLineSpan(_logs[i]));
-      if (i != _logs.length - 1) {
+    for (var lineIndex = 0; lineIndex < session.lines.length; lineIndex++) {
+      children.add(_buildLogLineSpan(session.lines[lineIndex]));
+      if (lineIndex != session.lines.length - 1) {
         children.add(const TextSpan(text: '\n'));
       }
     }
     return TextSpan(children: children);
+  }
+
+  Widget _buildSessionDivider(_LogSession session) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final start = session.startedAt;
+    final startTime =
+        '${start.hour.toString().padLeft(2, '0')}:'
+        '${start.minute.toString().padLeft(2, '0')}:'
+        '${start.second.toString().padLeft(2, '0')}';
+    final labelStyle = TextStyle(
+      color: scheme.outline.withValues(alpha: isDark ? 0.95 : 0.88),
+      fontFamily: 'monospace',
+      fontSize: 12.0,
+      height: 1.25,
+      fontWeight: FontWeight.w600,
+    );
+    final dividerColor = scheme.outlineVariant.withValues(
+      alpha: isDark ? 0.7 : 0.6,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: <Widget>[
+          Expanded(child: Divider(color: dividerColor, thickness: 1)),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              '会话 #${session.id} ${session.reason} ($startTime)',
+              style: labelStyle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Divider(color: dividerColor, thickness: 1)),
+        ],
+      ),
+    );
   }
 
   TextSpan _buildLogLineSpan(String line) {
@@ -3363,6 +3749,133 @@ class _SeedChoice {
   final Color color;
 
   const _SeedChoice(this.label, this.color);
+}
+
+class _LogSession {
+  final int id;
+  final String reason;
+  final DateTime startedAt;
+  final List<String> lines;
+
+  _LogSession({
+    required this.id,
+    required this.reason,
+    required this.startedAt,
+    required this.lines,
+  });
+}
+
+class _PsColorSquarePainter extends CustomPainter {
+  final double hue;
+  final double saturation;
+  final double value;
+
+  const _PsColorSquarePainter({
+    required this.hue,
+    required this.saturation,
+    required this.value,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final borderPaint = Paint()
+      ..color = const Color(0x33000000)
+      ..style = PaintingStyle.stroke;
+
+    final base = HSVColor.fromAHSV(1, hue, 1, 1).toColor();
+    final huePaint = Paint()..color = base;
+    canvas.drawRect(rect, huePaint);
+
+    final whiteGradient = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: <Color>[Colors.white, Color(0x00FFFFFF)],
+      ).createShader(rect);
+    canvas.drawRect(rect, whiteGradient);
+
+    final blackGradient = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[Color(0x00000000), Colors.black],
+      ).createShader(rect);
+    canvas.drawRect(rect, blackGradient);
+
+    canvas.drawRect(rect, borderPaint);
+
+    final selector = Offset(saturation * size.width, (1 - value) * size.height);
+    final ringPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final ringShadow = Paint()
+      ..color = Colors.black.withValues(alpha: 0.5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.drawCircle(selector, 7, ringShadow);
+    canvas.drawCircle(selector, 6, ringPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PsColorSquarePainter oldDelegate) {
+    return oldDelegate.hue != hue ||
+        oldDelegate.saturation != saturation ||
+        oldDelegate.value != value;
+  }
+}
+
+class _PsHueSliderPainter extends CustomPainter {
+  final double hue;
+
+  const _PsHueSliderPainter({required this.hue});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final hueGradient = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          Color(0xFFFF0000),
+          Color(0xFFFFFF00),
+          Color(0xFF00FF00),
+          Color(0xFF00FFFF),
+          Color(0xFF0000FF),
+          Color(0xFFFF00FF),
+          Color(0xFFFF0000),
+        ],
+      ).createShader(rect);
+    canvas.drawRect(rect, hueGradient);
+
+    final borderPaint = Paint()
+      ..color = const Color(0x33000000)
+      ..style = PaintingStyle.stroke;
+    canvas.drawRect(rect, borderPaint);
+
+    final y = (hue / 360) * size.height;
+    final clampedY = y.clamp(0, size.height).toDouble();
+    final markerRect = Rect.fromLTWH(0, clampedY - 2, size.width, 4);
+    canvas.drawRect(
+      markerRect,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawRect(
+      markerRect,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.65)
+        ..style = PaintingStyle.stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _PsHueSliderPainter oldDelegate) {
+    return oldDelegate.hue != hue;
+  }
 }
 
 String _launcherSettingsFilePath() {
