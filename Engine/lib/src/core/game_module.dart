@@ -449,6 +449,37 @@ class DefaultGameModule implements GameModule {
     required GameState gameState,
     required int scriptIndex,
   }) async {
+    final normalizedApiName = apiName.trim().toLowerCase();
+    if (normalizedApiName.startsWith('steam.achievement.')) {
+      final service = SteamAchievementService.instance;
+      final achievementId = resolveSteamAchievementId(params);
+      if (achievementId == null) {
+        if (kEngineDebugMode) {
+          debugPrint(
+            '[DefaultGameModule] steam achievement api missing id: api=$apiName params=$params',
+          );
+        }
+        return ScriptApiExecutionResult.handled();
+      }
+
+      switch (normalizedApiName) {
+        case 'steam.achievement.register':
+          service.registerAchievement(achievementId);
+          return ScriptApiExecutionResult.handled();
+        case 'steam.achievement.unlock':
+        case 'steam.achievement.trigger':
+          await service.unlockAchievement(achievementId);
+          return ScriptApiExecutionResult.handled();
+        case 'steam.achievement.clear':
+        case 'steam.achievement.reset':
+        case 'steam.achievement.cancel':
+          await service.clearAchievement(achievementId);
+          return ScriptApiExecutionResult.handled();
+        default:
+          return ScriptApiExecutionResult.handled();
+      }
+    }
+
     return const ScriptApiExecutionResult.unhandled();
   }
 
