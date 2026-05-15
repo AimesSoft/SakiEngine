@@ -255,10 +255,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_steamworks
-      sha256: "65b8d9e26be608fa576e8dadf52c70460c57d815668139f1c1d31cdbedaec4cf"
+      sha256: "416e642d42804a25cdb61f5662bcfd496c6669554aae09593a76f6fe4b4cd1a1"
       url: "https://pub.dev"
     source: hosted
-    version: "0.0.2"
+    version: "0.0.3"
   flutter_svg:
     dependency: "direct main"
     description:

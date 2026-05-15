@@ -11,7 +11,7 @@ dependencies:
     sdk: flutter
   sakiengine:
     path: ../../Engine
-  flutter_steamworks: ^0.0.2
+  flutter_steamworks: 0.0.3
 
 dependency_overrides:
   media_kit:

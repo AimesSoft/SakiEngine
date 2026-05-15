@@ -513,6 +513,8 @@ class AssetManager {
     final fileNameToSearchLower = fileNameToSearch.toLowerCase();
     final fileNameToSearchWithoutExtLower =
         p.basenameWithoutExtension(fileNameToSearch).toLowerCase();
+    final normalizedName = name.replaceAll('\\', '/');
+    final normalizedNameLower = normalizedName.toLowerCase();
 
     final searchBase = p.join(gamePath, 'Assets', 'images');
 
@@ -537,27 +539,70 @@ class AssetManager {
       p.join(gamePath, 'Assets', 'movies'), // 新增：视频文件搜索路径
     ]);
 
+    // 1) 路径优先：如果调用方给了路径（如 gui/save/unlock.png），优先精确匹配相对路径
+    // 这样可避免同名文件（例如 gui/save/unlock.png 与 gui/say/unlock.png）误命中。
+    if (normalizedName.contains('/')) {
+      final exactCandidates = <String>[
+        p.join(gamePath, 'Assets', normalizedName),
+        p.join(gamePath, 'Assets', 'images', normalizedName),
+      ];
+
+      for (final candidate in exactCandidates) {
+        final file = File(candidate);
+        if (await file.exists()) {
+          final assetPath = file.path.replaceAll('\\', '/');
+          _imageCache[name] = assetPath;
+          return assetPath;
+        }
+      }
+    }
+
+    String? fallbackMatch;
+    String? pathMatchedFallback;
+
     for (final dirPath in searchPaths) {
       final directory = Directory(dirPath);
       if (await directory.exists()) {
         await for (final file in directory.list(recursive: true)) {
-          if (file is File) {
-            final fileName = p.basename(file.path);
-            final fileNameLower = fileName.toLowerCase();
-            final fileNameWithoutExtLower =
-                p.basenameWithoutExtension(fileName).toLowerCase();
-            final fileNameMatched =
-                fileNameWithoutExtLower == fileNameToSearchWithoutExtLower ||
-                    fileNameLower == fileNameToSearchLower;
-            if (fileNameMatched) {
-              // Debug模式下直接返回绝对路径，用于FileImage
-              final assetPath = file.path.replaceAll('\\', '/');
-              _imageCache[name] = assetPath;
-              return assetPath;
+          if (file is! File) continue;
+
+          final fileName = p.basename(file.path);
+          final fileNameLower = fileName.toLowerCase();
+          final fileNameWithoutExtLower =
+              p.basenameWithoutExtension(fileName).toLowerCase();
+          final fileNameMatched =
+              fileNameWithoutExtLower == fileNameToSearchWithoutExtLower ||
+                  fileNameLower == fileNameToSearchLower;
+
+          if (!fileNameMatched) continue;
+
+          final assetPath = file.path.replaceAll('\\', '/');
+          fallbackMatch ??= assetPath;
+
+          // 2) 路径约束匹配：在同名情况下，优先命中包含目标路径片段的资源
+          final lowerAssetPath = assetPath.toLowerCase();
+          if (normalizedNameLower.contains('/')) {
+            if (lowerAssetPath.contains('/assets/$normalizedNameLower') ||
+                lowerAssetPath.contains('/assets/images/$normalizedNameLower')) {
+              pathMatchedFallback = assetPath;
+              break;
             }
+          } else {
+            pathMatchedFallback = assetPath;
+            break;
           }
         }
+
+        if (pathMatchedFallback != null) {
+          break;
+        }
       }
+    }
+
+    final resolved = pathMatchedFallback ?? fallbackMatch;
+    if (resolved != null) {
+      _imageCache[name] = resolved;
+      return resolved;
     }
 
     return null;
