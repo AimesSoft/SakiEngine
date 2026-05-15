@@ -1002,6 +1002,46 @@ class SksParser {
           nodes.add(
               ApiCallNode(apiName, parameters: _parseApiParameters(rawParams)));
           break;
+        case 'achievement':
+          // 语法糖：
+          // achievement unlock <id>
+          // achievement register <id>
+          // achievement clear <id>
+          if (parts.length < 2) {
+            break;
+          }
+
+          String action;
+          String achievementId;
+          if (parts.length >= 3) {
+            action = parts[1].toLowerCase();
+            achievementId = parts.sublist(2).join(' ').trim();
+          } else {
+            action = 'unlock';
+            achievementId = parts[1].trim();
+          }
+
+          if (achievementId.isEmpty) {
+            break;
+          }
+
+          final apiName = switch (action) {
+            'register' => 'steam.achievement.register',
+            'unlock' => 'steam.achievement.unlock',
+            'trigger' => 'steam.achievement.unlock',
+            'clear' => 'steam.achievement.clear',
+            'reset' => 'steam.achievement.clear',
+            'cancel' => 'steam.achievement.clear',
+            _ => 'steam.achievement.unlock',
+          };
+
+          nodes.add(
+            ApiCallNode(
+              apiName,
+              parameters: <String, String>{'id': achievementId},
+            ),
+          );
+          break;
         case 'pause':
           // pause(1.5) - 暂停指定秒数
           if (parts.length >= 2) {

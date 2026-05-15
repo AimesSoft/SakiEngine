@@ -215,6 +215,41 @@ async function createNewProjectNonInteractive({
     return cleanProjectName;
 }
 
+function disableMacOSAppSandboxIfPresent(projectDir) {
+    const entitlementPaths = [
+        path.join(projectDir, 'macos', 'Runner', 'DebugProfile.entitlements'),
+        path.join(projectDir, 'macos', 'Runner', 'Release.entitlements'),
+    ];
+
+    let updatedCount = 0;
+    for (const entitlementPath of entitlementPaths) {
+        updatedCount += disableSandboxInEntitlements(entitlementPath);
+    }
+
+    if (updatedCount > 0) {
+        colorLog('已关闭 macOS App Sandbox（Debug/Release）。', 'yellow');
+    }
+}
+
+function disableSandboxInEntitlements(entitlementPath) {
+    if (!fs.existsSync(entitlementPath)) {
+        return 0;
+    }
+
+    const content = fs.readFileSync(entitlementPath, 'utf8');
+    const updatedContent = content.replace(
+        /(<key>\s*com\.apple\.security\.app-sandbox\s*<\/key>\s*)(<true\/>|<false\/>)/g,
+        '$1<false/>',
+    );
+
+    if (updatedContent === content) {
+        return 0;
+    }
+
+    fs.writeFileSync(entitlementPath, updatedContent);
+    return 1;
+}
+
 function installProjectCiIfPossible(projectRoot, projectDir) {
     const installScript = path.join(projectRoot, 'scripts', 'install_project_ci.sh');
     if (!fs.existsSync(installScript)) {
@@ -667,6 +702,8 @@ async function createFlutterAppProject(projectRoot, projectDir, projectName, bun
         `flutter create --no-pub --project-name ${appPackageName} --org ${appOrg} --platforms=android,ios,linux,macos,windows,web \"${projectDir}\"`,
         { stdio: 'inherit' }
     );
+
+    disableMacOSAppSandboxIfPresent(projectDir);
 
     const projectGitignore = path.join(projectDir, '.gitignore');
     if (fs.existsSync(projectGitignore)) {
