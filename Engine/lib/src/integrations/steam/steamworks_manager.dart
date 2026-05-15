@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 
+import 'package:flutter/services.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter_steamworks/flutter_steamworks.dart';
 
@@ -17,6 +18,7 @@ class SteamworksManager {
   static final SteamworksManager instance = SteamworksManager._();
 
   final FlutterSteamworks _client = FlutterSteamworks();
+  static const MethodChannel _channel = MethodChannel('flutter_steamworks');
   bool _initialized = false;
   SteamworksInitOptions? _options;
 
@@ -75,5 +77,102 @@ class SteamworksManager {
 
   Future<String?> getPlatformVersion() {
     return _client.getPlatformVersion();
+  }
+
+  Future<bool> requestCurrentStats() async {
+    if (!_initialized) {
+      return false;
+    }
+    try {
+      final result = await _channel.invokeMethod<bool>('requestCurrentStats');
+      return result ?? false;
+    } catch (error, stackTrace) {
+      if (kEngineDebugMode) {
+        debugPrint('Steamworks requestCurrentStats 异常: $error');
+        debugPrint(stackTrace.toString());
+      }
+      return false;
+    }
+  }
+
+  Future<bool> isAchievementUnlocked(String achievementId) async {
+    if (!_initialized) {
+      return false;
+    }
+    try {
+      final statsOk = await requestCurrentStats();
+      if (!statsOk) {
+        return false;
+      }
+      final result = await _channel.invokeMethod<bool>(
+        'getAchievement',
+        <String, dynamic>{'achievementId': achievementId},
+      );
+      return result ?? false;
+    } catch (error, stackTrace) {
+      if (kEngineDebugMode) {
+        debugPrint('Steamworks isAchievementUnlocked 异常: $error');
+        debugPrint(stackTrace.toString());
+      }
+      return false;
+    }
+  }
+
+  Future<bool> unlockAchievement(String achievementId) async {
+    if (!_initialized) {
+      return false;
+    }
+    try {
+      final statsOk = await requestCurrentStats();
+      if (!statsOk) {
+        return false;
+      }
+      final setOk = await _channel.invokeMethod<bool>(
+            'setAchievement',
+            <String, dynamic>{'achievementId': achievementId},
+          ) ??
+          false;
+      if (!setOk) {
+        return false;
+      }
+      final stored =
+          await _channel.invokeMethod<bool>('storeStats') ?? false;
+      return stored;
+    } catch (error, stackTrace) {
+      if (kEngineDebugMode) {
+        debugPrint('Steamworks unlockAchievement 异常: $error');
+        debugPrint(stackTrace.toString());
+      }
+      return false;
+    }
+  }
+
+  Future<bool> clearAchievement(String achievementId) async {
+    if (!_initialized) {
+      return false;
+    }
+    try {
+      final statsOk = await requestCurrentStats();
+      if (!statsOk) {
+        return false;
+      }
+      final clearOk = await _channel.invokeMethod<bool>(
+            'clearAchievement',
+            <String, dynamic>{'achievementId': achievementId},
+          ) ??
+          false;
+      if (!clearOk) {
+        return false;
+      }
+      final stored =
+          await _channel.invokeMethod<bool>('storeStats') ?? false;
+      return stored;
+    } catch (error, stackTrace) {
+      if (kEngineDebugMode) {
+        debugPrint('Steamworks clearAchievement 异常: $error');
+        debugPrint(stackTrace.toString());
+      }
+      return false;
+    }
   }
 }

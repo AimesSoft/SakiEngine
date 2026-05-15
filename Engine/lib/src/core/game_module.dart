@@ -17,6 +17,7 @@ import 'package:sakiengine/src/widgets/settings_screen.dart';
 import 'package:sakiengine/src/widgets/about_screen.dart';
 import 'package:sakiengine/src/screens/review_screen.dart';
 import 'package:sakiengine/src/widgets/common/exit_confirmation_dialog.dart';
+import 'package:sakiengine/src/integrations/steam/steam_achievement_service.dart';
 
 /// 游戏模块接口 - 定义项目可以覆盖的所有组件
 abstract class GameModule {
@@ -151,6 +152,37 @@ abstract class GameModule {
     required GameState gameState,
     required int scriptIndex,
   }) async {
+    final normalizedApiName = apiName.trim().toLowerCase();
+    if (normalizedApiName.startsWith('steam.achievement.')) {
+      final service = SteamAchievementService.instance;
+      final achievementId = resolveSteamAchievementId(params);
+      if (achievementId == null) {
+        if (kEngineDebugMode) {
+          debugPrint(
+            '[DefaultGameModule] steam achievement api missing id: api=$apiName params=$params',
+          );
+        }
+        return ScriptApiExecutionResult.handled();
+      }
+
+      switch (normalizedApiName) {
+        case 'steam.achievement.register':
+          service.registerAchievement(achievementId);
+          return ScriptApiExecutionResult.handled();
+        case 'steam.achievement.unlock':
+        case 'steam.achievement.trigger':
+          await service.unlockAchievement(achievementId);
+          return ScriptApiExecutionResult.handled();
+        case 'steam.achievement.clear':
+        case 'steam.achievement.reset':
+        case 'steam.achievement.cancel':
+          await service.clearAchievement(achievementId);
+          return ScriptApiExecutionResult.handled();
+        default:
+          return ScriptApiExecutionResult.handled();
+      }
+    }
+
     return const ScriptApiExecutionResult.unhandled();
   }
 
@@ -228,6 +260,23 @@ abstract class GameModule {
   /// 是否启用普通对话框切换时的位移动画（Slide）。
   /// 返回 `false` 时仍会保留淡入淡出，但不会产生上下位移。
   bool get enableDialogueSwitcherSlideAnimation => true;
+}
+
+String? resolveSteamAchievementId(Map<String, String> params) {
+  const keys = <String>[
+    'id',
+    'achievement',
+    'achievement_id',
+    'key',
+    'name',
+  ];
+  for (final key in keys) {
+    final value = params[key];
+    if (value != null && value.trim().isNotEmpty) {
+      return value.trim();
+    }
+  }
+  return null;
 }
 
 /// 默认游戏模块实现 - 使用src/下的默认组件
