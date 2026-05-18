@@ -16,6 +16,18 @@ dependencies:
 dependency_overrides:
   media_kit:
     path: ../../third_party/media_kit_hotfix
+  media_kit_video:
+    path: ../../third_party/media_kit_video_hotfix
+  media_kit_libs_android_video:
+    path: ../../third_party/media_kit_libs_android_video_hotfix
+  media_kit_libs_ios_video:
+    path: ../../third_party/media_kit_libs_ios_video_hotfix
+  media_kit_libs_macos_video:
+    path: ../../third_party/media_kit_libs_macos_video_hotfix
+  media_kit_libs_windows_video:
+    path: ../../third_party/media_kit_libs_windows_video_hotfix
+  media_kit_libs_linux:
+    path: ../../third_party/media_kit_libs_linux_hotfix
 
 dev_dependencies:
   flutter_test:

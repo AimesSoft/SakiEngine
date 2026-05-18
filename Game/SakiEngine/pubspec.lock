@@ -287,10 +287,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_steamworks
-      sha256: "416e642d42804a25cdb61f5662bcfd496c6669554aae09593a76f6fe4b4cd1a1"
+      sha256: f603684e5bedd45f1cd356f988c3235e533fff00d2802900e84920dba68598ea
       url: "https://pub.dev"
     source: hosted
-    version: "0.0.3"
+    version: "0.0.4"
   flutter_svg:
     dependency: transitive
     description:
@@ -501,52 +501,46 @@ packages:
     source: path
     version: "1.2.6"
   media_kit_libs_android_video:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: media_kit_libs_android_video
-      sha256: "3f6274e5ab2de512c286a25c327288601ee445ed8ac319e0ef0b66148bd8f76c"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.3.8"
+      path: "../../third_party/media_kit_libs_android_video_hotfix"
+      relative: true
+    source: path
+    version: "1.3.7"
   media_kit_libs_ios_video:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: media_kit_libs_ios_video
-      sha256: b5382994eb37a4564c368386c154ad70ba0cc78dacdd3fb0cd9f30db6d837991
-      url: "https://pub.dev"
-    source: hosted
+      path: "../../third_party/media_kit_libs_ios_video_hotfix"
+      relative: true
+    source: path
     version: "1.1.4"
   media_kit_libs_linux:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: media_kit_libs_linux
-      sha256: "2b473399a49ec94452c4d4ae51cfc0f6585074398d74216092bf3d54aac37ecf"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../../third_party/media_kit_libs_linux_hotfix"
+      relative: true
+    source: path
     version: "1.2.1"
   media_kit_libs_macos_video:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: media_kit_libs_macos_video
-      sha256: f26aa1452b665df288e360393758f84b911f70ffb3878032e1aabba23aa1032d
-      url: "https://pub.dev"
-    source: hosted
+      path: "../../third_party/media_kit_libs_macos_video_hotfix"
+      relative: true
+    source: path
     version: "1.1.4"
   media_kit_libs_windows_video:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: media_kit_libs_windows_video
-      sha256: dff76da2778729ab650229e6b4ec6ec111eb5151431002cbd7ea304ff1f112ab
-      url: "https://pub.dev"
-    source: hosted
+      path: "../../third_party/media_kit_libs_windows_video_hotfix"
+      relative: true
+    source: path
     version: "1.0.11"
   media_kit_video:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: media_kit_video
-      sha256: "813858c3fe84eb46679eb698695f60665e2bfbef757766fac4d2e683f926e15a"
-      url: "https://pub.dev"
-    source: hosted
+      path: "../../third_party/media_kit_video_hotfix"
+      relative: true
+    source: path
     version: "1.3.1"
   meta:
     dependency: transitive

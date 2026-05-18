@@ -70,6 +70,22 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+dependency_overrides:
+  media_kit:
+    path: ../third_party/media_kit_hotfix
+  media_kit_video:
+    path: ../third_party/media_kit_video_hotfix
+  media_kit_libs_android_video:
+    path: ../third_party/media_kit_libs_android_video_hotfix
+  media_kit_libs_ios_video:
+    path: ../third_party/media_kit_libs_ios_video_hotfix
+  media_kit_libs_macos_video:
+    path: ../third_party/media_kit_libs_macos_video_hotfix
+  media_kit_libs_windows_video:
+    path: ../third_party/media_kit_libs_windows_video_hotfix
+  media_kit_libs_linux:
+    path: ../third_party/media_kit_libs_linux_hotfix
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
