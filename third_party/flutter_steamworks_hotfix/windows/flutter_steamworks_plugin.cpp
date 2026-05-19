@@ -1,0 +1,504 @@
+﻿#include "flutter_steamworks_plugin.h"
+
+// This must be included before many other Windows headers.
+#include <windows.h>
+
+// For getPlatformVersion; remove unless needed for your plugin implementation.
+#include <VersionHelpers.h>
+
+#include <flutter/method_channel.h>
+#include <flutter/plugin_registrar_windows.h>
+#include <flutter/standard_method_codec.h>
+
+#include <cstdlib>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <sstream>
+#include <string>
+#include <vector>
+#include <fstream>
+#include <iostream>
+#include <winreg.h>
+
+namespace flutter_steamworks {
+
+namespace {
+
+using SteamAPIInitFn = bool (*)();
+using SteamAPIInitFlatFn = int (*)(void *);
+using SteamAPIShutdownFn = void (*)();
+
+struct SteamRuntime {
+  HMODULE module = nullptr;
+  SteamAPIInitFn init_fn = nullptr;
+  SteamAPIInitFlatFn init_flat_fn = nullptr;
+  SteamAPIShutdownFn shutdown_fn = nullptr;
+  bool initialized = false;
+  bool stats_ready = false;
+};
+
+SteamRuntime &GetSteamRuntime() {
+  static SteamRuntime runtime;
+  return runtime;
+}
+
+void DebugOutput(const wchar_t *message) {
+  if (message == nullptr) {
+    return;
+  }
+  std::wstring output(message);
+  if (output.empty() || output.back() != L'\n') {
+    output.push_back(L'\n');
+  }
+  ::OutputDebugStringW(output.c_str());
+  std::wcerr << output;
+}
+
+std::vector<std::filesystem::path> BuildSteamLibraryCandidates() {
+  static const wchar_t *kNames[] = {L"steam_api64.dll", L"steam_api.dll"};
+  std::vector<std::filesystem::path> candidates;
+
+  HMODULE module = nullptr;
+  if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                             GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                         reinterpret_cast<LPCWSTR>(&BuildSteamLibraryCandidates),
+                         &module)) {
+    wchar_t path_buffer[MAX_PATH] = {0};
+    DWORD length = GetModuleFileNameW(module, path_buffer, MAX_PATH);
+    if (length > 0 && length < MAX_PATH) {
+      std::filesystem::path module_path(path_buffer);
+      std::filesystem::path dir = module_path.parent_path();
+      for (const wchar_t *name : kNames) {
+        candidates.emplace_back(dir / name);
+      }
+    }
+  }
+
+  for (const wchar_t *name : kNames) {
+    candidates.emplace_back(name);
+  }
+
+  // Fallback for local Windows debug runs: probe Steam install directory.
+  wchar_t steam_path[MAX_PATH] = {0};
+  DWORD steam_path_size = sizeof(steam_path);
+  const LONG reg_result = RegGetValueW(
+      HKEY_CURRENT_USER,
+      L"Software\\Valve\\Steam",
+      L"SteamPath",
+      RRF_RT_REG_SZ,
+      nullptr,
+      steam_path,
+      &steam_path_size);
+  if (reg_result == ERROR_SUCCESS && steam_path[0] != L'\0') {
+    std::filesystem::path steam_root(steam_path);
+    for (const wchar_t *name : kNames) {
+      candidates.emplace_back(steam_root / name);
+    }
+  }
+
+  return candidates;
+}
+
+bool EnsureSteamLibraryLoaded() {
+  SteamRuntime &runtime = GetSteamRuntime();
+  if (runtime.module != nullptr) {
+    return (runtime.init_fn != nullptr || runtime.init_flat_fn != nullptr) &&
+           runtime.shutdown_fn != nullptr;
+  }
+
+  const auto candidates = BuildSteamLibraryCandidates();
+  for (const auto &candidate : candidates) {
+    std::wcerr << L"[flutter_steamworks] Try load: " << candidate.c_str() << L"\n";
+    HMODULE module = LoadLibraryW(candidate.c_str());
+    if (module == nullptr) {
+      std::wcerr << L"[flutter_steamworks] LoadLibrary failed, GetLastError=" << GetLastError() << L"\n";
+      continue;
+    }
+
+    SteamAPIInitFn init_fn = reinterpret_cast<SteamAPIInitFn>(GetProcAddress(module, "SteamAPI_Init"));
+    SteamAPIInitFlatFn init_flat_fn = nullptr;
+    if (init_fn == nullptr) {
+      init_flat_fn = reinterpret_cast<SteamAPIInitFlatFn>(GetProcAddress(module, "SteamAPI_InitFlat"));
+    }
+    SteamAPIShutdownFn shutdown_fn = reinterpret_cast<SteamAPIShutdownFn>(GetProcAddress(module, "SteamAPI_Shutdown"));
+
+    if ((init_fn != nullptr || init_flat_fn != nullptr) && shutdown_fn != nullptr) {
+      std::wcerr << L"[flutter_steamworks] steam_api loaded, has_init="
+                 << (init_fn != nullptr) << L", has_init_flat=" << (init_flat_fn != nullptr)
+                 << L", has_shutdown=" << (shutdown_fn != nullptr) << L"\n";
+      runtime.module = module;
+      runtime.init_fn = init_fn;
+      runtime.init_flat_fn = init_flat_fn;
+      runtime.shutdown_fn = shutdown_fn;
+      return true;
+    }
+
+    FreeLibrary(module);
+  }
+
+  DebugOutput(L"[flutter_steamworks] Failed to find steam_api64.dll; make sure it is shipped with the app.");
+  return false;
+}
+
+bool InvokeSteamInit() {
+  SteamRuntime &runtime = GetSteamRuntime();
+  if (runtime.init_fn != nullptr) {
+    const bool ok = runtime.init_fn();
+    std::wcerr << L"[flutter_steamworks] SteamAPI_Init returned: " << ok << L"\n";
+    return ok;
+  }
+  if (runtime.init_flat_fn != nullptr) {
+    const int rc = runtime.init_flat_fn(nullptr);
+    std::wcerr << L"[flutter_steamworks] SteamAPI_InitFlat returned: " << rc << L"\n";
+    return rc == 0;
+  }
+  std::wcerr << L"[flutter_steamworks] No init function available.\n";
+  return false;
+}
+
+using SteamUserStatsFn = void* (*)();
+using SteamUserStatsGetAchievementFn = bool (*)(void*, const char*, bool*);
+using SteamUserStatsSetAchievementFn = bool (*)(void*, const char*);
+using SteamUserStatsClearAchievementFn = bool (*)(void*, const char*);
+using SteamUserStatsStoreStatsFn = bool (*)(void*);
+
+void* GetSteamUserStatsInterface() {
+  SteamRuntime& runtime = GetSteamRuntime();
+  if (runtime.module == nullptr) {
+    return nullptr;
+  }
+
+  auto steam_user_stats_fn = reinterpret_cast<SteamUserStatsFn>(
+      GetProcAddress(runtime.module, "SteamAPI_SteamUserStats_v013"));
+  if (steam_user_stats_fn == nullptr) {
+    return nullptr;
+  }
+
+  return steam_user_stats_fn();
+}
+
+bool EnsureSteamStatsReady() {
+  SteamRuntime& runtime = GetSteamRuntime();
+  if (runtime.stats_ready) {
+    return true;
+  }
+
+  if (GetSteamUserStatsInterface() == nullptr) {
+    return false;
+  }
+
+  runtime.stats_ready = true;
+  return true;
+}
+
+bool HandleGetAchievement(const std::string& achievement_id, bool* unlocked) {
+  if (achievement_id.empty() || unlocked == nullptr) {
+    return false;
+  }
+  if (!EnsureSteamStatsReady()) {
+    return false;
+  }
+
+  void* user_stats = GetSteamUserStatsInterface();
+  if (user_stats == nullptr) {
+    return false;
+  }
+
+  auto fn = reinterpret_cast<SteamUserStatsGetAchievementFn>(
+      GetProcAddress(GetSteamRuntime().module, "SteamAPI_ISteamUserStats_GetAchievement"));
+  if (fn == nullptr) {
+    return false;
+  }
+
+  bool achieved = false;
+  const bool ok = fn(user_stats, achievement_id.c_str(), &achieved);
+  *unlocked = achieved;
+  return ok;
+}
+
+bool HandleSetAchievement(const std::string& achievement_id) {
+  if (achievement_id.empty()) {
+    return false;
+  }
+  if (!EnsureSteamStatsReady()) {
+    return false;
+  }
+
+  void* user_stats = GetSteamUserStatsInterface();
+  if (user_stats == nullptr) {
+    return false;
+  }
+
+  auto fn = reinterpret_cast<SteamUserStatsSetAchievementFn>(
+      GetProcAddress(GetSteamRuntime().module, "SteamAPI_ISteamUserStats_SetAchievement"));
+  if (fn == nullptr) {
+    return false;
+  }
+
+  return fn(user_stats, achievement_id.c_str());
+}
+
+bool HandleClearAchievement(const std::string& achievement_id) {
+  if (achievement_id.empty()) {
+    return false;
+  }
+  if (!EnsureSteamStatsReady()) {
+    return false;
+  }
+
+  void* user_stats = GetSteamUserStatsInterface();
+  if (user_stats == nullptr) {
+    return false;
+  }
+
+  auto fn = reinterpret_cast<SteamUserStatsClearAchievementFn>(
+      GetProcAddress(GetSteamRuntime().module, "SteamAPI_ISteamUserStats_ClearAchievement"));
+  if (fn == nullptr) {
+    return false;
+  }
+
+  return fn(user_stats, achievement_id.c_str());
+}
+
+bool HandleStoreStats() {
+  if (!EnsureSteamStatsReady()) {
+    return false;
+  }
+
+  void* user_stats = GetSteamUserStatsInterface();
+  if (user_stats == nullptr) {
+    return false;
+  }
+
+  auto fn = reinterpret_cast<SteamUserStatsStoreStatsFn>(
+      GetProcAddress(GetSteamRuntime().module, "SteamAPI_ISteamUserStats_StoreStats"));
+  if (fn == nullptr) {
+    return false;
+  }
+
+  return fn(user_stats);
+}
+
+void ShutdownSteamIfNeeded() {
+  SteamRuntime &runtime = GetSteamRuntime();
+  if (runtime.initialized && runtime.shutdown_fn != nullptr) {
+    runtime.shutdown_fn();
+  }
+  if (runtime.module != nullptr) {
+    FreeLibrary(runtime.module);
+  }
+  runtime = SteamRuntime{};
+}
+
+bool SetSteamEnvironment(const std::string &app_id) {
+  if (_putenv_s("SteamAppId", app_id.c_str()) != 0) {
+    DebugOutput(L"[flutter_steamworks] Failed to set SteamAppId environment variable.");
+    return false;
+  }
+  if (_putenv_s("SteamGameId", app_id.c_str()) != 0) {
+    DebugOutput(L"[flutter_steamworks] Failed to set SteamGameId environment variable.");
+    return false;
+  }
+  return true;
+}
+
+void WriteSteamAppIdFile(const std::filesystem::path& directory, const std::string& app_id) {
+  if (directory.empty()) {
+    return;
+  }
+  std::error_code ec;
+  std::filesystem::create_directories(directory, ec);
+  std::ofstream out(directory / "steam_appid.txt", std::ios::binary | std::ios::trunc);
+  if (!out.is_open()) {
+    std::wcerr << L"[flutter_steamworks] Failed to open steam_appid.txt at: " << directory.c_str() << L"\n";
+    return;
+  }
+  out << app_id << "\n";
+  std::wcerr << L"[flutter_steamworks] Wrote steam_appid.txt at: " << directory.c_str() << L"\n";
+}
+
+void EnsureSteamAppIdFile(const std::string& app_id) {
+  wchar_t exe_path_buffer[MAX_PATH] = {0};
+  DWORD length = GetModuleFileNameW(nullptr, exe_path_buffer, MAX_PATH);
+  if (length > 0 && length < MAX_PATH) {
+    std::filesystem::path exe_path(exe_path_buffer);
+    WriteSteamAppIdFile(exe_path.parent_path(), app_id);
+  }
+  WriteSteamAppIdFile(std::filesystem::current_path(), app_id);
+}
+
+std::optional<std::string> ExtractAppId(const flutter::MethodCall<flutter::EncodableValue> &call) {
+  const auto *arguments = call.arguments();
+  if (arguments == nullptr) {
+    return std::nullopt;
+  }
+
+  const auto *map = std::get_if<flutter::EncodableMap>(arguments);
+  if (map == nullptr) {
+    return std::nullopt;
+  }
+
+  const auto iterator = map->find(flutter::EncodableValue("appId"));
+  if (iterator == map->end()) {
+    return std::nullopt;
+  }
+
+  const flutter::EncodableValue &value = iterator->second;
+  if (const auto *string_value = std::get_if<std::string>(&value)) {
+    if (!string_value->empty()) {
+      return *string_value;
+    }
+    return std::nullopt;
+  }
+
+  if (const auto *int_value = std::get_if<int32_t>(&value)) {
+    if (*int_value > 0) {
+      return std::to_string(*int_value);
+    }
+    return std::nullopt;
+  }
+
+  if (const auto *long_value = std::get_if<int64_t>(&value)) {
+    if (*long_value > 0) {
+      return std::to_string(*long_value);
+    }
+    return std::nullopt;
+  }
+
+  return std::nullopt;
+}
+
+std::optional<std::string> ExtractAchievementId(const flutter::MethodCall<flutter::EncodableValue> &call) {
+  const auto *arguments = call.arguments();
+  if (arguments == nullptr) {
+    return std::nullopt;
+  }
+
+  const auto *map = std::get_if<flutter::EncodableMap>(arguments);
+  if (map == nullptr) {
+    return std::nullopt;
+  }
+
+  const auto iterator = map->find(flutter::EncodableValue("achievementId"));
+  if (iterator == map->end()) {
+    return std::nullopt;
+  }
+
+  const flutter::EncodableValue &value = iterator->second;
+  if (const auto *string_value = std::get_if<std::string>(&value)) {
+    if (!string_value->empty()) {
+      return *string_value;
+    }
+    return std::nullopt;
+  }
+
+  return std::nullopt;
+}
+
+}  // namespace
+
+// static
+void FlutterSteamworksPlugin::RegisterWithRegistrar(
+    flutter::PluginRegistrarWindows *registrar) {
+  auto channel =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          registrar->messenger(), "flutter_steamworks",
+          &flutter::StandardMethodCodec::GetInstance());
+
+  auto plugin = std::make_unique<FlutterSteamworksPlugin>();
+
+  channel->SetMethodCallHandler(
+      [plugin_pointer = plugin.get()](const auto &call, auto result) {
+        plugin_pointer->HandleMethodCall(call, std::move(result));
+      });
+
+  registrar->AddPlugin(std::move(plugin));
+}
+
+FlutterSteamworksPlugin::FlutterSteamworksPlugin() {}
+
+FlutterSteamworksPlugin::~FlutterSteamworksPlugin() {
+  ShutdownSteamIfNeeded();
+}
+
+void FlutterSteamworksPlugin::HandleMethodCall(
+    const flutter::MethodCall<flutter::EncodableValue> &method_call,
+    std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+  if (method_call.method_name().compare("getPlatformVersion") == 0) {
+    std::ostringstream version_stream;
+    version_stream << "Windows ";
+    if (IsWindows10OrGreater()) {
+      version_stream << "10+";
+    } else if (IsWindows8OrGreater()) {
+      version_stream << "8";
+    } else if (IsWindows7OrGreater()) {
+      version_stream << "7";
+    }
+    result->Success(flutter::EncodableValue(version_stream.str()));
+  } else if (method_call.method_name().compare("initSteam") == 0) {
+    const auto app_id = ExtractAppId(method_call);
+    if (!app_id.has_value()) {
+      result->Error("invalid-argument", "App ID is required");
+      return;
+    }
+
+    if (!SetSteamEnvironment(*app_id)) {
+      result->Success(flutter::EncodableValue(false));
+      return;
+    }
+    std::wcerr << L"[flutter_steamworks] initSteam appId=" << app_id->c_str() << L"\n";
+    EnsureSteamAppIdFile(*app_id);
+
+    if (!EnsureSteamLibraryLoaded()) {
+      result->Success(flutter::EncodableValue(false));
+      return;
+    }
+
+    SteamRuntime &runtime = GetSteamRuntime();
+    if (runtime.initialized) {
+      result->Success(flutter::EncodableValue(true));
+      return;
+    }
+
+    if (InvokeSteamInit()) {
+      runtime.initialized = true;
+      DebugOutput(L"[flutter_steamworks] Steam API initialized successfully.");
+      result->Success(flutter::EncodableValue(true));
+    } else {
+      DebugOutput(L"[flutter_steamworks] Steam API initialization failed; ensure Steam client is running.");
+      result->Success(flutter::EncodableValue(false));
+    }
+  } else if (method_call.method_name().compare("requestCurrentStats") == 0) {
+    result->Success(flutter::EncodableValue(EnsureSteamStatsReady()));
+  } else if (method_call.method_name().compare("getAchievement") == 0) {
+    const auto achievement_id = ExtractAchievementId(method_call);
+    if (!achievement_id.has_value()) {
+      result->Error("invalid-argument", "achievementId is required");
+      return;
+    }
+    bool unlocked = false;
+    const bool ok = HandleGetAchievement(*achievement_id, &unlocked);
+    result->Success(flutter::EncodableValue(ok ? unlocked : false));
+  } else if (method_call.method_name().compare("setAchievement") == 0) {
+    const auto achievement_id = ExtractAchievementId(method_call);
+    if (!achievement_id.has_value()) {
+      result->Error("invalid-argument", "achievementId is required");
+      return;
+    }
+    result->Success(flutter::EncodableValue(HandleSetAchievement(*achievement_id)));
+  } else if (method_call.method_name().compare("clearAchievement") == 0) {
+    const auto achievement_id = ExtractAchievementId(method_call);
+    if (!achievement_id.has_value()) {
+      result->Error("invalid-argument", "achievementId is required");
+      return;
+    }
+    result->Success(flutter::EncodableValue(HandleClearAchievement(*achievement_id)));
+  } else if (method_call.method_name().compare("storeStats") == 0) {
+    result->Success(flutter::EncodableValue(HandleStoreStats()));
+  } else {
+    result->NotImplemented();
+  }
+}
+
+}  // namespace flutter_steamworks
