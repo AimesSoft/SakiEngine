@@ -43,6 +43,8 @@ class MouseParallax extends StatefulWidget {
     this.enabled = true,
     this.resetDuration = const Duration(milliseconds: 220),
     this.resetCurve = Curves.easeOut,
+    this.externalPointer,
+    this.resetOnPointerUp = true,
   });
 
   /// 覆盖层内容。
@@ -59,6 +61,8 @@ class MouseParallax extends StatefulWidget {
 
   /// 回正动画曲线。
   final Curve resetCurve;
+  final ValueListenable<Offset?>? externalPointer;
+  final bool resetOnPointerUp;
 
   @override
   State<MouseParallax> createState() => _MouseParallaxState();
@@ -74,13 +78,13 @@ class _MouseParallaxState extends State<MouseParallax>
   @override
   void initState() {
     super.initState();
-    _resetController = AnimationController(
-      vsync: this,
-      duration: widget.resetDuration,
-    )..addListener(() {
-        _offsetNotifier.value = _resetAnimation.value;
-        _currentOffset = _resetAnimation.value;
-      });
+    widget.externalPointer?.addListener(_handleExternalPointer);
+    _resetController =
+        AnimationController(vsync: this, duration: widget.resetDuration)
+          ..addListener(() {
+            _offsetNotifier.value = _resetAnimation.value;
+            _currentOffset = _resetAnimation.value;
+          });
 
     _resetAnimation = Tween<Offset>(
       begin: Offset.zero,
@@ -91,6 +95,11 @@ class _MouseParallaxState extends State<MouseParallax>
   @override
   void didUpdateWidget(MouseParallax oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.externalPointer != oldWidget.externalPointer) {
+      oldWidget.externalPointer?.removeListener(_handleExternalPointer);
+      widget.externalPointer?.addListener(_handleExternalPointer);
+      _handleExternalPointer();
+    }
     if (widget.resetDuration != oldWidget.resetDuration) {
       _resetController.duration = widget.resetDuration;
     }
@@ -101,6 +110,7 @@ class _MouseParallaxState extends State<MouseParallax>
 
   @override
   void dispose() {
+    widget.externalPointer?.removeListener(_handleExternalPointer);
     _resetController.dispose();
     _offsetNotifier.dispose();
     super.dispose();
@@ -126,18 +136,27 @@ class _MouseParallaxState extends State<MouseParallax>
     _offsetNotifier.value = normalized;
   }
 
+  void _handleExternalPointer() {
+    if (!widget.enabled) return;
+    final position = widget.externalPointer?.value;
+    if (position == null) {
+      _resetToCenter();
+      return;
+    }
+    _resetController.stop();
+    _currentOffset = position._clampToUnit();
+    _offsetNotifier.value = _currentOffset;
+  }
+
   void _resetToCenter() {
     if (_currentOffset == Offset.zero) {
       return;
     }
 
-    _resetAnimation = Tween<Offset>(
-      begin: _currentOffset,
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _resetController,
-      curve: widget.resetCurve,
-    ));
+    _resetAnimation = Tween<Offset>(begin: _currentOffset, end: Offset.zero)
+        .animate(
+          CurvedAnimation(parent: _resetController, curve: widget.resetCurve),
+        );
 
     _resetController
       ..reset()
@@ -155,7 +174,9 @@ class _MouseParallaxState extends State<MouseParallax>
         onPointerDown: (event) => _handlePointer(event.localPosition),
         onPointerMove: (event) => _handlePointer(event.localPosition),
         onPointerCancel: (_) => _resetToCenter(),
-        onPointerUp: (_) => _resetToCenter(),
+        onPointerUp: (_) {
+          if (widget.resetOnPointerUp) _resetToCenter();
+        },
         child: MouseRegion(
           opaque: false,
           onHover: (event) => _handlePointer(event.localPosition),
@@ -189,7 +210,8 @@ class MouseParallaxScope extends InheritedWidget {
     final scope = maybeOf(context);
     if (scope == null) {
       throw FlutterError(
-          'MouseParallaxScope.of() called with no MouseParallax ancestor.');
+        'MouseParallaxScope.of() called with no MouseParallax ancestor.',
+      );
     }
     return scope;
   }
@@ -288,9 +310,6 @@ class ParallaxAware extends StatelessWidget {
 
 extension _OffsetClamp on Offset {
   Offset _clampToUnit() {
-    return Offset(
-      dx.clamp(-1.0, 1.0),
-      dy.clamp(-1.0, 1.0),
-    );
+    return Offset(dx.clamp(-1.0, 1.0), dy.clamp(-1.0, 1.0));
   }
 }

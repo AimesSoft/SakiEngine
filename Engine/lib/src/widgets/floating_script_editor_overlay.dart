@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import 'package:sakiengine/src/config/game_path_resolver.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/game/game_script_localization.dart';
+import 'package:sakiengine/src/utils/desktop_file_manager.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/utils/key_sequence_detector.dart';
 import 'package:sakiengine/src/utils/music_manager.dart';
@@ -542,6 +544,19 @@ class _FloatingScriptEditorOverlayState
 
   void _notify(String message) {
     widget.onNotify?.call(message);
+  }
+
+  Future<void> _openScriptDirectory() async {
+    if (_currentScriptPath.isEmpty) return;
+    try {
+      await openDirectoryInFileManager(
+        File(_currentScriptPath).absolute.parent.path,
+      );
+    } catch (e) {
+      if (mounted) {
+        _notify('打开脚本文件夹失败: $e');
+      }
+    }
   }
 
   double _filePanelWidth(double uiScale) {
@@ -1258,10 +1273,22 @@ class _FloatingScriptEditorOverlayState
       return;
     }
     _rectInitialized = true;
-    _windowWidth = (size.width * 0.58).clamp(_minWidth, size.width - 32);
-    _windowHeight = (size.height * 0.68).clamp(_minHeight, size.height - 32);
+    _windowWidth = _fitWindowDimension(
+      size.width * 0.58,
+      _minWidth,
+      math.max(math.min(_minWidth, size.width), size.width - 32),
+    );
+    _windowHeight = _fitWindowDimension(
+      size.height * 0.68,
+      _minHeight,
+      math.max(math.min(_minHeight, size.height), size.height - 32),
+    );
     _windowLeft = (size.width - _windowWidth) / 2;
     _windowTop = (size.height - _windowHeight) / 2;
+  }
+
+  double _fitWindowDimension(double value, double minimum, double available) {
+    return value.clamp(math.min(minimum, available), available);
   }
 
   void _clampRect(Size size) {
@@ -2042,8 +2069,16 @@ class _FloatingScriptEditorOverlayState
     );
 
     _ensureInitialRect(screenSize);
-    _windowWidth = _windowWidth.clamp(_minWidth, screenSize.width);
-    _windowHeight = _windowHeight.clamp(_minHeight, screenSize.height);
+    _windowWidth = _fitWindowDimension(
+      _windowWidth,
+      _minWidth,
+      screenSize.width,
+    );
+    _windowHeight = _fitWindowDimension(
+      _windowHeight,
+      _minHeight,
+      screenSize.height,
+    );
     _clampRect(screenSize);
 
     final editorPadding = 12 * uiScale;
@@ -2063,14 +2098,15 @@ class _FloatingScriptEditorOverlayState
         ? lineLayouts[highlightedLineIndex].height
         : 0.0;
 
-    return Focus(
-      autofocus: true,
-      onKeyEvent: _handleEditorKeyEvent,
-      child: Positioned(
-        left: _windowLeft,
-        top: _windowTop,
-        width: _windowWidth,
-        height: _windowHeight,
+    // Positioned must reach the game Stack without Focus's Semantics in between.
+    return Positioned(
+      left: _windowLeft,
+      top: _windowTop,
+      width: _windowWidth,
+      height: _windowHeight,
+      child: Focus(
+        autofocus: true,
+        onKeyEvent: _handleEditorKeyEvent,
         child: Material(
           elevation: 30,
           color: Colors.transparent,
@@ -2137,6 +2173,8 @@ class _FloatingScriptEditorOverlayState
                               Expanded(
                                 child: Text(
                                   '脚本编辑浮窗 (Shift+P)',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: config.reviewTitleTextStyle.copyWith(
                                     fontSize:
                                         config.reviewTitleTextStyle.fontSize! *
@@ -2144,6 +2182,19 @@ class _FloatingScriptEditorOverlayState
                                         0.62,
                                     color: config.themeColors.primary,
                                   ),
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed:
+                                    _currentScriptPath.isEmpty || _isLoading
+                                    ? null
+                                    : _openScriptDirectory,
+                                icon: const Icon(Icons.folder_open_outlined),
+                                label: const Text('打开文件夹'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: config.themeColors.primary,
+                                  textStyle: const TextStyle(fontSize: 11),
+                                  visualDensity: VisualDensity.compact,
                                 ),
                               ),
                               IconButton(
@@ -2200,6 +2251,7 @@ class _FloatingScriptEditorOverlayState
                         _buildFindBar(config, uiScale, textScale),
                       Expanded(
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             if (_showFilePanel)
                               _buildScriptFilePanel(config, uiScale, textScale)
@@ -2417,14 +2469,16 @@ class _FloatingScriptEditorOverlayState
                         behavior: HitTestBehavior.opaque,
                         onPanUpdate: (details) {
                           setState(() {
-                            final maxWidth = (screenSize.width - _windowLeft)
-                                .clamp(_minWidth, screenSize.width);
-                            final maxHeight = (screenSize.height - _windowTop)
-                                .clamp(_minHeight, screenSize.height);
-                            _windowWidth = (_windowWidth + details.delta.dx)
-                                .clamp(_minWidth, maxWidth);
-                            _windowHeight = (_windowHeight + details.delta.dy)
-                                .clamp(_minHeight, maxHeight);
+                            _windowWidth = _fitWindowDimension(
+                              _windowWidth + details.delta.dx,
+                              _minWidth,
+                              screenSize.width - _windowLeft,
+                            );
+                            _windowHeight = _fitWindowDimension(
+                              _windowHeight + details.delta.dy,
+                              _minHeight,
+                              screenSize.height - _windowTop,
+                            );
                           });
                         },
                         child: Container(

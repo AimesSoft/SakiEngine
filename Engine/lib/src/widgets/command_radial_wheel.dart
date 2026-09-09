@@ -106,17 +106,18 @@ class _CommandRadialWheelState extends State<CommandRadialWheel> {
       return const SizedBox.shrink();
     }
 
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.escape) {
-          widget.onDismiss?.call();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Positioned.fill(
+    // Focus inserts a Semantics render object, so it must be inside Positioned.
+    return Positioned.fill(
+      child: Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.escape) {
+            widget.onDismiss?.call();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
         child: LayoutBuilder(
           builder: (context, constraints) {
             final size = constraints.biggest;

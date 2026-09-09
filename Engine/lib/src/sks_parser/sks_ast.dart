@@ -49,12 +49,14 @@ class ShowNode implements SksNode {
   final String? position;
   final String? animation;
   final int? repeatCount;
-  ShowNode(this.character,
-      {this.pose,
-      this.expression,
-      this.position,
-      this.animation,
-      this.repeatCount});
+  ShowNode(
+    this.character, {
+    this.pose,
+    this.expression,
+    this.position,
+    this.animation,
+    this.repeatCount,
+  });
 }
 
 class CgNode implements SksNode {
@@ -65,13 +67,15 @@ class CgNode implements SksNode {
   final String? transitionType;
   final String? animation;
   final int? repeatCount;
-  CgNode(this.character,
-      {this.pose,
-      this.expression,
-      this.position,
-      this.transitionType,
-      this.animation,
-      this.repeatCount});
+  CgNode(
+    this.character, {
+    this.pose,
+    this.expression,
+    this.position,
+    this.transitionType,
+    this.animation,
+    this.repeatCount,
+  });
 }
 
 class HideNode implements SksNode {
@@ -87,12 +91,14 @@ class MovieNode implements SksNode {
   final String? transitionType;
   final String? animation;
   final int? repeatCount;
-  MovieNode(this.movieFile,
-      {this.timer,
-      this.layers,
-      this.transitionType,
-      this.animation,
-      this.repeatCount});
+  MovieNode(
+    this.movieFile, {
+    this.timer,
+    this.layers,
+    this.transitionType,
+    this.animation,
+    this.repeatCount,
+  });
 }
 
 class BackgroundNode implements SksNode {
@@ -102,12 +108,14 @@ class BackgroundNode implements SksNode {
   final String? transitionType; // 新增：转场类型支持 (with语法)
   final String? animation; // 新增：动画类型支持 (an语法)
   final int? repeatCount; // 新增：重复次数支持 (repeat语法)
-  BackgroundNode(this.background,
-      {this.timer,
-      this.layers,
-      this.transitionType,
-      this.animation,
-      this.repeatCount});
+  BackgroundNode(
+    this.background, {
+    this.timer,
+    this.layers,
+    this.transitionType,
+    this.animation,
+    this.repeatCount,
+  });
 }
 
 class SayNode implements SksNode {
@@ -181,14 +189,11 @@ class JumpNode implements SksNode {
   final String? conditionVariable;
   final bool? conditionValue;
 
-  JumpNode(
-    this.targetLabel, {
-    this.conditionVariable,
-    this.conditionValue,
-  }) : assert(
-          (conditionVariable == null) == (conditionValue == null),
-          '条件变量与条件值必须同时提供',
-        );
+  JumpNode(this.targetLabel, {this.conditionVariable, this.conditionValue})
+    : assert(
+        (conditionVariable == null) == (conditionValue == null),
+        '条件变量与条件值必须同时提供',
+      );
 
   bool get isConditional => conditionVariable != null;
 }
@@ -201,7 +206,18 @@ class CommentNode implements SksNode {
   String toString() => '// $comment';
 }
 
-class NvlNode implements SksNode {}
+class NvlNode implements SksNode {
+  final String? presentation;
+  final String? layout;
+  final bool accumulate;
+  final bool preserve;
+  NvlNode({
+    this.presentation,
+    this.layout,
+    this.accumulate = true,
+    this.preserve = false,
+  });
+}
 
 class EndNvlNode implements SksNode {}
 
@@ -255,7 +271,7 @@ class ApiCallNode implements SksNode {
   final Map<String, String> parameters;
 
   ApiCallNode(this.apiName, {Map<String, String>? parameters})
-      : parameters = Map.unmodifiable(parameters ?? const <String, String>{});
+    : parameters = Map.unmodifiable(parameters ?? const <String, String>{});
 }
 
 class BoolNode implements SksNode {
@@ -311,11 +327,7 @@ class ShakeNode implements SksNode {
   final double? intensity;
   final String? target;
 
-  ShakeNode({
-    this.duration,
-    this.intensity,
-    this.target,
-  });
+  ShakeNode({this.duration, this.intensity, this.target});
 
   @override
   String toString() {

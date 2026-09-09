@@ -8,15 +8,17 @@ class ConfigParser {
     final lines = content.split('\n');
 
     for (final rawLine in lines) {
-      final lineWithoutComment =
-          SksLineUtils.stripLineCommentOutsideQuotes(rawLine);
+      final lineWithoutComment = SksLineUtils.stripLineCommentOutsideQuotes(
+        rawLine,
+      );
       final line = lineWithoutComment.trim();
       if (line.isEmpty || line.startsWith('//')) {
         continue;
       }
 
-      final match =
-          RegExp(r'^([^:]+):\s*"([^"]*)"\s*:\s*(.+)$').firstMatch(line);
+      final match = RegExp(
+        r'^([^:]+):\s*"([^"]*)"\s*:\s*(.+)$',
+      ).firstMatch(line);
       String id;
       String name;
       String resourceSpec;
@@ -45,8 +47,18 @@ class ConfigParser {
       final resourceId = resourceIdAndPose[0];
       String? defaultPoseId;
       String? slotId;
+      String? defaultAnimation;
+      int? defaultAnimationRepeat;
       for (int i = 1; i < resourceIdAndPose.length; i++) {
         final token = resourceIdAndPose[i];
+        if (token == 'an' && i + 1 < resourceIdAndPose.length) {
+          defaultAnimation = resourceIdAndPose[++i];
+          continue;
+        }
+        if (token == 'repeat' && i + 1 < resourceIdAndPose.length) {
+          defaultAnimationRepeat = int.tryParse(resourceIdAndPose[++i]);
+          continue;
+        }
         if (token == 'at' && i + 1 < resourceIdAndPose.length) {
           defaultPoseId = resourceIdAndPose[i + 1];
           i++;
@@ -63,6 +75,8 @@ class ConfigParser {
         resourceId: resourceId,
         defaultPoseId: defaultPoseId,
         slotId: slotId,
+        defaultAnimation: defaultAnimation,
+        defaultAnimationRepeat: defaultAnimationRepeat,
       );
     }
     return configs;
@@ -73,8 +87,9 @@ class ConfigParser {
     final lines = content.split('\n');
 
     for (final rawLine in lines) {
-      final lineWithoutComment =
-          SksLineUtils.stripLineCommentOutsideQuotes(rawLine);
+      final lineWithoutComment = SksLineUtils.stripLineCommentOutsideQuotes(
+        rawLine,
+      );
       final line = lineWithoutComment.trim();
       if (line.isEmpty || line.startsWith('//')) continue;
 

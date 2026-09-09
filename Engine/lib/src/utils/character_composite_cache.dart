@@ -7,6 +7,7 @@ import 'package:sakiengine/src/utils/character_layer_parser.dart';
 import 'package:sakiengine/src/utils/expression_offset_manager.dart';
 import 'package:sakiengine/src/utils/image_loader.dart';
 import 'package:sakiengine/src/rendering/image_sampling.dart';
+import 'package:sakiengine/src/rendering/character_layer_blend.dart';
 
 class CharacterCompositeCache {
   CharacterCompositeCache._();
@@ -54,7 +55,12 @@ class CharacterCompositeCache {
     }
 
     //print('[CharacterCompositeCache] 启动新的合成任务 - key: $key');
+    final generation = _revision;
     final task = _compose(resourceId, pose, expression).then((image) {
+      if (generation != _revision) {
+        image?.dispose();
+        return null;
+      }
       if (image != null) {
         //print('[CharacterCompositeCache] 合成成功，缓存图像 - key: $key');
         final replaced = _imageCache.remove(key);
@@ -131,6 +137,7 @@ class CharacterCompositeCache {
             yOffset: yOffset,
             alpha: alpha,
             scale: scale,
+            blend: info.blend,
           ),
         );
 
@@ -174,7 +181,7 @@ class CharacterCompositeCache {
           255,
           layer.alpha.clamp(0.0, 1.0),
         );
-        canvas.drawImage(layer.image, ui.Offset.zero, paint);
+        drawCharacterLayerImage(canvas, layer.image, paint, layer.blend);
         canvas.restore();
       }
 
@@ -256,6 +263,7 @@ class _CompositeLayer {
     required this.yOffset,
     required this.alpha,
     required this.scale,
+    required this.blend,
   });
 
   final ui.Image image;
@@ -263,4 +271,5 @@ class _CompositeLayer {
   final double yOffset;
   final double alpha;
   final double scale;
+  final String blend;
 }

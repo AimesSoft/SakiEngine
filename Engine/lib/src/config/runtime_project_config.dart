@@ -2,11 +2,13 @@ class RuntimeProjectConfig {
   final String? projectName;
   final String? appName;
   final String? gamePath;
+  final String? packageDigest;
 
   const RuntimeProjectConfig({
     this.projectName,
     this.appName,
     this.gamePath,
+    this.packageDigest,
   });
 }
 
@@ -26,11 +28,13 @@ class RuntimeProjectConfigStore {
     String? projectName,
     String? appName,
     String? gamePath,
+    String? packageDigest,
   }) {
     _config = RuntimeProjectConfig(
       projectName: _normalize(projectName),
       appName: _normalize(appName),
       gamePath: _normalize(gamePath),
+      packageDigest: _normalize(packageDigest),
     );
   }
 
@@ -54,11 +58,13 @@ void configureRuntimeProject({
   String? projectName,
   String? appName,
   String? gamePath,
+  String? packageDigest,
 }) {
   RuntimeProjectConfigStore().configure(
     projectName: projectName,
     appName: appName,
     gamePath: gamePath,
+    packageDigest: packageDigest,
   );
 }
 

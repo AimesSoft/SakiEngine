@@ -1,0 +1,351 @@
+[
+  {
+    "visible": true,
+    "who": "测试",
+    "what": "ADV before",
+    "mode": "adv",
+    "lines": [],
+    "currentLineIndex": -1,
+    "expectedLineCount": 0,
+    "expectedLines": []
+  },
+  {
+    "visible": true,
+    "who": "测试",
+    "what": "测试：First",
+    "mode": "nvl",
+    "lines": [
+      {
+        "who": "测试",
+        "what": "First",
+        "text": "测试：First"
+      }
+    ],
+    "currentLineIndex": 0,
+    "expectedLineCount": 0,
+    "expectedLines": []
+  },
+  {
+    "visible": true,
+    "who": "",
+    "what": "测试：First\nSecond",
+    "mode": "nvl",
+    "lines": [
+      {
+        "who": "测试",
+        "what": "First",
+        "text": "测试：First"
+      },
+      {
+        "who": "",
+        "what": "Second",
+        "text": "Second"
+      }
+    ],
+    "currentLineIndex": 1,
+    "expectedLineCount": 0,
+    "expectedLines": []
+  },
+  {
+    "visible": true,
+    "who": "测试",
+    "what": "测试：First\nSecond\n测试：Third",
+    "mode": "nvl",
+    "lines": [
+      {
+        "who": "测试",
+        "what": "First",
+        "text": "测试：First"
+      },
+      {
+        "who": "",
+        "what": "Second",
+        "text": "Second"
+      },
+      {
+        "who": "测试",
+        "what": "Third",
+        "text": "测试：Third"
+      }
+    ],
+    "currentLineIndex": 2,
+    "expectedLineCount": 0,
+    "expectedLines": []
+  },
+  {
+    "visible": true,
+    "who": "测试",
+    "what": "测试：First\nSecond\n测试：Third\n“Quoted”",
+    "mode": "nvl2",
+    "lines": [
+      {
+        "who": "测试",
+        "what": "First",
+        "text": "测试：First"
+      },
+      {
+        "who": "",
+        "what": "Second",
+        "text": "Second"
+      },
+      {
+        "who": "测试",
+        "what": "Third",
+        "text": "测试：Third"
+      },
+      {
+        "who": "测试",
+        "what": "Quoted",
+        "text": "“Quoted”"
+      }
+    ],
+    "currentLineIndex": 3,
+    "expectedLineCount": 2,
+    "expectedLines": [
+      {
+        "who": "",
+        "what": "Quoted",
+        "text": "“Quoted”"
+      },
+      {
+        "who": "",
+        "what": "Centered",
+        "text": "“Centered”"
+      }
+    ]
+  },
+  {
+    "visible": true,
+    "who": "",
+    "what": "测试：First\nSecond\n测试：Third\n“Quoted”\n“Centered”",
+    "mode": "nvl2",
+    "lines": [
+      {
+        "who": "测试",
+        "what": "First",
+        "text": "测试：First"
+      },
+      {
+        "who": "",
+        "what": "Second",
+        "text": "Second"
+      },
+      {
+        "who": "测试",
+        "what": "Third",
+        "text": "测试：Third"
+      },
+      {
+        "who": "测试",
+        "what": "Quoted",
+        "text": "“Quoted”"
+      },
+      {
+        "who": "",
+        "what": "Centered",
+        "text": "“Centered”"
+      }
+    ],
+    "currentLineIndex": 4,
+    "expectedLineCount": 2,
+    "expectedLines": [
+      {
+        "who": "",
+        "what": "Quoted",
+        "text": "“Quoted”"
+      },
+      {
+        "who": "",
+        "what": "Centered",
+        "text": "“Centered”"
+      }
+    ]
+  },
+  {
+    "visible": true,
+    "who": "测试",
+    "what": "“New block”",
+    "mode": "nvl2",
+    "lines": [
+      {
+        "who": "测试",
+        "what": "New block",
+        "text": "“New block”"
+      }
+    ],
+    "currentLineIndex": 0,
+    "expectedLineCount": 2,
+    "expectedLines": [
+      {
+        "who": "",
+        "what": "New block",
+        "text": "“New block”"
+      },
+      {
+        "who": "",
+        "what": "No quotes",
+        "text": "“No quotes”"
+      }
+    ]
+  },
+  {
+    "visible": true,
+    "who": "测试",
+    "what": "“New block”\nNo quotes",
+    "mode": "nvl6",
+    "lines": [
+      {
+        "who": "测试",
+        "what": "New block",
+        "text": "“New block”"
+      },
+      {
+        "who": "测试",
+        "what": "No quotes",
+        "text": "No quotes"
+      }
+    ],
+    "currentLineIndex": 1,
+    "expectedLineCount": 1,
+    "expectedLines": [
+      {
+        "who": "",
+        "what": "No quotes",
+        "text": "No quotes"
+      }
+    ]
+  },
+  {
+    "visible": true,
+    "who": "测试",
+    "what": "测试：Random first",
+    "mode": "nvl3",
+    "lines": [
+      {
+        "who": "测试",
+        "what": "Random first",
+        "text": "测试：Random first"
+      }
+    ],
+    "currentLineIndex": 0,
+    "expectedLineCount": 0,
+    "expectedLines": []
+  },
+  {
+    "visible": true,
+    "who": "测试",
+    "what": "测试：Random second",
+    "mode": "nvl3",
+    "lines": [
+      {
+        "who": "测试",
+        "what": "Random second",
+        "text": "测试：Random second"
+      }
+    ],
+    "currentLineIndex": 0,
+    "expectedLineCount": 0,
+    "expectedLines": []
+  },
+  {
+    "visible": true,
+    "who": "",
+    "what": "Fourth mode",
+    "mode": "nvl4",
+    "lines": [
+      {
+        "who": "",
+        "what": "Fourth mode",
+        "text": "Fourth mode"
+      }
+    ],
+    "currentLineIndex": 0,
+    "expectedLineCount": 0,
+    "expectedLines": []
+  },
+  {
+    "visible": true,
+    "who": "",
+    "what": "Fifth mode",
+    "mode": "nvl5",
+    "lines": [
+      {
+        "who": "",
+        "what": "Fifth mode",
+        "text": "Fifth mode"
+      }
+    ],
+    "currentLineIndex": 0,
+    "expectedLineCount": 0,
+    "expectedLines": []
+  },
+  {
+    "visible": true,
+    "who": "测试",
+    "what": "Sixth mode",
+    "mode": "nvl6",
+    "lines": [
+      {
+        "who": "测试",
+        "what": "Sixth mode",
+        "text": "Sixth mode"
+      }
+    ],
+    "currentLineIndex": 0,
+    "expectedLineCount": 2,
+    "expectedLines": [
+      {
+        "who": "",
+        "what": "Sixth mode",
+        "text": "Sixth mode"
+      },
+      {
+        "who": "",
+        "what": "Final centered line",
+        "text": "Final centered line"
+      }
+    ]
+  },
+  {
+    "visible": true,
+    "who": "",
+    "what": "Sixth mode\nFinal centered line",
+    "mode": "nvl6",
+    "lines": [
+      {
+        "who": "测试",
+        "what": "Sixth mode",
+        "text": "Sixth mode"
+      },
+      {
+        "who": "",
+        "what": "Final centered line",
+        "text": "Final centered line"
+      }
+    ],
+    "currentLineIndex": 1,
+    "expectedLineCount": 2,
+    "expectedLines": [
+      {
+        "who": "",
+        "what": "Sixth mode",
+        "text": "Sixth mode"
+      },
+      {
+        "who": "",
+        "what": "Final centered line",
+        "text": "Final centered line"
+      }
+    ]
+  },
+  {
+    "visible": true,
+    "who": "测试",
+    "what": "ADV after",
+    "mode": "adv",
+    "lines": [],
+    "currentLineIndex": -1,
+    "expectedLineCount": 0,
+    "expectedLines": []
+  }
+]

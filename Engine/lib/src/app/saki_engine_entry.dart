@@ -3,8 +3,15 @@ import 'dart:io' show Directory, Platform, Process, ProcessStartMode;
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:sakiengine/src/config/game_path_resolver.dart';
+import 'package:sakiengine/src/compat/yuyu/yuyu_package.dart';
+import 'package:sakiengine/src/compat/yuyu/yuyu_validator.dart';
+import 'package:sakiengine/src/compat/yuyu/yuyu_game_module.dart';
+import 'package:sakiengine/src/game/script_merger.dart';
+import 'package:sakiengine/src/utils/animation_manager.dart';
+import 'package:sakiengine/src/utils/character_layer_parser.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
+import 'package:sakiengine/src/utils/character_composite_cache.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -443,6 +450,7 @@ Future<void> runSakiEngine({
   String? projectName,
   String? appName,
   String? gamePath,
+  String? yuyuPackagePath,
   int steamAppId = 3536120,
   bool enableSteamworks = true,
   bool restoreStartupWindowBounds = true,
@@ -478,14 +486,46 @@ Future<void> runSakiEngine({
         return false;
       };
 
+      final requestedPackage =
+          yuyuPackagePath ?? Platform.environment['SAKI_YUYU_PACKAGE'];
+      YuyuPackage? package;
+      if (requestedPackage != null && requestedPackage.isNotEmpty) {
+        package = await YuyuPackage.open(requestedPackage);
+        try {
+          if (package.webEntry != null &&
+              !(Platform.isMacOS || Platform.isWindows)) {
+            throw UnsupportedError(
+              'YuYuball Web UI currently requires the Windows/macOS host',
+            );
+          }
+          await validateYuyuPackage(package);
+        } catch (_) {
+          await package.close();
+          rethrow;
+        }
+        final previous = YuyuPackage.active;
+        YuyuPackage.active = package;
+        await previous?.close();
+        GamePathResolver.clearCache();
+        ScriptMerger().clearCache();
+        AnimationManager.clearCache();
+        CharacterLayerParser.clearCache();
+        CharacterCompositeCache.instance.clear();
+        moduleLoader.registerModule(
+          package.gameId,
+          () => YuyuGameModule(package!),
+        );
+        await moduleLoader.reloadModule();
+      }
       configureRuntimeProject(
-        projectName: projectName,
-        appName: appName,
-        gamePath: gamePath,
+        projectName: package?.gameId ?? projectName,
+        appName: package?.gameName ?? appName,
+        gamePath: package == null ? gamePath : null,
+        packageDigest: package?.digest,
       );
       unawaited(_openShowcaseResourceDirectoryIfNeeded());
 
-      if (enableSteamworks) {
+      if (enableSteamworks && package == null) {
         final steamworksManager = SteamworksManager.instance;
         if (steamworksManager.isSupportedPlatform) {
           final steamOptions = SteamworksInitOptions(appId: steamAppId);
@@ -517,6 +557,11 @@ Future<void> runSakiEngine({
       }
 
       await SakiEngineConfig().loadConfig();
+      final stage = YuyuPackage.active?.manifest['stage'] as Map?;
+      if (stage != null) {
+        SakiEngineConfig().logicalWidth = (stage['width'] as num).toDouble();
+        SakiEngineConfig().logicalHeight = (stage['height'] as num).toDouble();
+      }
       await SettingsManager().init();
       final startupWindowAspectRatio = !kIsWeb && restoreStartupWindowBounds
           ? SettingsManager().currentGameWindowAspectRatio

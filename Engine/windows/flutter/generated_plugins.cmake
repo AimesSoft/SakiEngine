@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   erika_flutter
   flutter_avif_windows
+  flutter_inappwebview_windows
   flutter_steamworks
   hotkey_manager_windows
   just_audio_windows

@@ -14,6 +14,7 @@ import 'package:sakiengine/src/widgets/dialogue_content.dart';
 
 class DialogueBox extends StatefulWidget {
   final String? speaker;
+  final Color? speakerColor;
   final String? speakerAlias; // 新增：角色简写
   final String? dialogueTag; // 对话行尾扩展 token（默认对话框不消费）
   final String dialogue;
@@ -24,6 +25,7 @@ class DialogueBox extends StatefulWidget {
   const DialogueBox({
     super.key,
     this.speaker,
+    this.speakerColor,
     this.speakerAlias, // 新增：角色简写参数
     this.dialogueTag,
     required this.dialogue,
@@ -94,13 +96,9 @@ class _DialogueBoxState extends State<DialogueBox>
       vsync: this,
     );
 
-    _textFadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _textFadeController,
-      curve: Curves.easeInOut,
-    ));
+    _textFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _textFadeController, curve: Curves.easeInOut),
+    );
 
     // 监听设置变化
     SettingsManager().addListener(_onSettingsChanged);
@@ -244,6 +242,7 @@ class _DialogueBoxState extends State<DialogueBox>
                     children: [
                       DialogueSpeakerHeader(
                         speaker: widget.speaker,
+                        color: widget.speakerColor,
                         uiScale: uiScale,
                         textScale: textScale,
                       ),

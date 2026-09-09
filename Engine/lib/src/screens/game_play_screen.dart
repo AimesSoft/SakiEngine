@@ -567,8 +567,10 @@ class _GamePlayScreenState extends State<GamePlayScreen>
 
   bool get _isBlockingCinematicInput {
     final gameState = _gameManager.currentState;
-    return (_dialogueProgressionManagerReference?.currentTypewriter
-                ?.blocksGameInput ?? false) ||
+    return (_dialogueProgressionManagerReference
+                ?.currentTypewriter
+                ?.blocksGameInput ??
+            false) ||
         gameState.movieFile != null ||
         (gameState.scriptCanvasId != null &&
             gameState.scriptCanvasDurationSeconds > 0);
@@ -1045,7 +1047,12 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                       fit: StackFit.expand,
                       children: [
                         MouseParallax(
-                          maxOffset: const Offset(26, 16),
+                          maxOffset: gameModule.mouseParallaxMaxOffset,
+                          resetCurve: gameModule.mouseParallaxResetCurve,
+                          resetOnPointerUp:
+                              gameModule.mouseParallaxResetOnPointerUp,
+                          externalPointer:
+                              gameModule.mouseParallaxExternalPointer,
                           enabled:
                               _isParallaxEnabled &&
                               !_isHiddenUiSceneTransformActive,
@@ -1402,26 +1409,32 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                                           applyHint: _projectDebugApplying
                                               ? 'Applying...'
                                               : _projectDebugSession!.applyHint,
-                                          options: _projectDebugSession!.options,
-                                          maxSize: _projectDebugSession!.maxSize,
+                                          options:
+                                              _projectDebugSession!.options,
+                                          maxSize:
+                                              _projectDebugSession!.maxSize,
                                           alignment:
                                               _projectDebugSession!.alignment,
-                                          imageFit: _projectDebugSession!.imageFit,
-                                          currentOptionId:
-                                              _projectDebugSession!.currentOptionId,
+                                          imageFit:
+                                              _projectDebugSession!.imageFit,
+                                          currentOptionId: _projectDebugSession!
+                                              .currentOptionId,
                                           center:
                                               _expressionWheelCenter ??
-                                              MediaQuery.sizeOf(context).center(
-                                                Offset.zero,
-                                              ),
+                                              MediaQuery.sizeOf(
+                                                context,
+                                              ).center(Offset.zero),
                                           onHighlightedOptionChanged: (id) {
                                             if (!_projectDebugApplying) {
-                                              _projectDebugSession?.onPreview(id);
+                                              _projectDebugSession?.onPreview(
+                                                id,
+                                              );
                                             }
                                           },
                                           onOptionDoubleTap:
                                               _applyProjectDebugSelection,
-                                          onDismiss: _dismissCommandMenuForEscape,
+                                          onDismiss:
+                                              _dismissCommandMenuForEscape,
                                         ),
                                       if (kEngineDebugMode &&
                                           _showFloatingScriptEditor)
@@ -1606,8 +1619,8 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                     trigger: sceneShakeLayer == SceneShakeLayer.cg,
                     intensity: gameState.shakeIntensity ?? 8.0,
                     duration: Duration(
-                      milliseconds:
-                          ((gameState.shakeDuration ?? 1.0) * 1000).round(),
+                      milliseconds: ((gameState.shakeDuration ?? 1.0) * 1000)
+                          .round(),
                     ),
                     child: _wrapWithParallax(widget, 0.55, reserveBleed: true),
                   ),
@@ -1952,7 +1965,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
         cacheRevision: CharacterCompositeCache.instance.revision,
         heightFactor: finalScale,
         isFadingOut: characterState.isFadingOut,
-        skipAnimation: _isFastForwarding,
+        skipAnimation:
+            _isFastForwarding ||
+            !(widget.gameModule?.enableCharacterTransitions ?? true),
         onFadeOutComplete: characterState.isFadingOut
             ? () => _removeCharacterAfterFadeOut(characterId)
             : null,

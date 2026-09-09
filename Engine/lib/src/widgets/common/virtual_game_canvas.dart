@@ -8,6 +8,7 @@ class SakiVirtualGameCanvas extends StatelessWidget {
   final double? selectedAspectRatio;
   final bool matchAvailableAspectRatio;
   final List<double> aspectRatioPresets;
+  final bool contain;
 
   const SakiVirtualGameCanvas({
     super.key,
@@ -15,6 +16,7 @@ class SakiVirtualGameCanvas extends StatelessWidget {
     this.selectedAspectRatio,
     this.matchAvailableAspectRatio = false,
     this.aspectRatioPresets = const <double>[],
+    this.contain = false,
   });
 
   EdgeInsets _scaleInsets(EdgeInsets insets, double divisor) {
@@ -61,7 +63,9 @@ class SakiVirtualGameCanvas extends StatelessWidget {
         final selectedCanvasWidth = canvasHeight * canvasAspectRatio;
         final scaleX = availableWidth / selectedCanvasWidth;
         final scaleY = availableHeight / canvasHeight;
-        final scale = scaleX > scaleY ? scaleX : scaleY;
+        final scale = contain
+            ? (scaleX < scaleY ? scaleX : scaleY)
+            : (scaleX > scaleY ? scaleX : scaleY);
         if (scale <= 0) {
           return child;
         }
@@ -89,7 +93,7 @@ class SakiVirtualGameCanvas extends StatelessWidget {
             color: Colors.black,
             child: ClipRect(
               child: FittedBox(
-                fit: BoxFit.cover,
+                fit: contain ? BoxFit.contain : BoxFit.cover,
                 clipBehavior: Clip.hardEdge,
                 child: SizedBox(
                   width: selectedCanvasWidth,

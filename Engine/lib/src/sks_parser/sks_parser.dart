@@ -977,7 +977,20 @@ class SksParser {
           nodes.add(HideNode(parts[1], immediate: immediate));
           break;
         case 'nvl':
-          nodes.add(NvlNode());
+          String? presentation;
+          String? layout;
+          for (final part in parts.skip(1)) {
+            if (part.startsWith('style:')) presentation = part.substring(6);
+            if (part.startsWith('layout:')) layout = part.substring(7);
+          }
+          nodes.add(
+            NvlNode(
+              presentation: presentation,
+              layout: layout,
+              accumulate: !parts.contains('replace'),
+              preserve: parts.contains('preserve'),
+            ),
+          );
           break;
         case 'endnvl':
           nodes.add(EndNvlNode());

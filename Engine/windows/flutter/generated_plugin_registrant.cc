@@ -8,6 +8,7 @@
 
 #include <erika_flutter/erika_flutter_plugin_c_api.h>
 #include <flutter_avif_windows/flutter_avif_windows_plugin.h>
+#include <flutter_inappwebview_windows/flutter_inappwebview_windows_plugin_c_api.h>
 #include <flutter_steamworks/flutter_steamworks_plugin_c_api.h>
 #include <hotkey_manager_windows/hotkey_manager_windows_plugin_c_api.h>
 #include <just_audio_windows/just_audio_windows_plugin.h>
@@ -19,6 +20,8 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("ErikaFlutterPluginCApi"));
   FlutterAvifWindowsPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("FlutterAvifWindowsPlugin"));
+  FlutterInappwebviewWindowsPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("FlutterInappwebviewWindowsPluginCApi"));
   FlutterSteamworksPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("FlutterSteamworksPluginCApi"));
   HotkeyManagerWindowsPluginCApiRegisterWithRegistrar(

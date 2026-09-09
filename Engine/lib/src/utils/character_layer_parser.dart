@@ -5,11 +5,13 @@ class CharacterLayerInfo {
   final String assetName;
   final int layerLevel;
   final String layerType;
+  final String blend;
 
   const CharacterLayerInfo({
     required this.assetName,
     required this.layerLevel,
     required this.layerType,
+    this.blend = 'normal',
   });
 }
 
@@ -31,6 +33,28 @@ class CharacterLayerParser {
     }
 
     final layers = <CharacterLayerInfo>[];
+
+    final mapped = await AssetManager().mappedCharacterLayers(cacheKey);
+    if (mapped != null) {
+      for (final layer in mapped) {
+        if (await AssetManager().findAsset(layer['assetName'] as String) ==
+            null) {
+          throw FormatException(
+            'Missing mapped character layer: ${layer['assetName']}',
+          );
+        }
+        layers.add(
+          CharacterLayerInfo(
+            assetName: layer['assetName'] as String,
+            layerLevel: layer['layerLevel'] as int,
+            layerType: layer['layerType'] as String,
+            blend: layer['blend'] as String? ?? 'normal',
+          ),
+        );
+      }
+      _layerCache[cacheKey] = layers;
+      return layers;
+    }
 
     // 首先检查是否为物件（在items文件夹中查找）
     final itemAssetName = 'items/$resourceId';

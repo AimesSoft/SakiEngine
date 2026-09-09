@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:sakiengine/src/compat/yuyu/yuyu_package.dart';
 
 import 'package:sakiengine/src/config/game_path_resolver.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
@@ -136,6 +137,8 @@ class AssetManager {
   }
 
   Future<String> loadString(String path) async {
+    final package = YuyuPackage.active;
+    if (package != null) return package.loadText(path);
     final candidates = GameScriptLocalization.resolveAssetPaths(path);
     Object? lastError;
     final compiledBundle = CompiledSksRegistry.instance.activeBundle;
@@ -204,6 +207,21 @@ class AssetManager {
     }
   }
 
+  Future<List<Map<String, dynamic>>?> mappedCharacterLayers(String key) async {
+    final package = YuyuPackage.active;
+    if (package == null) return null;
+    return (await package.layerMapping).layersFor(key);
+  }
+
+  Future<String?> resolveMappedCharacterPose(
+    String? requested,
+    String? previous,
+  ) async {
+    final package = YuyuPackage.active;
+    if (package == null || requested == null) return requested;
+    return (await package.layerMapping).resolvePose(requested, previous);
+  }
+
   Map<String, dynamic> listToManifestMap(List<String> assets) {
     final Map<String, dynamic> manifest = {};
 
@@ -251,6 +269,8 @@ class AssetManager {
   }
 
   Future<List<String>> listAssets(String directory, String extension) async {
+    final package = YuyuPackage.active;
+    if (package != null) return package.listFiles(directory, extension);
     final assets = <String>[];
     final seen = <String>{};
     final candidates = GameScriptLocalization.resolveAssetDirectories(
@@ -506,6 +526,8 @@ class AssetManager {
   }
 
   Future<String?> findAsset(String name) async {
+    final package = YuyuPackage.active;
+    if (package != null) return package.resolveAsset(name);
     if (_imageCache.containsKey(name)) {
       if (_findAssetDiagCount < 200) {
         _findAssetDiagCount++;
@@ -574,6 +596,8 @@ class AssetManager {
   /// Flutter bundle entry is materialized once into the process temp directory
   /// because native decoders cannot read Flutter's virtual asset namespace.
   Future<String?> findNativeMediaAsset(String name) async {
+    final package = YuyuPackage.active;
+    if (package != null) return package.resolveAsset(name);
     final cached = _nativeMediaCache[name];
     if (cached != null && await File(cached).exists()) {
       return cached;

@@ -1,3 +1,4 @@
+import 'package:sakiengine/src/utils/character_composite_cache.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
@@ -263,6 +264,16 @@ class GameRenderer {
         pose: characterState.pose ?? 'pose1',
         expression: characterState.expression ?? 'happy',
       );
+
+      if (layerInfos.any((layer) => layer.layerType == 'yuyu')) {
+        final composite = await CharacterCompositeCache.instance.preload(
+          characterState.resourceId, characterState.pose!, characterState.expression!,
+        );
+        if (composite == null) throw const FormatException('Mapped character composite failed');
+        final params = _calculateCharacterRenderParams(poseConfig, canvasSize, composite, characterState.animationProperties);
+        _drawCharacterLayer(canvas, composite, params, 1);
+        return;
+      }
 
       // 加载所有图层的图片数据
       ui.Image? sampleImage;

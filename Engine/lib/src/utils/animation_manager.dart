@@ -1,31 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 
-class AnimationKeyframe {
-  final String type; // 'ease' or 'linear'
-  final double duration;
-  final Map<String, double> properties;
-
-  AnimationKeyframe({
-    required this.type,
-    required this.duration,
-    required this.properties,
-  });
-}
-
-class AnimationDefinition {
-  final String name;
-  final List<AnimationKeyframe> keyframes;
-  final Map<String, double> presetProperties; // 新增：预设属性
-
-  AnimationDefinition({
-    required this.name,
-    required this.keyframes,
-    this.presetProperties = const {},
-  });
-}
+export 'animation_config.dart';
+import 'animation_config.dart';
 
 class AnimationManager {
   static final Map<String, AnimationDefinition> _animations = {};
@@ -53,102 +34,7 @@ class AnimationManager {
   }
 
   static void _parseAnimations(String content) {
-    final lines = content.split('\n');
-    String? currentAnimationName;
-    List<AnimationKeyframe> currentKeyframes = [];
-    Map<String, double> currentPresetProperties = {};
-
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty || trimmed.startsWith('//')) continue;
-
-      if (!trimmed.startsWith('ease') &&
-          !trimmed.startsWith('linear') &&
-          !_isPropertyLine(trimmed)) {
-        // 这是动画名称
-        if (currentAnimationName != null &&
-            (currentKeyframes.isNotEmpty ||
-                currentPresetProperties.isNotEmpty)) {
-          _animations[currentAnimationName] = AnimationDefinition(
-            name: currentAnimationName,
-            keyframes: List.from(currentKeyframes),
-            presetProperties: Map.from(currentPresetProperties),
-          );
-        }
-        currentAnimationName = trimmed;
-        currentKeyframes.clear();
-        currentPresetProperties.clear();
-      } else if (_isPropertyLine(trimmed)) {
-        // 这是预设属性行（如：scale+0.1）
-        final property = _parsePropertyLine(trimmed);
-        if (property != null) {
-          currentPresetProperties[property.key] = property.value;
-          //print('[AnimationManager] 解析预设属性: ${property.key} = ${property.value}');
-        }
-      } else {
-        // 这是关键帧定义
-        final keyframe = _parseKeyframe(trimmed);
-        if (keyframe != null) {
-          currentKeyframes.add(keyframe);
-        }
-      }
-    }
-
-    // 处理最后一个动画
-    if (currentAnimationName != null &&
-        (currentKeyframes.isNotEmpty || currentPresetProperties.isNotEmpty)) {
-      _animations[currentAnimationName] = AnimationDefinition(
-        name: currentAnimationName,
-        keyframes: List.from(currentKeyframes),
-        presetProperties: Map.from(currentPresetProperties),
-      );
-    }
-  }
-
-  /// 检查是否是属性行（如：scale+0.1, xcenter-0.5）
-  static bool _isPropertyLine(String line) {
-    return RegExp(r'^\w+[+-]\d*\.?\d+$').hasMatch(line);
-  }
-
-  /// 解析属性行
-  static MapEntry<String, double>? _parsePropertyLine(String line) {
-    final match = RegExp(r'^(\w+)([+-])(\d*\.?\d+)$').firstMatch(line);
-    if (match != null) {
-      final propName = match.group(1)!;
-      final operator = match.group(2)!;
-      final value = double.parse(match.group(3)!);
-      return MapEntry(propName, operator == '+' ? value : -value);
-    }
-    return null;
-  }
-
-  static AnimationKeyframe? _parseKeyframe(String line) {
-    final parts = line.split(' ');
-    if (parts.length < 3) return null;
-
-    final type = parts[0]; // 'ease' or 'linear'
-    final duration = double.tryParse(parts[1]);
-    if (duration == null) return null;
-
-    final properties = <String, double>{};
-
-    // 解析属性变化 如: ycenter-0.5, xcenter+0.1
-    for (int i = 2; i < parts.length; i++) {
-      final prop = parts[i];
-      final match = RegExp(r'(\w+)([+-])(\d*\.?\d+)').firstMatch(prop);
-      if (match != null) {
-        final propName = match.group(1)!;
-        final operator = match.group(2)!;
-        final value = double.parse(match.group(3)!);
-        properties[propName] = operator == '+' ? value : -value;
-      }
-    }
-
-    return AnimationKeyframe(
-      type: type,
-      duration: duration,
-      properties: properties,
-    );
+    _animations.addAll(AnimationConfigParser().parse(content));
   }
 
   static AnimationDefinition? getAnimation(String name) {
@@ -200,6 +86,131 @@ class AnimationManager {
   }
 }
 
+/// A finite, build-time-mapped sequence sampled against one monotonic clock.
+/// This keeps the existing Saki property model; it does not interpret ATL.
+class YuyuSequence {
+  final AnimationDefinition definition;
+  final Map<String, double> base;
+
+  YuyuSequence(this.definition, Map<String, double> base)
+    : base = Map.unmodifiable(base) {
+    for (final frame in definition.keyframes) {
+      if (!frame.duration.isFinite ||
+          frame.duration < 0 ||
+          !const {
+            'linear',
+            'ease',
+            'easein',
+            'easeout',
+            'hold',
+          }.contains(frame.type) ||
+          frame.properties.values.any((v) => !v.isFinite) ||
+          (frame.type == 'hold' && frame.properties.isNotEmpty)) {
+        throw FormatException('Invalid sequence ${definition.name}');
+      }
+    }
+  }
+
+  double get duration =>
+      definition.keyframes.fold(0, (v, frame) => v + frame.duration);
+
+  static double warp(String type, double t) => switch (type) {
+    'linear' => t,
+    'ease' => .5 - math.cos(math.pi * t) / 2,
+    'easein' => math.cos((1 - t) * math.pi / 2),
+    'easeout' => 1 - math.cos(math.pi * t / 2),
+    'hold' => 0,
+    _ => throw FormatException('Unknown warper: $type'),
+  };
+
+  Map<String, double> sample(double seconds, {bool subsequentCycle = false}) {
+    if (!seconds.isFinite || seconds < 0) {
+      throw ArgumentError.value(seconds, 'seconds');
+    }
+    final values = subsequentCycle
+        ? sample(duration)
+        : Map<String, double>.from(base);
+    for (final entry in definition.presetProperties.entries) {
+      values[entry.key] = (base[entry.key] ?? 0) + entry.value;
+    }
+    var remaining = seconds;
+    for (final frame in definition.keyframes) {
+      final fraction = frame.duration == 0
+          ? 1.0
+          : (remaining / frame.duration).clamp(0.0, 1.0);
+      final progress = warp(frame.type, fraction);
+      for (final property in frame.properties.entries) {
+        final start = values[property.key] ?? base[property.key] ?? 0;
+        final end = (base[property.key] ?? 0) + property.value;
+        values[property.key] = start + (end - start) * progress;
+      }
+      if (remaining < frame.duration) break;
+      remaining -= frame.duration;
+    }
+    return values;
+  }
+}
+
+class YuyuSequencePlayback {
+  final YuyuSequence sequence;
+  final ValueChanged<Map<String, double>> onUpdate;
+  Ticker? _ticker;
+  Completer<bool>? _completion;
+  bool _disposed = false;
+
+  YuyuSequencePlayback({
+    required AnimationDefinition definition,
+    required Map<String, double> base,
+    required this.onUpdate,
+  }) : sequence = YuyuSequence(definition, base);
+
+  Future<bool> play(TickerProvider vsync, {int? repeatCount}) {
+    if (_disposed || _completion != null) {
+      throw StateError('Playback already used');
+    }
+    final count = repeatCount ?? 1;
+    if (count < 0 || (count == 0 && sequence.duration == 0)) {
+      throw ArgumentError('An infinite sequence must advance time');
+    }
+    final completion = _completion = Completer<bool>();
+    onUpdate(sequence.sample(0));
+    if (sequence.duration == 0) {
+      completion.complete(true);
+      return completion.future;
+    }
+    _ticker = vsync.createTicker((elapsed) {
+      final seconds = elapsed.inMicroseconds / Duration.microsecondsPerSecond;
+      final finished = count > 0 && seconds >= sequence.duration * count;
+      if (finished) {
+        onUpdate(
+          sequence.sample(sequence.duration, subsequentCycle: count > 1),
+        );
+        _ticker?.stop();
+        completion.complete(true);
+      } else {
+        onUpdate(
+          sequence.sample(
+            seconds % sequence.duration,
+            subsequentCycle: seconds >= sequence.duration,
+          ),
+        );
+      }
+    });
+    _ticker!.start();
+    return completion.future;
+  }
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _ticker?.dispose();
+    final completion = _completion;
+    if (completion != null && !completion.isCompleted) {
+      completion.complete(false);
+    }
+  }
+}
+
 class CharacterAnimationController {
   final String characterId;
   final VoidCallback? onComplete;
@@ -215,6 +226,7 @@ class CharacterAnimationController {
   double _layoutXOffset = 0;
   bool _shouldStop = false; // 用于控制无限循环的停止
   bool _isInfiniteLoop = false;
+  YuyuSequencePlayback? _yuyuPlayback;
 
   CharacterAnimationController({
     required this.characterId,
@@ -258,6 +270,24 @@ class CharacterAnimationController {
     // Ren'Py ATL 会先应用 transform 的初始属性，再开始关键帧。
     // 立即发布预设状态，避免上一段动画的最终状态残留一帧。
     onAnimationUpdate?.call(currentProperties);
+
+    _yuyuPlayback?.dispose();
+    _yuyuPlayback = null;
+    if (animDef.profile == 'yuyuball-sequence-v1') {
+      _controller?.stop();
+      final playback = YuyuSequencePlayback(
+        definition: animDef,
+        base: _originalBaseProperties,
+        onUpdate: (values) {
+          _currentProperties = values;
+          onAnimationUpdate?.call(currentProperties);
+        },
+      );
+      _yuyuPlayback = playback;
+      return playback.play(vsync, repeatCount: repeatCount).then((completed) {
+        if (completed) onComplete?.call();
+      });
+    }
 
     return _playConfiguredAnimation(animDef.keyframes, vsync, repeatCount);
   }
@@ -514,9 +544,11 @@ class CharacterAnimationController {
   /// 停止无限循环动画
   void stopInfiniteLoop() {
     _shouldStop = true;
+    _yuyuPlayback?.dispose();
   }
 
   void dispose() {
+    _yuyuPlayback?.dispose();
     _shouldStop = true; // 确保停止任何正在运行的无限循环
     _controller?.dispose();
   }

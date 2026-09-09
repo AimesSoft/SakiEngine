@@ -178,6 +178,13 @@ abstract class GameModule {
   /// 默认保留现有行为，避免改变既有项目的自定义选项布局。
   bool get choiceMenuDisplaysLeadingDialogue => true;
 
+  /// Optional project renderer for the native NVL state. Returning null uses
+  /// NvlScreen. Plot execution and progression remain owned by GameManager.
+  Widget? createNvlPresentation({
+    required GameState gameState,
+    required DialogueProgressionManager progressionManager,
+  }) => null;
+
   /// 创建自定义场景基础层（位于角色层下方）。
   /// 返回 `null` 时表示不插入自定义层。
   Widget? createSceneBaseLayer({
@@ -380,6 +387,11 @@ abstract class GameModule {
   /// 隐藏游戏 UI 后是否允许玩家缩放、拖动画面。
   bool get enableHiddenUiSceneZoom => true;
 
+  Offset get mouseParallaxMaxOffset => const Offset(26, 16);
+  Curve get mouseParallaxResetCurve => Curves.easeOut;
+  bool get mouseParallaxResetOnPointerUp => true;
+  ValueListenable<Offset?>? get mouseParallaxExternalPointer => null;
+
   /// 隐藏游戏 UI 时允许的最大画面倍率。
   double get hiddenUiSceneMaxZoom => 3.0;
 
@@ -393,6 +405,8 @@ abstract class GameModule {
 
   /// 是否启用普通对话框切换动画（Fade/Slide）。
   /// 返回 `false` 时，对话框切换将无过渡、立即更新。
+  bool get enableCharacterTransitions => true;
+
   bool get enableDialogueSwitcherAnimation => true;
 
   /// 是否启用普通对话框切换时的位移动画（Slide）。
@@ -627,6 +641,12 @@ class DefaultGameModule implements GameModule {
   bool get choiceMenuDisplaysLeadingDialogue => true;
 
   @override
+  Widget? createNvlPresentation({
+    required GameState gameState,
+    required DialogueProgressionManager progressionManager,
+  }) => null;
+
+  @override
   Widget? createSceneBaseLayer({
     required BuildContext context,
     required GameState gameState,
@@ -822,6 +842,15 @@ class DefaultGameModule implements GameModule {
   bool get enableHiddenUiSceneZoom => true;
 
   @override
+  Offset get mouseParallaxMaxOffset => const Offset(26, 16);
+  @override
+  Curve get mouseParallaxResetCurve => Curves.easeOut;
+  @override
+  bool get mouseParallaxResetOnPointerUp => true;
+  @override
+  ValueListenable<Offset?>? get mouseParallaxExternalPointer => null;
+
+  @override
   double get hiddenUiSceneMaxZoom => 3.0;
 
   @override
@@ -829,6 +858,9 @@ class DefaultGameModule implements GameModule {
 
   @override
   bool get enableReturnToMainMenuTransition => true;
+
+  @override
+  bool get enableCharacterTransitions => true;
 
   @override
   bool get enableDialogueSwitcherAnimation => true;

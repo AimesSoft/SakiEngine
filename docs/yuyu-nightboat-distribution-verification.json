@@ -1,0 +1,57 @@
+{
+  "date": "2026-09-07",
+  "content": "/Library/Afolder/RenpyProject/YuYuball/Builds/Night_Voyage_0.1.0_20260907.yuyu",
+  "contentBytes": 636922390,
+  "contentSha256": "151641f56b9c9c5d030f56198d7ac4e485726caf33304c4d7965ccb323005f57",
+  "sourceFilesUnchanged": 1337,
+  "originalGameFiles": 1337,
+  "generatedRuntimeFiles": [
+    "game/cache/build_info.json",
+    "game/script_version.txt"
+  ],
+  "verifiedIndexEntries": 1353,
+  "rpyFiles": 60,
+  "mappingDiagnostics": 1322,
+  "compatibility": {
+    "entryLabel": "yu_start_cced28c6dc",
+    "mappingProfile": "yuyuball-to-sks-sequence-v1",
+    "method": "rpy-to-sks",
+    "publicationTarget": "yuyuball",
+    "requiredCapabilities": [
+      "sks.core@1",
+      "sks.animation.yuyuball-sequence@1",
+      "sks.layers.yuyuball-attributes@1",
+      "sks.characters.yuyuball@1"
+    ],
+    "scriptRoot": "saki/GameScript",
+    "status": "incomplete"
+  },
+  "builds": [
+    {
+      "platform": "mac",
+      "archive": "/Library/Afolder/RenpyProject/YuYuball/Builds/Night_Voyage_0.1.0_20260907_mac.zip",
+      "bytes": 637741111,
+      "contentEntry": "NightBoat.app/Contents/Resources/autorun/game.yuyu",
+      "contentSha256": "151641f56b9c9c5d030f56198d7ac4e485726caf33304c4d7965ccb323005f57",
+      "looseGameEntries": 0
+    },
+    {
+      "platform": "win",
+      "archive": "/Library/Afolder/RenpyProject/YuYuball/Builds/Night_Voyage_0.1.0_20260907_win.zip",
+      "bytes": 631402848,
+      "contentEntry": "Night_Voyage_0.1.0_20260907_win/game.yuyu",
+      "contentSha256": "151641f56b9c9c5d030f56198d7ac4e485726caf33304c4d7965ccb323005f57",
+      "looseGameEntries": 0
+    }
+  ],
+  "windowsRuntimeTested": false,
+  "macLaunch": {
+    "exitCode": 0,
+    "traceback": false,
+    "packageAutoDiscovery": true,
+    "visualParityTested": false
+  },
+  "pythonTests": 28,
+  "flutterPackageTests": 4,
+  "sakiRejectedNativePackage": true
+}

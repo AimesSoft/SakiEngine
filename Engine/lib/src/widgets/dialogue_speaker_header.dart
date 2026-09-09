@@ -3,16 +3,18 @@ import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 
 /// 对话框标题栏组件
-/// 
+///
 /// 显示说话者的名称
 class DialogueSpeakerHeader extends StatelessWidget {
   final String? speaker;
+  final Color? color;
   final double uiScale;
   final double textScale;
 
   const DialogueSpeakerHeader({
     super.key,
     required this.speaker,
+    this.color,
     required this.uiScale,
     required this.textScale,
   });
@@ -40,7 +42,7 @@ class DialogueSpeakerHeader extends StatelessWidget {
         speaker ?? '',
         style: config.speakerTextStyle.copyWith(
           fontSize: config.speakerTextStyle.fontSize! * textScale,
-          color: config.themeColors.primary,
+          color: color ?? config.themeColors.primary,
           letterSpacing: 0.5,
         ),
       ),

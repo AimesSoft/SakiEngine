@@ -8,6 +8,13 @@ import 'package:sakiengine/src/sks_compiler/compiled_sks_bundle.dart';
 import 'package:sakiengine/src/sks_compiler/compiled_sks_registry.dart';
 
 class AssetManager {
+  Future<List<Map<String, dynamic>>?> mappedCharacterLayers(String key) async =>
+      null;
+
+  Future<String?> resolveMappedCharacterPose(
+    String? requested,
+    String? previous,
+  ) async => requested;
   static final AssetManager _instance = AssetManager._internal();
   factory AssetManager() => _instance;
   AssetManager._internal() {

@@ -1,5 +1,6 @@
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
+import 'package:sakiengine/src/config/runtime_project_config.dart';
 import 'package:sakiengine/src/game/game_script_localization.dart';
 import 'package:sakiengine/src/sks_compiler/compiled_sks_bundle.dart';
 import 'package:sakiengine/src/sks_compiler/compiled_sks_registry.dart';
@@ -60,6 +61,7 @@ class ScriptMerger {
           _loadedScripts[fileNameWithoutExt] = script;
           _collectLabels(fileNameWithoutExt, script);
         } catch (e) {
+          if (RuntimeProjectConfigStore().config.packageDigest != null) rethrow;
           if (kEngineDebugMode) {
             //print('[ScriptMerger] 加载脚本文件失败: $fileName - $e');
           }
@@ -70,6 +72,7 @@ class ScriptMerger {
         //print('[ScriptMerger] 全局标签映射构建完成，共 ${_globalLabelMap.length} 个标签');
       }
     } catch (e) {
+      if (RuntimeProjectConfigStore().config.packageDigest != null) rethrow;
       if (kEngineDebugMode) {
         //print('[ScriptMerger] 构建全局标签映射失败: $e');
       }

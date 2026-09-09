@@ -173,8 +173,9 @@ class _SksCompiler {
     for (final source in sources) {
       textByAssetPath[source.assetPath] = source.content;
       if (source.isLabelScript) {
-        labelScriptsByAssetPath[source.assetPath] =
-            parser.parse(source.content);
+        labelScriptsByAssetPath[source.assetPath] = parser.parse(
+          source.content,
+        );
       }
     }
 
@@ -207,8 +208,10 @@ class _SksCompiler {
     final results = <_SksSource>[];
 
     for (final root in scriptRoots) {
-      await for (final entity
-          in root.list(recursive: true, followLinks: false)) {
+      await for (final entity in root.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entity is! File) {
           continue;
         }
@@ -282,8 +285,9 @@ class _SksCompiler {
 
   String _emitNode(SksNode node) {
     if (node is ScriptNode) {
-      final children =
-          node.children.map((child) => _emitNode(child)).join(', ');
+      final children = node.children
+          .map((child) => _emitNode(child))
+          .join(', ');
       return 'ScriptNode(<SksNode>[$children])';
     }
     if (node is AnimeNode) {
@@ -361,7 +365,7 @@ class _SksCompiler {
       return 'CommentNode(${_str(node.comment)})';
     }
     if (node is NvlNode) {
-      return 'NvlNode()';
+      return 'NvlNode(presentation: ${_nullableString(node.presentation)}, layout: ${_nullableString(node.layout)}, accumulate: ${node.accumulate}, preserve: ${node.preserve})';
     }
     if (node is EndNvlNode) {
       return 'EndNvlNode()';

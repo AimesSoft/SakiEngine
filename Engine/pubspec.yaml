@@ -44,6 +44,10 @@ dependencies:
   flutter_screenutil: ^5.9.3
   provider: ^6.1.4
   path: ^1.9.1
+  archive: ^4.2.0
+  crypto: ^3.0.7
+  unorm_dart: ^0.3.2
+  flutter_inappwebview: ^6.1.5
   path_provider: ^2.1.5
   intl: ^0.20.2
   hotkey_manager: ^0.2.3

@@ -7,7 +7,7 @@ import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 
 /// 二进制序列化工具类，用于将游戏数据序列化为二进制格式
 class BinarySerializer {
-  static const int _version = 18; // 保存角色动画末帧与淡出状态
+  static const int _version = 19; // NVL presentation and layout state
   static const String _magicNumber = 'SAKI';
 
   static Uint8List serializeGameStateSnapshot(GameStateSnapshot snapshot) =>
@@ -282,6 +282,9 @@ class BinarySerializer {
     buffer.addAll(_writeNullableString(state.scriptCanvasId));
     buffer.addAll(_writeString(state.scriptCanvasDurationSeconds.toString()));
     buffer.addAll(_writeInt32(state.scriptCanvasRevision));
+    buffer.addAll(_writeNullableString(state.nvlPresentation));
+    buffer.addAll(_writeNullableString(state.nvlLayout));
+    buffer.add(state.nvlAccumulate ? 1 : 0);
 
     return Uint8List.fromList(buffer);
   }
@@ -391,6 +394,16 @@ class BinarySerializer {
       scriptCanvasRevision = reader.readInt32();
     }
 
+    final nvlPresentation = version != null && version >= 19
+        ? reader.readNullableString()
+        : null;
+    final nvlLayout = version != null && version >= 19
+        ? reader.readNullableString()
+        : null;
+    final nvlAccumulate = version != null && version >= 19
+        ? reader.readByte() == 1
+        : true;
+
     return GameState(
       background: background,
       movieFile: movieFile, // 新增：视频文件参数
@@ -407,6 +420,9 @@ class BinarySerializer {
       isNvlnMode: isNvlnMode, // 添加无遮罩NVL模式状态
       isNvlOverlayVisible: isNvlOverlayVisible,
       nvlDialogues: nvlDialogues,
+      nvlPresentation: nvlPresentation,
+      nvlLayout: nvlLayout,
+      nvlAccumulate: nvlAccumulate,
       currentNode: currentNode, // 添加 currentNode
       scriptOverlayText: scriptOverlayText,
       scriptOverlayBackgroundColor: scriptOverlayBackgroundColor,
@@ -676,6 +692,8 @@ class BinarySerializer {
     } else {
       buffer.addAll(_writeInt64(nvlDialogue.timestamp.millisecondsSinceEpoch));
     }
+    buffer.addAll(_writeNullableString(nvlDialogue.presentation));
+    buffer.addAll(_writeNullableString(nvlDialogue.speakerAlias));
     return Uint8List.fromList(buffer);
   }
 
@@ -703,6 +721,12 @@ class BinarySerializer {
       dialogue: dialogue,
       dialogueTag: dialogueTag,
       timestamp: timestamp,
+      presentation: version != null && version >= 19
+          ? reader.readNullableString()
+          : null,
+      speakerAlias: version != null && version >= 19
+          ? reader.readNullableString()
+          : null,
     );
   }
 }

@@ -342,15 +342,19 @@ class GameUILayerState extends State<GameUILayer> {
               return FadeTransition(opacity: animation, child: child);
             },
             child: widget.gameState.isNvlOverlayVisible
-                ? NvlScreen(
-                    key: widget.nvlScreenKey,
-                    nvlDialogues: widget.gameState.nvlDialogues,
-                    isMovieMode: widget.gameState.isNvlMovieMode,
-                    progressionManager: widget.dialogueProgressionManager,
-                    isFastForwarding:
-                        widget.gameState.isFastForwarding, // 传递快进状态
-                    isNoMask: widget.gameState.isNvlnMode, // 新增：传递无遮罩状态
-                  )
+                ? widget.gameModule.createNvlPresentation(
+                        gameState: widget.gameState,
+                        progressionManager: widget.dialogueProgressionManager,
+                      ) ??
+                      NvlScreen(
+                        key: widget.nvlScreenKey,
+                        nvlDialogues: widget.gameState.nvlDialogues,
+                        isMovieMode: widget.gameState.isNvlMovieMode,
+                        progressionManager: widget.dialogueProgressionManager,
+                        isFastForwarding:
+                            widget.gameState.isFastForwarding, // 传递快进状态
+                        isNoMask: widget.gameState.isNvlnMode, // 新增：传递无遮罩状态
+                      )
                 : const SizedBox.shrink(key: ValueKey('no_nvl')),
           ),
         ),

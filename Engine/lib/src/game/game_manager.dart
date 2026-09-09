@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'dart:async';
+import 'package:sakiengine/src/config/runtime_project_config.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
@@ -592,6 +593,7 @@ class GameManager {
     required String? oldPositionId,
     required String? newPositionId,
   }) async {
+    if (RuntimeProjectConfigStore().config.packageDigest != null) return;
     if (_tickerProvider == null || oldPositionId == newPositionId) return;
     final revision = _characterPresentationRevision;
 
@@ -2318,6 +2320,7 @@ class GameManager {
   }
 
   int? _findFollowingMenuNodeIndex(int currentNodeIndex) {
+    if (RuntimeProjectConfigStore().config.packageDigest != null) return null;
     var nextIndex = currentNodeIndex + 1;
     while (nextIndex < _script.children.length) {
       final nextNode = _script.children[nextIndex];
@@ -2550,6 +2553,15 @@ class GameManager {
 
       if (node is BackgroundNode) {
         // 每次scene切换前都创建自动存档
+        if (RuntimeProjectConfigStore().config.packageDigest != null) {
+          // A new display list must not inherit tickers from removed tags.
+          for (final controller in _activeCharacterAnimations.values) {
+            controller.dispose();
+          }
+          _activeCharacterAnimations.clear();
+          _sceneAnimationController?.dispose();
+          _sceneAnimationController = null;
+        }
         await _createRuntimeAutoSave(reason: 'scene');
 
         // 检查当前scene是否是章节末尾前最后一个没有对话的scene
@@ -2585,7 +2597,11 @@ class GameManager {
         final isInitialBackground =
             _currentState.background == null &&
             _currentState.cgCharacters.isEmpty;
-        final isSameBackground = _currentState.background == node.background;
+        final isSameBackground =
+            RuntimeProjectConfigStore().config.packageDigest == null &&
+            _currentState.background == node.background;
+        final immediateScene =
+            (node.transitionType ?? defaultSceneTransitionType) == 'none';
         // 检查是否从CG切换到场景，如果是则强制使用转场效果
         final isFromCGToScene =
             _currentState.cgCharacters.isNotEmpty &&
@@ -2593,7 +2609,8 @@ class GameManager {
 
         // 快进模式下跳过转场效果，或其他需要跳过转场的情况
         // 但从CG切换到场景时必须使用转场效果
-        if (_isSeekingNextChoice ||
+        if (immediateScene ||
+            _isSeekingNextChoice ||
             ((_skipPresentation ||
                     _context == null ||
                     isInitialBackground ||
@@ -2903,6 +2920,17 @@ class GameManager {
         // 跟踪角色是否曾经显示过
         _everShownCharacters.add(finalCharacterKey);
 
+        final isNewCharacter = !_currentState.characters.containsKey(
+          finalCharacterKey,
+        );
+        final animation =
+            node.animation ??
+            (isNewCharacter && node.position == null
+                ? characterConfig?.defaultAnimation
+                : null);
+        final repeatCount = node.animation != null
+            ? node.repeatCount
+            : characterConfig?.defaultAnimationRepeat;
         final currentCharacterState =
             _currentState.characters[finalCharacterKey] ??
             CharacterState(resourceId: resourceId, positionId: positionId);
@@ -2911,10 +2939,17 @@ class GameManager {
         // 先将新角色添加到临时角色列表，然后检测位置变化
         final tempCharacters = Map.of(_currentState.characters);
 
+        final requestedPose =
+            RuntimeProjectConfigStore().config.packageDigest != null
+            ? await AssetManager().resolveMappedCharacterPose(
+                node.pose,
+                currentCharacterState.pose,
+              )
+            : node.pose;
         final targetVisual = _resolveCharacterVisualForResource(
           currentState: currentCharacterState,
           targetResourceId: resourceId,
-          requestedPose: node.pose,
+          requestedPose: requestedPose,
           requestedExpression: node.expression,
         );
         final targetPose = targetVisual.pose;
@@ -2947,6 +2982,12 @@ class GameManager {
           return;
         }
 
+        if (RuntimeProjectConfigStore().config.packageDigest != null &&
+            node.position != null &&
+            animation == null) {
+          _activeCharacterAnimations.remove(finalCharacterKey)?.dispose();
+        }
+
         // Position ticks and completed hide callbacks own the live map. Merge
         // this show into it instead of restoring the pre-animation snapshot.
         final newCharacters = Map.of(_currentState.characters);
@@ -2958,8 +2999,7 @@ class GameManager {
           expression: targetExpression,
           isFadingOut: false,
           positionId: node.position ?? currentCharacterState.positionId,
-          clearAnimationProperties:
-              node.animation == null && node.position != null,
+          clearAnimationProperties: animation == null && node.position != null,
         );
 
         _currentState = _currentState.copyWith(
@@ -2970,18 +3010,18 @@ class GameManager {
         _emitCurrentState();
 
         // 如果有动画，启动动画播放（非阻塞）
-        if (node.animation != null) {
+        if (animation != null) {
           if (_skipPresentation) {
             _applyCharacterAnimationFinalState(
               finalCharacterKey,
-              node.animation!,
-              repeatCount: node.repeatCount,
+              animation,
+              repeatCount: repeatCount,
             );
           } else {
             _playCharacterAnimation(
               finalCharacterKey,
-              node.animation!,
-              repeatCount: node.repeatCount,
+              animation,
+              repeatCount: repeatCount,
             );
           }
         }
@@ -3254,6 +3294,7 @@ class GameManager {
         final characterConfig = _characterConfigs[node.character];
         CharacterState? currentCharacterState;
         final shouldAutoRenderDialogueCharacter =
+            RuntimeProjectConfigStore().config.packageDigest == null &&
             _activeNvlContext == _NvlContextMode.none;
 
         if (shouldAutoRenderDialogueCharacter && node.character != null) {
@@ -3425,6 +3466,7 @@ class GameManager {
             _showNvlOverlayOnNextDialogue = false;
           }
           final newNvlDialogue = NvlDialogue(
+            presentation: _currentState.nvlPresentation,
             speaker: characterConfig?.name,
             speakerAlias: node.character ?? tailSpeakerAlias, // 新增：传递角色简写
             dialogue: resolvedDialogue,
@@ -3433,7 +3475,7 @@ class GameManager {
           );
 
           final updatedNvlDialogues = List<NvlDialogue>.from(
-            _currentState.nvlDialogues,
+            _currentState.nvlAccumulate ? _currentState.nvlDialogues : const [],
           );
           updatedNvlDialogues.add(newNvlDialogue);
 
@@ -3551,6 +3593,7 @@ class GameManager {
         ////print('[GameManager] 角色配置: $characterConfig');
         CharacterState? currentCharacterState;
         final shouldAutoRenderDialogueCharacter =
+            RuntimeProjectConfigStore().config.packageDigest == null &&
             _activeNvlContext == _NvlContextMode.none;
         final followingMenuNodeIndex = _findFollowingMenuNodeIndex(
           currentNodeIndex,
@@ -3790,6 +3833,7 @@ class GameManager {
             _showNvlOverlayOnNextDialogue = false;
           }
           final newNvlDialogue = NvlDialogue(
+            presentation: _currentState.nvlPresentation,
             speaker: characterConfig?.name,
             speakerAlias: node.character ?? tailSpeakerAlias, // 新增：传递角色简写
             dialogue: resolvedDialogue,
@@ -3798,7 +3842,7 @@ class GameManager {
           );
 
           final updatedNvlDialogues = List<NvlDialogue>.from(
-            _currentState.nvlDialogues,
+            _currentState.nvlAccumulate ? _currentState.nvlDialogues : const [],
           );
           updatedNvlDialogues.add(newNvlDialogue);
 
@@ -3987,15 +4031,25 @@ class GameManager {
       }
 
       if (node is NvlNode) {
-        final shouldDelayOverlay = _shouldDelayNvlOverlay(_scriptIndex);
+        final shouldDelayOverlay =
+            node.presentation == null && _shouldDelayNvlOverlay(_scriptIndex);
+        final preserve =
+            node.preserve &&
+            _currentState.isNvlMode &&
+            (node.presentation == _currentState.nvlPresentation ||
+                (node.accumulate && _currentState.nvlAccumulate));
         _activeNvlContext = _NvlContextMode.standard;
         _showNvlOverlayOnNextDialogue = shouldDelayOverlay;
         _currentState = _currentState.copyWith(
           isNvlMode: true,
           isNvlMovieMode: false,
-          isNvlnMode: false, // 确保nvln模式关闭
+          isNvlnMode: false,
           isNvlOverlayVisible: !shouldDelayOverlay,
-          nvlDialogues: [],
+          nvlDialogues: preserve ? _currentState.nvlDialogues : [],
+          nvlPresentation: node.presentation,
+          nvlLayout: node.layout,
+          nvlAccumulate: node.accumulate,
+          clearNvlPresentation: true,
           clearDialogueAndSpeaker: true,
           everShownCharacters: _everShownCharacters,
         );
@@ -4013,6 +4067,8 @@ class GameManager {
           isNvlMovieMode: false,
           isNvlOverlayVisible: !shouldDelayOverlay,
           nvlDialogues: [],
+          clearNvlPresentation: true,
+          nvlAccumulate: true,
           clearDialogueAndSpeaker: true,
           everShownCharacters: _everShownCharacters,
         );
@@ -4031,6 +4087,8 @@ class GameManager {
           isNvlnMode: false,
           isNvlOverlayVisible: !shouldDelayOverlay,
           nvlDialogues: [],
+          clearNvlPresentation: true,
+          nvlAccumulate: true,
           clearDialogueAndSpeaker: true,
           everShownCharacters: _everShownCharacters,
         );
@@ -4574,20 +4632,6 @@ class GameManager {
         .clamp(0, _script.children.length)
         .toInt();
 
-    // 为历史条目创建快照时，使用正确的节点索引
-    // 对于NVL模式，只保存当前单句对话而不是整个NVL列表，避免回退时重复显示
-    final nvlDialoguesForSnapshot = _currentState.isNvlMode
-        ? [
-            NvlDialogue(
-              speaker: speaker,
-              speakerAlias: null,
-              dialogue: dialogue,
-              dialogueTag: dialogueTag,
-              timestamp: timestamp,
-            ),
-          ]
-        : List.from(_currentState.nvlDialogues);
-
     final snapshotState = _buildDialogueHistorySnapshotState();
     if (kSakiDiagnosticLogs) {
       sakiDiagnosticLog(
@@ -4726,6 +4770,7 @@ class GameManager {
               ? node.dialogueTag
               : lastDialogue.dialogueTag,
           timestamp: lastDialogue.timestamp,
+          presentation: lastDialogue.presentation,
         );
         _currentState = _currentState.copyWith(
           nvlDialogues: updatedNvlDialogues,
@@ -4986,8 +5031,8 @@ class GameManager {
 
         if (assetPath != null && _context != null) {
           // 预加载图片到缓存
-          if (kEngineDebugMode && !assetPath.startsWith('assets/')) {
-            // Debug模式下，如果是绝对路径，使用FileImage
+          if (isFileSystemAssetPath(assetPath)) {
+            // Mounted package media also uses filesystem paths in release.
             await precacheImage(FileImage(File(assetPath)), _context!);
           } else {
             // 发布模式或assets路径，使用AssetImage
@@ -5809,6 +5854,9 @@ class GameState {
   final bool isNvlnMode; // 新增：无遮罩NVL模式
   final bool isNvlOverlayVisible; // 新增：NVL遮罩是否可见
   final List<NvlDialogue> nvlDialogues;
+  final String? nvlPresentation;
+  final String? nvlLayout;
+  final bool nvlAccumulate;
   final Set<String> everShownCharacters;
   final SceneFilter? sceneFilter;
   final List<String>? sceneLayers; // 新增：多图层支持
@@ -5858,6 +5906,9 @@ class GameState {
     this.isNvlnMode = false, // 新增：无遮罩NVL模式，默认false
     this.isNvlOverlayVisible = false, // 新增：NVL遮罩默认隐藏
     this.nvlDialogues = const [],
+    this.nvlPresentation,
+    this.nvlLayout,
+    this.nvlAccumulate = true,
     this.everShownCharacters = const {},
     this.sceneFilter,
     this.sceneLayers,
@@ -5919,6 +5970,10 @@ class GameState {
     bool? isNvlnMode, // 新增：无遮罩NVL模式参数
     bool? isNvlOverlayVisible, // 新增：NVL遮罩是否可见
     List<NvlDialogue>? nvlDialogues,
+    String? nvlPresentation,
+    String? nvlLayout,
+    bool? nvlAccumulate,
+    bool clearNvlPresentation = false,
     Set<String>? everShownCharacters,
     SceneFilter? sceneFilter,
     bool clearSceneFilter = false,
@@ -5997,6 +6052,19 @@ class GameState {
       isNvlOverlayVisible:
           isNvlOverlayVisible ?? this.isNvlOverlayVisible, // 新增：NVL遮罩可见性
       nvlDialogues: nvlDialogues ?? this.nvlDialogues,
+      nvlPresentation: isNvlMode == false
+          ? null
+          : clearNvlPresentation
+          ? nvlPresentation
+          : nvlPresentation ?? this.nvlPresentation,
+      nvlLayout: isNvlMode == false
+          ? null
+          : clearNvlPresentation
+          ? nvlLayout
+          : nvlLayout ?? this.nvlLayout,
+      nvlAccumulate: isNvlMode == false
+          ? true
+          : nvlAccumulate ?? this.nvlAccumulate,
       everShownCharacters: everShownCharacters ?? this.everShownCharacters,
       sceneFilter: clearSceneFilter ? null : (sceneFilter ?? this.sceneFilter),
       sceneLayers: clearSceneLayers ? null : (sceneLayers ?? this.sceneLayers),
@@ -6072,10 +6140,12 @@ class NvlDialogue {
   final String dialogue;
   final String? dialogueTag; // 对话行尾扩展 token（项目层可自定义）
   final DateTime timestamp;
+  final String? presentation;
 
   NvlDialogue({
     this.speaker,
     this.speakerAlias, // 新增：角色简写参数
+    this.presentation,
     required this.dialogue,
     this.dialogueTag,
     required this.timestamp,
