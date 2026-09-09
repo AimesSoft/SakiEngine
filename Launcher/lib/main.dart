@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'showcase_assets.dart';
+
 enum RunBuildMode { debug, showcase, profile, release }
 
 enum BuildMode { release, showcase }
@@ -1918,6 +1920,8 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     cacheDir.createSync(recursive: true);
 
     final originalPubspec = await gamePubspec.readAsString();
+    final useExternalShowcaseAssets = _buildMode == BuildMode.showcase &&
+        const ['windows', 'macos', 'linux'].contains(platform);
     final originalEngineLoader = engineLoader.existsSync()
         ? await engineLoader.readAsString()
         : _defaultGeneratedLoader;
@@ -2007,13 +2011,29 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
           throw _TaskFailure('更新发布资源后 pub get 失败');
         }
       } else {
-        _appendLog('演出模式构建: 跳过 .sks 预编译与发布资源裁剪，保留脚本直读能力');
+        _appendLog('演出模式构建: 跳过 .sks 预编译，保留脚本直读能力');
       }
 
       if (!useReleaseAssetPipeline) {
         await _prepareProjectForExecution(game, generateIcons: true);
       } else {
         _appendLog('发布构建模式: 跳过二次 prepare-project，避免覆盖发布资源清单');
+      }
+
+      // Apply after prepare-project, which regenerates the asset declarations.
+      if (useExternalShowcaseAssets) {
+        await gamePubspec.writeAsString(
+          prepareShowcasePubspec(await gamePubspec.readAsString()),
+        );
+        _appendLog('演出资源仅放入外部 Game 目录，排除内置媒体、剧本与旧资源包');
+        final pubGetCode = await _runCommand(
+          executable: 'flutter',
+          arguments: const <String>['pub', 'get'],
+          workingDirectory: gameDir.path,
+        );
+        if (pubGetCode != 0) {
+          throw _TaskFailure('更新演出资源后 pub get 失败');
+        }
       }
 
       if (platform == 'ios') {
@@ -2068,29 +2088,29 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
       }
 
       final outputDir = _resolveBuildOutputDirectory(gameDir, platform);
-      if (_buildMode == BuildMode.showcase &&
-          (platform == 'macos' ||
-              platform == 'windows' ||
-              platform == 'linux')) {
+      if (useExternalShowcaseAssets) {
         await _stageShowcaseGameDirectory(
           gameDir: gameDir,
           outputDir: outputDir,
           game: game,
         );
       }
-      if (_buildMode == BuildMode.release) {
-        await _packageReleaseBuildAsZip(
-          gameDir: gameDir,
-          outputDir: outputDir,
-          game: game,
-        );
-      }
+      await _packageBuildAsZip(
+        gameDir: gameDir,
+        outputDir: outputDir,
+        game: game,
+        mode: _buildMode,
+      );
 
       _appendLog('构建完成: $game -> $platform');
       await _openBuildOutputInFileManager(gameDir, platform);
     } on _TaskFailure catch (e) {
       _appendLog('构建失败: ${e.message}');
     } finally {
+      if (useExternalShowcaseAssets) {
+        await gamePubspec.writeAsString(originalPubspec);
+        _appendLog('已恢复演出构建临时资源清单（pubspec）');
+      }
       if (_buildMode == BuildMode.release) {
         await gamePubspec.writeAsString(originalPubspec);
         await engineLoader.writeAsString(originalEngineLoader);
@@ -2489,10 +2509,11 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
     }
   }
 
-  Future<void> _packageReleaseBuildAsZip({
+  Future<void> _packageBuildAsZip({
     required Directory gameDir,
     required Directory outputDir,
     required String game,
+    required BuildMode mode,
   }) async {
     if (!outputDir.existsSync()) {
       throw _TaskFailure('构建产物目录不存在，无法打包 zip: ${outputDir.path}');
@@ -2505,14 +2526,15 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
       _readGameVersion(File(_joinPath(gameDir.path, 'pubspec.yaml'))),
     );
     final buildDate = _formatBuildDate(DateTime.now());
-    final archiveName = '$gameName-$version-$buildDate.zip';
+    final modeSuffix = mode == BuildMode.showcase ? '-showcase' : '';
+    final archiveName = '$gameName-$version-$buildDate$modeSuffix.zip';
     final archiveFile = File(_joinPath(outputDir.parent.path, archiveName));
 
     if (archiveFile.existsSync()) {
       await archiveFile.delete();
     }
 
-    _appendLog('发布构建完成，正在打包 zip: $archiveName');
+    _appendLog('${_buildModeLabel(mode)}构建完成，正在打包 zip: $archiveName');
 
     int zipCode;
     if (Platform.isWindows) {
@@ -2561,7 +2583,7 @@ CompiledSksBundle? loadGeneratedCompiledSksBundle() {
       throw _TaskFailure('自动打包 zip 失败');
     }
 
-    _appendLog('已生成发布压缩包: ${archiveFile.path}');
+    _appendLog('已生成${_buildModeLabel(mode)}压缩包: ${archiveFile.path}');
   }
 
   Future<bool> _launchRunInSystemTerminal({
