@@ -555,9 +555,19 @@ class _MoviePlayerState extends State<MoviePlayer> {
     _player = null;
     _secondaryPlayer = null;
     await Future.wait<void>([
-      if (player != null) player.dispose(),
-      if (secondaryPlayer != null) secondaryPlayer.dispose(),
+      if (player != null) _shutdownPlayer(player),
+      if (secondaryPlayer != null) _shutdownPlayer(secondaryPlayer),
     ]);
+  }
+
+  Future<void> _shutdownPlayer(ErikaPlayer player) async {
+    try {
+      await player.stop();
+    } catch (_) {}
+    try {
+      await player.close();
+    } catch (_) {}
+    await player.dispose();
   }
 
   @override

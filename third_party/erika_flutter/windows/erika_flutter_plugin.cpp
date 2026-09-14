@@ -829,23 +829,16 @@ struct ErikaFlutterPlugin::ErikaNativeLibrary {
   using StringFreeFn = void (*)(char*);
 
   static std::shared_ptr<ErikaNativeLibrary> Shared() {
-    static std::mutex mutex;
-    static std::weak_ptr<ErikaNativeLibrary> weak;
-    std::lock_guard<std::mutex> lock(mutex);
-    if (auto shared = weak.lock()) {
-      return shared;
-    }
-    auto shared = std::shared_ptr<ErikaNativeLibrary>(new ErikaNativeLibrary());
-    weak = shared;
+    static std::shared_ptr<ErikaNativeLibrary> shared(
+        new ErikaNativeLibrary());
     return shared;
   }
 
-  ~ErikaNativeLibrary() {
-    if (module != nullptr) {
-      FreeLibrary(module);
-      module = nullptr;
-    }
-  }
+  // Keep erika_capi.dll loaded for the process lifetime. The native runtime can
+  // still have decoder/audio worker teardown in flight after the last presenter
+  // is destroyed; unloading the DLL here turns those late returns into
+  // erika_capi.dll_unloaded access violations.
+  ~ErikaNativeLibrary() = default;
 
   ErikaPresenterHandle* CreatePresenter(ErikaPresenterConfig config) const {
     if (create_with_config != nullptr) {
@@ -1636,6 +1629,7 @@ struct ErikaFlutterPlugin::PlayerHost {
 
   ~PlayerHost() {
     if (handle != nullptr) {
+      library->close(handle);
       library->detach_surface(handle);
       library->destroy(handle);
       handle = nullptr;
