@@ -4001,7 +4001,10 @@ class GameManager {
         // 在结局前创建自动存档
         await _checkAndCreateAutoSave(_scriptIndex, reason: '结局');
 
-        _scriptIndex++;
+        // The title transition can leave the old screen interactive briefly.
+        // A return ends this script; subsequent input must not enter the next
+        // adjacent label and overwrite the player's selected route.
+        _scriptIndex = _script.children.length;
         onReturn?.call();
         _isProcessing = false;
         return;
@@ -6034,7 +6037,7 @@ class GameState {
       dialogue: clearDialogueAndSpeaker ? null : (dialogue ?? this.dialogue),
       dialogueTag: clearDialogueAndSpeaker
           ? null
-          : (dialogueTag ?? this.dialogueTag),
+          : (dialogue != null ? dialogueTag : (dialogueTag ?? this.dialogueTag)),
       speaker: forceNullSpeaker
           ? null
           : (clearDialogueAndSpeaker ? null : (speaker ?? this.speaker)),

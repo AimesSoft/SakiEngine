@@ -113,4 +113,28 @@ void main() {
 
     expect(tester.state(find.byType(DirectCgDisplay)), isNot(same(aruState)));
   });
+
+  testWidgets('dissolve survives eviction of its source images', (
+    tester,
+  ) async {
+    final first = await createImage(Colors.pink);
+    final second = await createImage(Colors.purple);
+    final third = await createImage(Colors.blue);
+    await tester.pumpWidget(buildSprite(image: first, resourceId: 'aru'));
+    await tester.pumpAndSettle();
+    first.dispose();
+
+    await tester.pumpWidget(buildSprite(image: second, resourceId: 'aru2'));
+    await tester.pump(const Duration(milliseconds: 80));
+    second.dispose();
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(tester.takeException(), isNull);
+
+    // A third expression can arrive before the previous dissolve finishes.
+    await tester.pumpWidget(buildSprite(image: third, resourceId: 'aru3'));
+    third.dispose();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

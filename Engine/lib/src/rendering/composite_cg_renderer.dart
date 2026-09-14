@@ -1347,10 +1347,11 @@ class _DirectCgDisplayState extends State<DirectCgDisplay>
     );
     _progress = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
 
-    _currentImage = widget.image;
+    // Cache eviction must not invalidate an image still used by the dissolve.
+    _currentImage = widget.image.clone();
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed && !_controller.isAnimating) {
-        _previousImage = null;
+        _releasePreviousImage();
         _hasShownOnce = true;
       }
     });
@@ -1372,15 +1373,16 @@ class _DirectCgDisplayState extends State<DirectCgDisplay>
   void didUpdateWidget(covariant DirectCgDisplay oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final imageChanged = widget.image != _currentImage;
+    final imageChanged = widget.image != oldWidget.image;
     final fadingChanged = widget.isFadingOut != oldWidget.isFadingOut;
 
     if (imageChanged) {
+      _previousImage?.dispose();
       _previousImage = _currentImage;
-      _currentImage = widget.image;
+      _currentImage = widget.image.clone();
       if (widget.skipAnimation) {
         _controller.value = 1.0;
-        _previousImage = null;
+        _releasePreviousImage();
         _hasShownOnce = true;
       } else {
         _controller.forward(from: 0.0);
@@ -1388,25 +1390,32 @@ class _DirectCgDisplayState extends State<DirectCgDisplay>
     } else if (fadingChanged) {
       if (widget.isFadingOut) {
         // 淡出时不参与差分溶解
-        _previousImage = null;
+        _releasePreviousImage();
       }
       if (widget.skipAnimation) {
         _controller.value = widget.isFadingOut ? 0.0 : 1.0;
-        _previousImage = null;
+        _releasePreviousImage();
         _hasShownOnce = true;
       } else {
         _controller.forward(from: 0.0);
       }
     } else if (widget.skipAnimation && !_hasShownOnce) {
       _controller.value = 1.0;
-      _previousImage = null;
+      _releasePreviousImage();
       _hasShownOnce = true;
     }
+  }
+
+  void _releasePreviousImage() {
+    _previousImage?.dispose();
+    _previousImage = null;
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _releasePreviousImage();
+    _currentImage?.dispose();
     super.dispose();
   }
 

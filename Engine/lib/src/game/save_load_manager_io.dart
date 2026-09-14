@@ -868,9 +868,15 @@ class SaveLoadManager {
     final path = slot.screenshotFilePath;
     final offset = slot.screenshotOffset;
     final length = slot.screenshotLength;
-    if (path == null || offset == null || length == null || length <= 0) {
+    if (path == null) {
       return null;
     }
+    // The Dart directory fallback lists file metadata without native byte
+    // offsets. Resolve those slots lazily when their thumbnail is displayed.
+    if (offset == null || length == null) {
+      return (await loadFullSaveSlot(slot))?.screenshotData;
+    }
+    if (length <= 0) return null;
 
     RandomAccessFile? file;
     final stopwatch = Stopwatch()..start();

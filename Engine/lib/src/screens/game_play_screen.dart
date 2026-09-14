@@ -96,6 +96,13 @@ Key characterCompositeRenderKey(String characterKey) =>
 Key characterPositionedRenderKey(String characterKey) =>
     ValueKey('positioned-$characterKey');
 
+/// GameManager already resolves aliases to a unique stage slot. Distinct slots
+/// may deliberately share an image resource (for example a crowd or reflection).
+@visibleForTesting
+Iterable<MapEntry<String, CharacterState>> characterStageEntries(
+  Map<String, CharacterState> characters,
+) => characters.entries;
+
 enum _CommandDebugMenuMode {
   expression,
   character,
@@ -1919,17 +1926,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
           characterOrder,
         );
 
-    // 按resourceId分组，保留最新的角色状态
-    final Map<String, MapEntry<String, CharacterState>> charactersByResourceId =
-        {};
-
-    for (final entry in characters.entries) {
-      final resourceId = entry.value.resourceId;
-      // 总是保留最新的状态（覆盖之前的）
-      charactersByResourceId[resourceId] = entry;
-    }
-
-    return charactersByResourceId.values.map((entry) {
+    return characterStageEntries(characters).map((entry) {
       final characterId = entry.key;
       final characterState = entry.value;
 
