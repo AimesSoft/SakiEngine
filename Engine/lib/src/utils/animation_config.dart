@@ -104,6 +104,7 @@ class AnimationConfigParser {
                   'ycenter',
                   'rotation',
                   'alpha',
+                  'maskReveal',
                 }.contains(property.key) ||
                 !property.value.isFinite)) {
           throw FormatException('Invalid animation preset: $trimmed');
@@ -198,6 +199,7 @@ class AnimationConfigParser {
                 'ycenter',
                 'rotation',
                 'alpha',
+                'maskReveal',
               }.contains(match[1]))) {
         throw FormatException('Invalid animation property: $prop');
       }

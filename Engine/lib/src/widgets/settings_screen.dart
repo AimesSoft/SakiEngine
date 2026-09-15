@@ -12,6 +12,7 @@ import 'package:sakiengine/src/widgets/settings/video_settings_tab.dart';
 import 'package:sakiengine/src/widgets/settings/audio_settings_tab.dart';
 import 'package:sakiengine/src/widgets/settings/gameplay_settings_tab.dart';
 import 'package:sakiengine/src/widgets/settings/control_settings_tab.dart';
+import 'package:sakiengine/src/widgets/settings/developer_settings_tab.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onClose;
@@ -54,6 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'settings.tabs.audio',
     'settings.tabs.gameplay',
     'settings.tabs.control',
+    'settings.tabs.developer',
   ];
 
   late final Listenable _combinedListenable;
@@ -260,17 +262,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
       alignment: Alignment.centerLeft, // 添加左对齐
-      child: Row(
-        mainAxisSize: MainAxisSize.min, // 让 Row 不铺满宽度
-        children: List.generate(tabTitles.length, (index) {
-          return _SettingsTab(
-            title: tabTitles[index],
-            isSelected: _selectedTabIndex == index,
-            onTap: () => setState(() => _selectedTabIndex = index),
-            config: config,
-            scale: scale,
-          );
-        }),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min, // 让 Row 不铺满宽度
+          children: List.generate(tabTitles.length, (index) {
+            return _SettingsTab(
+              title: tabTitles[index],
+              isSelected: _selectedTabIndex == index,
+              onTap: () => setState(() => _selectedTabIndex = index),
+              config: config,
+              scale: scale,
+            );
+          }),
+        ),
       ),
     );
   }
@@ -303,6 +308,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       case 3: // 操控设置
         return const ControlSettingsTab();
+      case 4:
+        return const DeveloperSettingsTab();
       default:
         return const VideoSettingsTab();
     }
@@ -572,8 +579,10 @@ class _SettingsTabState extends State<_SettingsTab>
                         textScale *
                         0.65,
                     color: widget.isSelected
-                        ? widget.config.themeColors.primary
-                        : widget.config.themeColors.primary.withOpacity(0.7),
+                        ? widget.config.themeColors.onSurface
+                        : widget.config.themeColors.onSurface.withValues(
+                            alpha: 0.7,
+                          ),
                     fontWeight: widget.isSelected
                         ? FontWeight.bold
                         : FontWeight.w500,

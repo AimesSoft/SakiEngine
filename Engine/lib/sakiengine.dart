@@ -13,3 +13,4 @@ export 'src/core/debug_command_menu.dart';
 export 'src/core/script_canvas.dart';
 export 'src/core/module_registry.dart' show registerProjectModule;
 export 'src/utils/asset_path_utils.dart' show isFileSystemAssetPath;
+export 'src/utils/game_file_logger.dart' show GameFileLogger;

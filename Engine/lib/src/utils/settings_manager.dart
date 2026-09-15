@@ -5,6 +5,7 @@ import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
 import 'package:sakiengine/src/game/unified_game_data_manager.dart';
+import 'package:sakiengine/src/utils/game_file_logger.dart';
 import 'platform_window_manager_io.dart'
     if (dart.library.html) 'platform_window_manager_web.dart';
 
@@ -638,6 +639,7 @@ class SettingsManager extends ChangeNotifier with WindowListener {
   // 恢复默认设置
   Future<void> resetToDefault() async {
     await init();
+    await GameFileLogger().setEnabled(GameFileLogger.defaultEnabled);
 
     final projectDefaultMenuDisplayMode = _projectDefaultMenuDisplayMode();
     final projectDefaultGameWindowResizeMode =

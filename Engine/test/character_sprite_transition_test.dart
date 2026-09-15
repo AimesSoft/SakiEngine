@@ -1,7 +1,9 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/rendering/composite_cg_renderer.dart';
 import 'package:sakiengine/src/screens/game_play_screen.dart';
 import 'package:sakiengine/src/utils/engine_asset_loader.dart';
@@ -113,6 +115,136 @@ void main() {
 
     expect(tester.state(find.byType(DirectCgDisplay)), isNot(same(aruState)));
   });
+
+  for (final effect in ['opacity', 'rotation', 'reveal', 'lighting']) {
+    testWidgets('$effect returning to neutral never restarts the sprite fade', (
+      tester,
+    ) async {
+      final sprite = await createImage(Colors.green);
+      addTearDown(sprite.dispose);
+      final boundaryKey = GlobalKey();
+      Widget frame(double amount) => MaterialApp(
+        home: Center(
+          child: RepaintBoundary(
+            key: boundaryKey,
+            child: applyCharacterPresentationEffects(
+              SizedBox(
+                width: 40,
+                height: 40,
+                child: DirectCgDisplay(
+                  image: sprite,
+                  resourceId: 'slot:aru',
+                  enableFadeIn: true,
+                ),
+              ),
+              alpha: effect == 'opacity' ? amount : 1,
+              rotation: effect == 'rotation' ? (amount - 1) * 0.025 : 0,
+              reveal: effect == 'reveal' ? amount : 1,
+              lighting: effect == 'lighting' && amount < 1
+                  ? const ColorFilter.mode(Colors.white, BlendMode.modulate)
+                  : null,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpWidget(frame(0.8));
+      await tester.pumpAndSettle();
+      final original = tester.state(find.byType(DirectCgDisplay));
+      for (final amount in [0.9999, 1.0, 0.9, 1.0]) {
+        await tester.pumpWidget(frame(amount));
+        expect(tester.state(find.byType(DirectCgDisplay)), same(original));
+        if (amount == 1) {
+          final pixel = await tester.runAsync(() async {
+            final boundary =
+                boundaryKey.currentContext!.findRenderObject()
+                    as RenderRepaintBoundary;
+            final image = await boundary.toImage();
+            final bytes = (await image.toByteData())!.buffer.asUint8List();
+            final offset = (20 * image.width + 20) * 4;
+            final pixel = bytes.sublist(offset, offset + 4);
+            image.dispose();
+            return pixel;
+          });
+          expect(pixel, [76, 175, 80, 255]);
+        }
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets(
+    'silhouette blends into the existing sprite without losing opacity',
+    (tester) async {
+      final sprite = await createImage(Colors.green);
+      addTearDown(sprite.dispose);
+      final boundaryKey = GlobalKey();
+      final silhouette = CharacterState(
+        resourceId: 'aru',
+        positionId: 'stage_right',
+        maskType: 'silhouette',
+        maskColor: '#FF66CC',
+      );
+      Widget frame(CharacterState character) => MaterialApp(
+        home: Center(
+          child: RepaintBoundary(
+            key: boundaryKey,
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: applyCharacterSilhouetteMask(
+                DirectCgDisplay(
+                  image: sprite,
+                  resourceId: 'slot:aru',
+                  enableFadeIn: true,
+                ),
+                character,
+              ),
+            ),
+          ),
+        ),
+      );
+      Future<List<int>> centerPixel() async {
+        final boundary =
+            boundaryKey.currentContext!.findRenderObject()
+                as RenderRepaintBoundary;
+        final image = await boundary.toImage();
+        final bytes = (await image.toByteData())!.buffer.asUint8List();
+        final offset = (20 * image.width + 20) * 4;
+        final pixel = bytes.sublist(offset, offset + 4);
+        image.dispose();
+        return pixel;
+      }
+
+      await tester.pumpWidget(frame(silhouette));
+      await tester.pumpAndSettle();
+      final spriteState = tester.state(find.byType(DirectCgDisplay));
+      expect(await tester.runAsync(centerPixel), [255, 102, 204, 255]);
+
+      for (final reveal in [0.25, 0.5, 0.75, 1.0]) {
+        await tester.pumpWidget(
+          frame(
+            silhouette.copyWith(animationProperties: {'maskReveal': reveal}),
+          ),
+        );
+        expect(tester.state(find.byType(DirectCgDisplay)), same(spriteState));
+        final pixel = (await tester.runAsync(centerPixel))!;
+        expect(pixel[0], closeTo(255 * (1 - reveal) + 76 * reveal, 1));
+        expect(pixel[1], closeTo(102 * (1 - reveal) + 175 * reveal, 1));
+        expect(pixel[2], closeTo(204 * (1 - reveal) + 80 * reveal, 1));
+        expect(pixel[3], 255);
+      }
+
+      await tester.pumpWidget(frame(silhouette.copyWith(clearMask: true)));
+      expect(tester.state(find.byType(DirectCgDisplay)), same(spriteState));
+      // The very first unmasked frame must be fully opaque, with no new fade-in.
+      expect(await tester.runAsync(centerPixel), [76, 175, 80, 255]);
+
+      await tester.pumpWidget(frame(silhouette));
+      expect(tester.state(find.byType(DirectCgDisplay)), same(spriteState));
+      expect(await tester.runAsync(centerPixel), [255, 102, 204, 255]);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets('dissolve survives eviction of its source images', (
     tester,

@@ -10,6 +10,7 @@ class DebugLogger {
   static const int maxLogs = 1000; // 最多保存1000条日志
   static const Duration _notificationInterval = Duration(milliseconds: 100);
   Timer? _notificationTimer;
+  final Set<void Function(String)> _entryListeners = {};
 
   // Stream controller for real-time log updates
   final StreamController<List<String>> _logStreamController =
@@ -17,6 +18,15 @@ class DebugLogger {
 
   List<String> get logs => List.unmodifiable(_logs);
   Stream<List<String>> get logStream => _logStreamController.stream;
+
+  /// Receives each formatted entry immediately, before batched UI updates.
+  void addEntryListener(void Function(String) listener) {
+    _entryListeners.add(listener);
+  }
+
+  void removeEntryListener(void Function(String) listener) {
+    _entryListeners.remove(listener);
+  }
 
   void addLog(String message) {
     final timestamp = DateTime.now();
@@ -33,6 +43,11 @@ class DebugLogger {
       _logs.removeAt(0);
     }
 
+    if (_entryListeners.isNotEmpty) {
+      for (final listener in _entryListeners.toList(growable: false)) {
+        listener(logEntry);
+      }
+    }
     _scheduleListenerNotification();
   }
 
@@ -86,12 +101,5 @@ class DebugLogger {
 }
 
 void setupDebugLogger() {
-  // 添加初始化日志，表示日志系统已启动
-  DebugLogger().addLog("调试日志系统已启动 - 所有print输出都会被自动捕获");
-
-  // 添加一些测试日志来验证系统工作正常
-  DebugLogger().addLog("测试日志: INFO级别消息");
-  DebugLogger().addLog("测试日志: [WARN] 警告级别消息");
-  DebugLogger().addLog("测试日志: [ERROR] 错误级别消息");
-  DebugLogger().addLog("测试日志: [DEBUG] 调试级别消息");
+  DebugLogger().addLog("调试日志系统已启动");
 }

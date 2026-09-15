@@ -25,6 +25,7 @@ import 'package:sakiengine/src/integrations/steam/steamworks_manager.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
 import 'package:sakiengine/src/utils/debug_logger.dart';
+import 'package:sakiengine/src/utils/game_file_logger.dart';
 import 'package:sakiengine/src/utils/global_variable_manager.dart';
 import 'package:sakiengine/src/utils/performance_monitor.dart';
 import 'package:sakiengine/src/utils/settings_manager.dart';
@@ -455,8 +456,10 @@ Future<void> runSakiEngine({
   bool enableSteamworks = true,
   bool restoreStartupWindowBounds = true,
   bool useNearestNeighborSampling = false,
+  List<String> legacyFileLoggingPreferenceKeys = const [],
 }) async {
   setupDebugLogger();
+  final fileLogger = GameFileLogger();
   final mpvVerboseLogging = _isMpvVerboseLoggingEnabled();
 
   await runZoned(
@@ -485,6 +488,7 @@ Future<void> runSakiEngine({
         }
         return false;
       };
+      fileLogger.installGlobalErrorHandlers();
 
       final requestedPackage =
           yuyuPackagePath ?? Platform.environment['SAKI_YUYU_PACKAGE'];
@@ -563,6 +567,9 @@ Future<void> runSakiEngine({
         SakiEngineConfig().logicalHeight = (stage['height'] as num).toDouble();
       }
       await SettingsManager().init();
+      await fileLogger.initialize(
+        legacyPreferenceKeys: legacyFileLoggingPreferenceKeys,
+      );
       final startupWindowAspectRatio = !kIsWeb && restoreStartupWindowBounds
           ? SettingsManager().currentGameWindowAspectRatio
           : null;

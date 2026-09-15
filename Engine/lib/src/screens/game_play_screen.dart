@@ -96,6 +96,76 @@ Key characterCompositeRenderKey(String characterKey) =>
 Key characterPositionedRenderKey(String characterKey) =>
     ValueKey('positioned-$characterKey');
 
+/// Keep the sprite subtree mounted when a silhouette is applied or cleared.
+/// Replacing this wrapper would restart the sprite's initial fade-in.
+@visibleForTesting
+Widget applyCharacterSilhouetteMask(Widget child, CharacterState character) {
+  final isSilhouette =
+      (character.maskType ?? '').trim().toLowerCase() == 'silhouette';
+  final reveal = (character.animationProperties?['maskReveal'] ?? 0.0).clamp(
+    0.0,
+    1.0,
+  );
+  final strength = isSilhouette ? 1.0 - reveal : 0.0;
+  final original = 1.0 - strength;
+  final color = parseColor(character.maskColor?.trim()) ?? Colors.white;
+  return ColorFiltered(
+    // Interpolate the tint into the original RGB while retaining the sprite's
+    // alpha. The silhouette never fades through an empty/transparent frame.
+    colorFilter: ColorFilter.matrix(<double>[
+      original,
+      0,
+      0,
+      0,
+      color.r * 255 * strength,
+      0,
+      original,
+      0,
+      0,
+      color.g * 255 * strength,
+      0,
+      0,
+      original,
+      0,
+      color.b * 255 * strength,
+      0,
+      0,
+      0,
+      original + color.a * strength,
+      0,
+    ]),
+    child: child,
+  );
+}
+
+/// Neutral animation values must update the existing render objects, rather
+/// than remove wrappers and remount the sprite with a fresh fade-in controller.
+@visibleForTesting
+Widget applyCharacterPresentationEffects(
+  Widget child, {
+  double alpha = 1.0,
+  double rotation = 0.0,
+  double reveal = 1.0,
+  ColorFilter? lighting,
+}) {
+  return BottomUpReveal(
+    progress: reveal,
+    child: Transform.rotate(
+      angle: rotation,
+      alignment: Alignment.center,
+      child: Opacity(
+        opacity: alpha.clamp(0.0, 1.0).toDouble(),
+        child: ColorFiltered(
+          colorFilter:
+              lighting ??
+              const ColorFilter.mode(Colors.transparent, BlendMode.srcOver),
+          child: child,
+        ),
+      ),
+    ),
+  );
+}
+
 /// GameManager already resolves aliases to a unique stage slot. Distinct slots
 /// may deliberately share an image resource (for example a crowd or reflection).
 @visibleForTesting
@@ -1970,41 +2040,18 @@ class _GamePlayScreenState extends State<GamePlayScreen>
             : null,
       );
 
-      Widget finalWidget = characterWidget;
+      Widget finalWidget = applyCharacterSilhouetteMask(
+        characterWidget,
+        characterState,
+      );
 
-      final maskType = (characterState.maskType ?? '').trim().toLowerCase();
-      if (maskType == 'silhouette') {
-        final parsedMaskColor =
-            parseColor(characterState.maskColor?.trim()) ??
-            const Color(0xFFFFFFFF);
-        finalWidget = ColorFiltered(
-          colorFilter: ColorFilter.mode(parsedMaskColor, BlendMode.srcIn),
-          child: finalWidget,
-        );
-      }
-
-      if (characterLighting != null) {
-        finalWidget = ColorFiltered(
-          colorFilter: characterLighting.colorFilter,
-          child: finalWidget,
-        );
-      }
-
-      if (alpha < 1.0) {
-        finalWidget = Opacity(opacity: alpha, child: finalWidget);
-      }
-
-      if (rotation != 0.0) {
-        finalWidget = Transform.rotate(
-          angle: rotation,
-          alignment: Alignment.center,
-          child: finalWidget,
-        );
-      }
-
-      if (reveal < 1.0) {
-        finalWidget = BottomUpReveal(progress: reveal, child: finalWidget);
-      }
+      finalWidget = applyCharacterPresentationEffects(
+        finalWidget,
+        alpha: alpha,
+        rotation: rotation,
+        reveal: reveal,
+        lighting: characterLighting?.colorFilter,
+      );
 
       finalWidget = _wrapWithParallax(finalWidget, 0.65);
 
