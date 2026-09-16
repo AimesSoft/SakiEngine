@@ -8,6 +8,7 @@ import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 import 'package:sakiengine/src/utils/image_loader.dart';
 import 'package:sakiengine/src/rendering/image_sampling.dart';
+import 'package:sakiengine/src/effects/scene_presentation_theme.dart';
 
 /// 转场效果类型枚举
 enum TransitionType {
@@ -59,6 +60,9 @@ class SceneTransitionEffectManager {
     }
 
     final overlay = Overlay.of(context);
+    // Resolve from the requesting scene; an OverlayEntry is built outside any
+    // theme overrides local to that scene.
+    final backdropColor = ScenePresentationTheme.backdropColorOf(context);
     final transitionRect = transitionType == TransitionType.pixel ||
             transitionType == TransitionType.diss
         ? _resolveTransitionRect(context, overlay)
@@ -83,6 +87,7 @@ class SceneTransitionEffectManager {
     switch (transitionType) {
       case TransitionType.fade:
         transitionWidget = _FadeTransitionOverlay(
+          backdropColor: backdropColor,
           duration: duration,
           onMidTransition: onMidTransition,
           onComplete: () {
@@ -95,6 +100,7 @@ class SceneTransitionEffectManager {
         break;
       case TransitionType.diss:
         transitionWidget = _DissTransitionOverlay(
+          backdropColor: backdropColor,
           duration: duration,
           onMidTransition: onMidTransition,
           onComplete: () {
@@ -111,6 +117,7 @@ class SceneTransitionEffectManager {
         break;
       case TransitionType.wipe:
         transitionWidget = _WipeTransitionOverlay(
+          backdropColor: backdropColor,
           duration: duration * 2, // wipe转场持续时间翻倍
           onMidTransition: onMidTransition,
           onComplete: () {
@@ -123,6 +130,7 @@ class SceneTransitionEffectManager {
         break;
       case TransitionType.blink:
         transitionWidget = _BlinkTransitionOverlay(
+          backdropColor: backdropColor,
           duration: duration,
           onMidTransition: onMidTransition,
           onComplete: () {
@@ -150,6 +158,7 @@ class SceneTransitionEffectManager {
       default:
         // 默认使用fade效果
         transitionWidget = _FadeTransitionOverlay(
+          backdropColor: backdropColor,
           duration: duration,
           onMidTransition: onMidTransition,
           onComplete: () {
@@ -252,11 +261,13 @@ class SceneTransitionEffectManager {
 
 /// 黑屏淡入淡出转场覆盖层（原有效果）
 class _FadeTransitionOverlay extends StatefulWidget {
+  final Color backdropColor;
   final Duration duration;
   final VoidCallback onMidTransition;
   final VoidCallback onComplete;
 
   const _FadeTransitionOverlay({
+    required this.backdropColor,
     required this.duration,
     required this.onMidTransition,
     required this.onComplete,
@@ -345,7 +356,7 @@ class _FadeTransitionOverlayState extends State<_FadeTransitionOverlay>
         return IgnorePointer(
           ignoring: true, // 不拦截UI交互
           child: Material(
-            color: Colors.black.withOpacity(opacity),
+            color: widget.backdropColor.withValues(alpha: opacity),
             child: const SizedBox(
               width: double.infinity,
               height: double.infinity,
@@ -359,6 +370,7 @@ class _FadeTransitionOverlayState extends State<_FadeTransitionOverlay>
 
 /// 图片直接渐变转场覆盖层（使用dissolve着色器效果）
 class _DissTransitionOverlay extends StatefulWidget {
+  final Color backdropColor;
   final Duration duration;
   final VoidCallback onMidTransition;
   final VoidCallback onComplete;
@@ -368,6 +380,7 @@ class _DissTransitionOverlay extends StatefulWidget {
   final Future<ui.Image?> Function()? captureFrame;
 
   const _DissTransitionOverlay({
+    required this.backdropColor,
     required this.duration,
     required this.onMidTransition,
     required this.onComplete,
@@ -596,7 +609,7 @@ class _DissTransitionOverlayState extends State<_DissTransitionOverlay>
         // 如果没有图片，使用黑色遮罩进行渐变过渡
         if (_oldImage == null && _newImage == null) {
           return Material(
-            color: Colors.black.withOpacity(_dissAnimation.value > 0.5
+            color: widget.backdropColor.withOpacity(_dissAnimation.value > 0.5
                 ? 2.0 * (1.0 - _dissAnimation.value)
                 : 2.0 * _dissAnimation.value),
             child: const SizedBox(
@@ -649,11 +662,13 @@ class _DissTransitionOverlayState extends State<_DissTransitionOverlay>
 
 /// 旋转擦除转场覆盖层（类似iris转场效果）
 class _WipeTransitionOverlay extends StatefulWidget {
+  final Color backdropColor;
   final Duration duration;
   final VoidCallback onMidTransition;
   final VoidCallback onComplete;
 
   const _WipeTransitionOverlay({
+    required this.backdropColor,
     required this.duration,
     required this.onMidTransition,
     required this.onComplete,
@@ -751,6 +766,7 @@ class _WipeTransitionOverlayState extends State<_WipeTransitionOverlay>
             color: Colors.transparent,
             child: CustomPaint(
               painter: _WipeMaskPainter(
+                color: widget.backdropColor,
                 sweepProgress: sweepProgress,
               ),
               size: Size.infinite,
@@ -764,9 +780,11 @@ class _WipeTransitionOverlayState extends State<_WipeTransitionOverlay>
 
 /// 旋转遮罩绘制器
 class _WipeMaskPainter extends CustomPainter {
+  final Color color;
   final double sweepProgress;
 
   _WipeMaskPainter({
+    required this.color,
     required this.sweepProgress,
   });
 
@@ -780,7 +798,7 @@ class _WipeMaskPainter extends CustomPainter {
 
     // 黑色遮罩画笔
     final maskPaint = Paint()
-      ..color = Colors.black
+      ..color = color
       ..style = PaintingStyle.fill;
 
     // 如果进度达到或超过1.0，直接绘制全屏黑色
@@ -814,7 +832,7 @@ class _WipeMaskPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _WipeMaskPainter oldDelegate) {
-    return oldDelegate.sweepProgress != sweepProgress;
+    return oldDelegate.sweepProgress != sweepProgress || oldDelegate.color != color;
   }
 }
 
@@ -1223,11 +1241,13 @@ class _PixelShaderFramePainter extends CustomPainter {
 
 /// 睁眼转场覆盖层（淡入黑屏，然后上下睁眼显示新场景）
 class _BlinkTransitionOverlay extends StatefulWidget {
+  final Color backdropColor;
   final Duration duration;
   final VoidCallback onMidTransition;
   final VoidCallback onComplete;
 
   const _BlinkTransitionOverlay({
+    required this.backdropColor,
     required this.duration,
     required this.onMidTransition,
     required this.onComplete,
@@ -1309,7 +1329,7 @@ class _BlinkTransitionOverlayState extends State<_BlinkTransitionOverlay>
           return IgnorePointer(
             ignoring: true,
             child: Material(
-              color: Colors.black.withOpacity(_fadeInAnimation.value),
+              color: widget.backdropColor.withValues(alpha: _fadeInAnimation.value),
               child: const SizedBox(
                 width: double.infinity,
                 height: double.infinity,
@@ -1324,6 +1344,7 @@ class _BlinkTransitionOverlayState extends State<_BlinkTransitionOverlay>
               color: Colors.transparent,
               child: CustomPaint(
                 painter: _BlinkMaskPainter(
+                  color: widget.backdropColor,
                   closeProgress: _blinkOutAnimation.value,
                 ),
                 size: Size.infinite,
@@ -1338,9 +1359,11 @@ class _BlinkTransitionOverlayState extends State<_BlinkTransitionOverlay>
 
 /// 睁眼遮罩绘制器
 class _BlinkMaskPainter extends CustomPainter {
+  final Color color;
   final double closeProgress;
 
   _BlinkMaskPainter({
+    required this.color,
     required this.closeProgress,
   });
 
@@ -1360,9 +1383,9 @@ class _BlinkMaskPainter extends CustomPainter {
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
       colors: [
-        Colors.black,
-        Colors.black,
-        Colors.black.withOpacity(0.0),
+        color,
+        color,
+        color.withValues(alpha: 0.0),
       ],
       stops: [
         0.0,
@@ -1381,9 +1404,9 @@ class _BlinkMaskPainter extends CustomPainter {
       begin: Alignment.bottomCenter,
       end: Alignment.topCenter,
       colors: [
-        Colors.black,
-        Colors.black,
-        Colors.black.withOpacity(0.0),
+        color,
+        color,
+        color.withValues(alpha: 0.0),
       ],
       stops: [
         0.0,
@@ -1399,7 +1422,7 @@ class _BlinkMaskPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _BlinkMaskPainter oldDelegate) {
-    return oldDelegate.closeProgress != closeProgress;
+    return oldDelegate.closeProgress != closeProgress || oldDelegate.color != color;
   }
 }
 

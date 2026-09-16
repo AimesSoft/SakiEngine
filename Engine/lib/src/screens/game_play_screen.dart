@@ -65,6 +65,7 @@ import 'package:sakiengine/src/utils/read_text_tracker.dart';
 import 'package:sakiengine/src/utils/read_text_skip_manager.dart';
 import 'package:sakiengine/src/utils/settings_manager.dart';
 import 'package:sakiengine/src/effects/scene_transition_effects.dart';
+import 'package:sakiengine/src/effects/scene_presentation_theme.dart';
 import 'package:sakiengine/src/widgets/movie_player.dart'; // 新增：视频播放器导入
 import 'package:sakiengine/src/widgets/script_canvas_layer.dart';
 import 'package:sakiengine/src/utils/dialogue_shake_effect.dart'; // 新增：震动效果导入
@@ -720,7 +721,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   Widget _buildInitialLoadingOverlayLayer(BuildContext context) {
     final loadingBuilder = widget.initialLoadingOverlayBuilder;
     final overlayContent = loadingBuilder == null
-        ? const ColoredBox(color: Colors.black)
+        ? ColoredBox(color: ScenePresentationTheme.backdropColorOf(context))
         : loadingBuilder(
             context,
             _initialLoadingReadyToComplete,
@@ -1044,7 +1045,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
             return KeyEventResult.ignored;
           },
           child: Scaffold(
-            backgroundColor: Colors.black, // 添加黑色背景，这样震动时露出的就是黑色
+            backgroundColor: ScenePresentationTheme.backdropColorOf(context),
             body: Stack(
               fit: StackFit.expand,
               children: [
@@ -1059,7 +1060,11 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                             gameState: GameState.initial(),
                           );
                       return fallbackSceneBaseLayer ??
-                          const ColoredBox(color: Colors.black);
+                          ColoredBox(
+                            color: ScenePresentationTheme.backdropColorOf(
+                              context,
+                            ),
+                          );
                     }
                     final gameState = snapshot.data!;
                     final gameModule = widget.gameModule ?? DefaultGameModule();
@@ -1806,6 +1811,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   ]) {
     ////print('[_buildBackground] 开始构建背景: $background');
     Widget backgroundWidget;
+    final backdropColor = ScenePresentationTheme.backdropColorOf(context);
 
     // 如果有多图层数据，使用多图层渲染器
     if (sceneLayers != null && sceneLayers.isNotEmpty) {
@@ -1823,7 +1829,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
         );
       } else {
         ////print('[_buildBackground] 多图层为空，使用黑色背景');
-        backgroundWidget = const ColoredBox(color: Colors.black);
+        backgroundWidget = ColoredBox(color: backdropColor);
       }
     } else {
       ////print('[_buildBackground] 单图层模式，背景内容: $background');
@@ -1847,7 +1853,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
-            errorWidget: const ColoredBox(color: Colors.black),
+            errorWidget: ColoredBox(color: backdropColor),
           );
         } else if (isFileSystemAssetPath(background)) {
           //print('[_buildBackground] 🐛 检测到绝对文件路径，直接使用Image.file加载: $background');
@@ -1864,7 +1870,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
             // 关键：不使用frameBuilder，让图像立即显示
             errorBuilder: (context, error, stackTrace) {
               //print('[_buildBackground] ❌ 直接文件加载失败: $background, 错误: $error');
-              return const ColoredBox(color: Colors.black);
+              return ColoredBox(color: backdropColor);
             },
           );
         } else {
@@ -1881,10 +1887,10 @@ class _GamePlayScreenState extends State<GamePlayScreen>
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
-              errorWidget: const ColoredBox(color: Colors.black),
+              errorWidget: ColoredBox(color: backdropColor),
             );
           } else {
-            backgroundWidget = const ColoredBox(color: Colors.black);
+            backgroundWidget = ColoredBox(color: backdropColor);
           }
         }
       }

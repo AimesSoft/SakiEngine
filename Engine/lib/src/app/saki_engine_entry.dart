@@ -19,6 +19,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:sakiengine/src/config/runtime_project_config.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/core/game_module.dart';
+import 'package:sakiengine/src/effects/scene_presentation_theme.dart';
 import 'package:sakiengine/src/core/project_module_loader.dart';
 import 'package:sakiengine/src/game/save_load_manager.dart';
 import 'package:sakiengine/src/integrations/steam/steamworks_manager.dart';
@@ -819,8 +820,8 @@ class _StartupMaskWrapperState extends State<StartupMaskWrapper>
           builder: (context, child) {
             if (!_prewarmingComplete || _fadeAnimation.value > 0) {
               return Material(
-                color: Colors.black.withOpacity(
-                  _prewarmingComplete ? _fadeAnimation.value : 1.0,
+                color: ScenePresentationTheme.backdropColorOf(context).withValues(
+                  alpha: _prewarmingComplete ? _fadeAnimation.value : 1.0,
                 ),
                 child: const SizedBox(
                   width: double.infinity,

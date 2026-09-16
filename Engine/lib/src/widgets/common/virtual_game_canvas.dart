@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
+import 'package:sakiengine/src/effects/scene_presentation_theme.dart';
 
 /// Presents the game as a fixed-size logical canvas and scales it uniformly to
 /// cover the host window. Descendants keep seeing the engine logical resolution.
@@ -90,7 +91,7 @@ class SakiVirtualGameCanvas extends StatelessWidget {
           width: availableWidth,
           height: availableHeight,
           child: ColoredBox(
-            color: Colors.black,
+            color: ScenePresentationTheme.backdropColorOf(context),
             child: ClipRect(
               child: FittedBox(
                 fit: contain ? BoxFit.contain : BoxFit.cover,

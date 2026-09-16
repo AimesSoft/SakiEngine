@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
+import 'package:sakiengine/src/effects/scene_presentation_theme.dart';
 
 /// 全局转场覆盖层管理器
 /// 使用覆盖层方式实现黑场过渡，与场景切换分离
@@ -30,9 +31,11 @@ class TransitionOverlayManager {
     
     final completer = Completer<void>();
     
+    final backdropColor = ScenePresentationTheme.backdropColorOf(context);
     // 创建覆盖层
     _overlayEntry = OverlayEntry(
       builder: (context) => _TransitionOverlay(
+        backdropColor: backdropColor,
         duration: duration,
         onMidTransition: onMidTransition,
         onComplete: () {
@@ -83,9 +86,11 @@ class SceneTransitionManager {
     
     final completer = Completer<void>();
     
+    final backdropColor = ScenePresentationTheme.backdropColorOf(context);
     // 创建覆盖层
     _overlayEntry = OverlayEntry(
       builder: (context) => _TransitionOverlay(
+        backdropColor: backdropColor,
         duration: duration,
         onMidTransition: onMidTransition,
         onComplete: () {
@@ -114,11 +119,13 @@ class SceneTransitionManager {
 
 /// 转场覆盖层Widget
 class _TransitionOverlay extends StatefulWidget {
+  final Color backdropColor;
   final Duration duration;
   final VoidCallback onMidTransition;
   final VoidCallback onComplete;
   
   const _TransitionOverlay({
+    required this.backdropColor,
     required this.duration,
     required this.onMidTransition,
     required this.onComplete,
@@ -205,7 +212,7 @@ class _TransitionOverlayState extends State<_TransitionOverlay>
         }
         
         return Material(
-          color: Colors.black.withOpacity(opacity),
+          color: widget.backdropColor.withValues(alpha: opacity),
           child: SizedBox(
             width: double.infinity,
             height: double.infinity,
