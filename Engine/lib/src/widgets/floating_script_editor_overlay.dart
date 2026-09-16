@@ -9,11 +9,15 @@ import 'package:sakiengine/src/config/game_path_resolver.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/game/game_script_localization.dart';
+import 'package:sakiengine/src/localization/script_localization_editing.dart';
+import 'package:sakiengine/src/localization/script_text_localizer.dart';
 import 'package:sakiengine/src/utils/desktop_file_manager.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/utils/key_sequence_detector.dart';
 import 'package:sakiengine/src/utils/music_manager.dart';
 import 'package:sakiengine/src/utils/scaling_manager.dart';
+import 'package:sakiengine/src/widgets/game_style_dropdown.dart';
+import 'package:sakiengine/src/widgets/confirm_dialog.dart';
 
 String? extractVoiceFileFromScriptLine(String line) {
   final trimmed = line.trimLeft();
@@ -476,7 +480,12 @@ class _FloatingScriptEditorOverlayState
   final TextEditingController _findController = TextEditingController();
   final FocusNode _editorFocusNode = FocusNode();
   final FocusNode _findFocusNode = FocusNode();
-  final UndoHistoryController _undoController = UndoHistoryController();
+  UndoHistoryController _undoController = UndoHistoryController();
+  String? _displayLanguage = ScriptTextLocalizer.currentDefaultLanguageTag();
+  LocalizedScriptProjection? _projection;
+  String _diskSource = '';
+  int _editorGeneration = 0;
+  bool _isSaving = false;
   final ScrollController _scrollController = ScrollController();
   final ScrollController _horizontalScrollController = ScrollController();
   final ScrollController _fileListScrollController = ScrollController();
@@ -511,6 +520,19 @@ class _FloatingScriptEditorOverlayState
   static const double _editorFontSize = 14.0;
   static const double _gutterWidth = 84.0;
   bool _hasPreviewedVoice = false;
+  final _bareIconButtonStyle = ButtonStyle(
+    backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+    overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+    shadowColor: const WidgetStatePropertyAll(Colors.transparent),
+    side: const WidgetStatePropertyAll(BorderSide.none),
+    foregroundColor: WidgetStateProperty.resolveWith(
+      (states) =>
+          states.contains(WidgetState.focused) ||
+              states.contains(WidgetState.hovered)
+          ? SakiEngineConfig().themeColors.primaryLight
+          : null,
+    ),
+  );
 
   @override
   void initState() {
@@ -666,30 +688,14 @@ class _FloatingScriptEditorOverlayState
     if (!_isDirty) {
       return true;
     }
-    final config = SakiEngineConfig();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: config.themeColors.background,
-          title: Text(
-            '当前文件尚未保存',
-            style: TextStyle(color: config.themeColors.primary),
-          ),
-          content: Text(
-            '切换到 ${entry.fileName} 会放弃当前修改。',
-            style: TextStyle(color: config.themeColors.onSurface),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('放弃修改并切换'),
-            ),
-          ],
+        return ConfirmDialog(
+          title: '当前文件尚未保存',
+          content: '切换到 ${entry.fileName} 会放弃当前修改。',
+          cancelText: '取消',
+          confirmText: '放弃修改并切换',
         );
       },
     );
@@ -697,7 +703,7 @@ class _FloatingScriptEditorOverlayState
   }
 
   Future<void> _selectScriptFile(_ScriptFileEntry entry) async {
-    if (_isLoading || p.equals(entry.path, _currentScriptPath)) {
+    if (_isLoading || _isSaving || p.equals(entry.path, _currentScriptPath)) {
       return;
     }
     if (!await _confirmDiscardChangesBeforeSwitch(entry) || !mounted) {
@@ -713,7 +719,7 @@ class _FloatingScriptEditorOverlayState
         return;
       }
       _scriptController.value = TextEditingValue(
-        text: content,
+        text: _loadSourceProjection(content),
         selection: const TextSelection.collapsed(offset: 0),
       );
       setState(() {
@@ -816,8 +822,54 @@ class _FloatingScriptEditorOverlayState
     }
   }
 
-  void _onScriptTextChanged(String _) {
-    _isDirty = true;
+  String _loadSourceProjection(String content) {
+    _diskSource = content;
+    _projection = LocalizedScriptProjection(content, _displayLanguage);
+    _resetUndoHistory();
+    return _projection!.text;
+  }
+
+  void _resetUndoHistory() {
+    final previous = _undoController;
+    _undoController = UndoHistoryController();
+    _editorGeneration++;
+    WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
+  }
+
+  void _switchDisplayLanguage(String value) {
+    final language = value == 'source' ? null : value;
+    if (language == _displayLanguage) return;
+    _projection?.edit(_scriptController.text);
+    final source = _projection?.source ?? _scriptController.text;
+    setState(() {
+      _displayLanguage = language;
+      _projection = LocalizedScriptProjection(source, language);
+      _scriptController.value = TextEditingValue(
+        text: _projection!.text,
+        selection: const TextSelection.collapsed(offset: 0),
+      );
+      _resetUndoHistory();
+    });
+    if (_showFindBar) _updateFindResults(selectClosest: false);
+  }
+
+  void _onScriptTextChanged(String value) {
+    try {
+      _projection?.edit(value);
+    } on FormatException catch (error) {
+      _scriptController.value = TextEditingValue(
+        text: _projection!.text,
+        selection: TextSelection.collapsed(
+          offset: math.min(
+            _scriptController.selection.extentOffset.clamp(0, value.length),
+            _projection!.text.length,
+          ),
+        ),
+      );
+      _notify(error.message.toString());
+      return;
+    }
+    _isDirty = (_projection?.source ?? value) != _diskSource;
     _editorRefreshDebounce?.cancel();
     _editorRefreshDebounce = Timer(const Duration(milliseconds: 120), () {
       if (mounted) {
@@ -1334,7 +1386,7 @@ class _FloatingScriptEditorOverlayState
 
       final file = File(matchedScriptPath);
       final content = await file.readAsString();
-      _scriptController.text = content;
+      _scriptController.text = _loadSourceProjection(content);
       _currentScriptPath = matchedScriptPath;
       _isDirty = false;
 
@@ -1505,12 +1557,22 @@ class _FloatingScriptEditorOverlayState
       return;
     }
 
+    if (_isSaving) return;
+    setState(() {
+      _isSaving = true;
+    });
     try {
+      _projection?.edit(_scriptController.text);
+      final source = _projection?.source ?? _scriptController.text;
       final file = File(_currentScriptPath);
       if (!await file.exists()) {
         throw FileSystemException('目标脚本不存在', _currentScriptPath);
       }
-      await _atomicWriteScript(file, _scriptController.text);
+      if (await file.readAsString() != _diskSource) {
+        throw const FileSystemException('文件已被其他编辑器修改，草稿已保留');
+      }
+      await _atomicWriteScript(file, source);
+      _diskSource = source;
       if (mounted) {
         setState(() {
           _isDirty = false;
@@ -1525,6 +1587,12 @@ class _FloatingScriptEditorOverlayState
         print('浮窗脚本编辑器: 保存失败: $e');
       }
       return;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
 
     try {
@@ -1855,6 +1923,7 @@ class _FloatingScriptEditorOverlayState
                   ),
                 ),
                 IconButton(
+                  style: _bareIconButtonStyle,
                   tooltip: '刷新文件列表',
                   onPressed: _isLoadingScriptFiles
                       ? null
@@ -1865,6 +1934,7 @@ class _FloatingScriptEditorOverlayState
                   color: config.themeColors.primary,
                 ),
                 IconButton(
+                  style: _bareIconButtonStyle,
                   tooltip: '隐藏文件栏',
                   onPressed: () {
                     setState(() {
@@ -2022,6 +2092,7 @@ class _FloatingScriptEditorOverlayState
             ),
           ),
           IconButton(
+            style: _bareIconButtonStyle,
             tooltip: '上一个 (Shift+⌘/Ctrl+G)',
             onPressed: _findMatchCount == 0
                 ? null
@@ -2032,6 +2103,7 @@ class _FloatingScriptEditorOverlayState
             color: config.themeColors.primary,
           ),
           IconButton(
+            style: _bareIconButtonStyle,
             tooltip: '下一个 (⌘/Ctrl+G 或 F3)',
             onPressed: _findMatchCount == 0
                 ? null
@@ -2042,6 +2114,7 @@ class _FloatingScriptEditorOverlayState
             color: config.themeColors.primary,
           ),
           IconButton(
+            style: _bareIconButtonStyle,
             tooltip: '关闭查找 (Esc)',
             onPressed: _closeFindBar,
             icon: const Icon(Icons.close_rounded),
@@ -2150,6 +2223,7 @@ class _FloatingScriptEditorOverlayState
                           child: Row(
                             children: [
                               IconButton(
+                                style: _bareIconButtonStyle,
                                 tooltip: _showFilePanel ? '隐藏文件栏' : '展开文件栏',
                                 onPressed: () {
                                   final shouldShow = !_showFilePanel;
@@ -2198,6 +2272,7 @@ class _FloatingScriptEditorOverlayState
                                 ),
                               ),
                               IconButton(
+                                style: _bareIconButtonStyle,
                                 tooltip: '查找 (⌘/Ctrl+F)',
                                 onPressed: _openFindBar,
                                 icon: const Icon(Icons.search_rounded),
@@ -2205,6 +2280,7 @@ class _FloatingScriptEditorOverlayState
                                 color: config.themeColors.primary,
                               ),
                               IconButton(
+                                style: _bareIconButtonStyle,
                                 tooltip: '定位当前句',
                                 onPressed: _centerCurrentDialogueInEditor,
                                 icon: const Icon(Icons.center_focus_strong),
@@ -2212,13 +2288,15 @@ class _FloatingScriptEditorOverlayState
                                 color: config.themeColors.primary,
                               ),
                               IconButton(
+                                style: _bareIconButtonStyle,
                                 tooltip: '保存并重载 (⌘/Ctrl+S)',
-                                onPressed: _saveScript,
+                                onPressed: _isSaving ? null : _saveScript,
                                 icon: const Icon(Icons.save_alt),
                                 visualDensity: VisualDensity.compact,
                                 color: Colors.green.shade500,
                               ),
                               IconButton(
+                                style: _bareIconButtonStyle,
                                 tooltip: '关闭 (Esc / ⌘/Ctrl+W)',
                                 onPressed: widget.onClose,
                                 icon: const Icon(Icons.close),
@@ -2235,16 +2313,49 @@ class _FloatingScriptEditorOverlayState
                           vertical: 6 * uiScale,
                         ),
                         color: Colors.black.withOpacity(0.2),
-                        child: Text(
-                          _currentScriptPath.isNotEmpty
-                              ? '${_isDirty ? '● ' : ''}$_currentScriptPath'
-                              : '未加载脚本文件',
-                          style: TextStyle(
-                            color: config.themeColors.primary.withOpacity(0.86),
-                            fontSize: 11 * textScale,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _currentScriptPath.isNotEmpty
+                                    ? '${_isDirty ? '● ' : ''}$_currentScriptPath'
+                                    : '未加载脚本文件',
+                                style: TextStyle(
+                                  color: config.themeColors.primary.withOpacity(
+                                    0.86,
+                                  ),
+                                  fontSize: 11 * textScale,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IgnorePointer(
+                              ignoring: _isLoading || _isSaving,
+                              child: GameStyleDropdown<String>(
+                                key: const ValueKey('script-editor-language'),
+                                config: config,
+                                scale: uiScale * .8,
+                                textScale: textScale,
+                                width: 190 * uiScale,
+                                value: _displayLanguage ?? 'source',
+                                items: [
+                                  for (final entry
+                                      in scriptEditorLanguages.entries)
+                                    GameStyleDropdownItem(
+                                      value: entry.key,
+                                      label: entry.value,
+                                    ),
+                                  const GameStyleDropdownItem(
+                                    value: 'source',
+                                    label: '完整源码',
+                                  ),
+                                ],
+                                onChanged: _switchDisplayLanguage,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       if (_showFindBar)
@@ -2401,6 +2512,11 @@ class _FloatingScriptEditorOverlayState
                                                                     ),
                                                                   ),
                                                                 TextField(
+                                                                  readOnly:
+                                                                      _isSaving,
+                                                                  key: ValueKey(
+                                                                    _editorGeneration,
+                                                                  ),
                                                                   controller:
                                                                       _scriptController,
                                                                   focusNode:

@@ -12,8 +12,13 @@ class ConfirmDialog extends StatefulWidget {
   final String content;
   final VoidCallback? onConfirm;
   final VoidCallback? onCancel;
-  final bool? confirmResult;
-  final bool? cancelResult;
+  final Object? confirmResult;
+  final Object? cancelResult;
+  final String? confirmText;
+  final String? cancelText;
+  final String? alternateText;
+  final Object? alternateResult;
+  final IconData alternateIcon;
 
   const ConfirmDialog({
     super.key,
@@ -23,6 +28,11 @@ class ConfirmDialog extends StatefulWidget {
     this.onCancel,
     this.confirmResult = true,
     this.cancelResult = false,
+    this.confirmText,
+    this.cancelText,
+    this.alternateText,
+    this.alternateResult,
+    this.alternateIcon = Icons.more_horiz,
   });
 
   @override
@@ -40,35 +50,29 @@ class _ConfirmDialogState extends State<ConfirmDialog>
   @override
   void initState() {
     super.initState();
-    
+
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 350),
       vsync: this,
     );
 
-    _scaleAnimation = Tween<double>(
-      begin: 0.7,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.elasticOut,
-    ));
+    _scaleAnimation = Tween<double>(begin: 0.7, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
+    );
 
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
-    ));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
+      ),
+    );
 
-    _backdropAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
-    ));
+    _backdropAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
+      ),
+    );
 
     _animationController.forward();
   }
@@ -92,8 +96,10 @@ class _ConfirmDialogState extends State<ConfirmDialog>
     final uiScale = context.scaleFor(ComponentType.ui);
     final textScale = context.scaleFor(ComponentType.text);
     final localization = LocalizationManager();
-    final cancelText = localization.t('dialog.action.cancel');
-    final confirmText = localization.t('dialog.action.confirm');
+    final cancelText =
+        widget.cancelText ?? localization.t('dialog.action.cancel');
+    final confirmText =
+        widget.confirmText ?? localization.t('dialog.action.confirm');
 
     return AnimatedBuilder(
       animation: _animationController,
@@ -106,7 +112,9 @@ class _ConfirmDialogState extends State<ConfirmDialog>
               width: double.infinity,
               height: double.infinity,
               decoration: BoxDecoration(
-                color: config.themeColors.primaryDark.withOpacity(0.1 * _backdropAnimation.value),
+                color: config.themeColors.primaryDark.withOpacity(
+                  0.1 * _backdropAnimation.value,
+                ),
               ),
               child: GestureDetector(
                 onTap: () {},
@@ -119,17 +127,23 @@ class _ConfirmDialogState extends State<ConfirmDialog>
                         width: 480 * uiScale,
                         constraints: const BoxConstraints(),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(config.baseWindowBorder),
+                          borderRadius: BorderRadius.circular(
+                            config.baseWindowBorder,
+                          ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.3 * _fadeAnimation.value),
+                              color: Colors.black.withOpacity(
+                                0.3 * _fadeAnimation.value,
+                              ),
                               blurRadius: 20 * uiScale,
                               offset: Offset(0, 8 * uiScale),
                             ),
                           ],
                         ),
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(config.baseWindowBorder),
+                          borderRadius: BorderRadius.circular(
+                            config.baseWindowBorder,
+                          ),
                           child: IntrinsicHeight(
                             child: Stack(
                               children: [
@@ -140,21 +154,27 @@ class _ConfirmDialogState extends State<ConfirmDialog>
                                   ),
                                 ),
                                 // 中层：背景图片
-                                if (config.baseWindowBackground != null && config.baseWindowBackground!.isNotEmpty)
+                                if (config.baseWindowBackground != null &&
+                                    config.baseWindowBackground!.isNotEmpty)
                                   Positioned.fill(
                                     child: Opacity(
                                       opacity: config.baseWindowBackgroundAlpha,
                                       child: ColorFiltered(
-                                        colorFilter: SvgColorFilterUtils.getSvgColorTemperatureFilter(config),
+                                        colorFilter:
+                                            SvgColorFilterUtils.getSvgColorTemperatureFilter(
+                                              config,
+                                            ),
                                         child: Align(
                                           alignment: Alignment(
                                             (config.baseWindowXAlign - 0.5) * 2,
                                             (config.baseWindowYAlign - 0.5) * 2,
                                           ),
                                           child: Transform.scale(
-                                            scale: config.baseWindowBackgroundScale,
+                                            scale: config
+                                                .baseWindowBackgroundScale,
                                             child: SmartAssetImage(
-                                              assetName: config.baseWindowBackground!,
+                                              assetName:
+                                                  config.baseWindowBackground!,
                                               fit: BoxFit.contain,
                                             ),
                                           ),
@@ -164,21 +184,29 @@ class _ConfirmDialogState extends State<ConfirmDialog>
                                   ),
                                 // 上层：半透明控件
                                 Container(
-                                  color: config.themeColors.background.withOpacity(config.baseWindowAlpha),
+                                  color: config.themeColors.background
+                                      .withOpacity(config.baseWindowAlpha),
                                   padding: EdgeInsets.all(24 * uiScale),
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
                                         widget.title,
                                         textAlign: TextAlign.left,
-                                        style: config.dialogueTextStyle.copyWith(
-                                          fontSize: config.dialogueTextStyle.fontSize! * textScale * 1.2,
-                                          fontWeight: FontWeight.bold,
-                                          color: config.themeColors.primary,
-                                        ),
+                                        style: config.dialogueTextStyle
+                                            .copyWith(
+                                              fontSize:
+                                                  config
+                                                      .dialogueTextStyle
+                                                      .fontSize! *
+                                                  textScale *
+                                                  1.2,
+                                              fontWeight: FontWeight.bold,
+                                              color: config.themeColors.primary,
+                                            ),
                                       ),
                                       SizedBox(height: 16 * uiScale),
                                       Flexible(
@@ -186,16 +214,24 @@ class _ConfirmDialogState extends State<ConfirmDialog>
                                           child: Text(
                                             widget.content,
                                             textAlign: TextAlign.left,
-                                            style: config.dialogueTextStyle.copyWith(
-                                              fontSize: config.dialogueTextStyle.fontSize! * textScale,
-                                              color: config.themeColors.onSurface,
-                                            ),
+                                            style: config.dialogueTextStyle
+                                                .copyWith(
+                                                  fontSize:
+                                                      config
+                                                          .dialogueTextStyle
+                                                          .fontSize! *
+                                                      textScale,
+                                                  color: config
+                                                      .themeColors
+                                                      .onSurface,
+                                                ),
                                           ),
                                         ),
                                       ),
                                       SizedBox(height: 24 * uiScale),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.start,
+                                      Wrap(
+                                        spacing: 16 * uiScale,
+                                        runSpacing: 8 * uiScale,
                                         children: [
                                           _buildButton(
                                             context,
@@ -210,13 +246,26 @@ class _ConfirmDialogState extends State<ConfirmDialog>
                                             config,
                                             isNegative: true,
                                           ),
-                                          SizedBox(width: 16 * uiScale),
+                                          if (widget.alternateText != null)
+                                            _buildButton(
+                                              context,
+                                              widget.alternateText!,
+                                              widget.alternateIcon,
+                                              () => _handleClose(
+                                                widget.alternateResult,
+                                              ),
+                                              uiScale,
+                                              textScale,
+                                              config,
+                                            ),
                                           _buildButton(
                                             context,
                                             confirmText,
                                             Icons.check_rounded,
                                             () {
-                                              _handleClose(widget.confirmResult);
+                                              _handleClose(
+                                                widget.confirmResult,
+                                              );
                                               widget.onConfirm?.call();
                                             },
                                             uiScale,
@@ -251,9 +300,9 @@ class _ConfirmDialogState extends State<ConfirmDialog>
     VoidCallback onPressed,
     double uiScale,
     double textScale,
-    SakiEngineConfig config,
-    {bool isNegative = false}
-  ) {
+    SakiEngineConfig config, {
+    bool isNegative = false,
+  }) {
     return Material(
       color: Colors.transparent,
       child: MouseRegion(
@@ -270,12 +319,12 @@ class _ConfirmDialogState extends State<ConfirmDialog>
             ),
             decoration: BoxDecoration(
               color: isNegative
-                ? config.themeColors.background.withOpacity(0.6)
-                : config.themeColors.primary.withOpacity(0.1),
+                  ? config.themeColors.background.withOpacity(0.6)
+                  : config.themeColors.primary.withOpacity(0.1),
               border: Border.all(
                 color: isNegative
-                  ? config.themeColors.onSurfaceVariant.withOpacity(0.3)
-                  : config.themeColors.primary.withOpacity(0.5),
+                    ? config.themeColors.onSurfaceVariant.withOpacity(0.3)
+                    : config.themeColors.primary.withOpacity(0.5),
                 width: 1,
               ),
             ),
@@ -285,8 +334,8 @@ class _ConfirmDialogState extends State<ConfirmDialog>
                 Icon(
                   icon,
                   color: isNegative
-                    ? config.themeColors.onSurfaceVariant
-                    : config.themeColors.primary,
+                      ? config.themeColors.onSurfaceVariant
+                      : config.themeColors.primary,
                   size: config.dialogueTextStyle.fontSize! * textScale * 1.2,
                 ),
                 SizedBox(width: 8 * uiScale),
@@ -295,8 +344,8 @@ class _ConfirmDialogState extends State<ConfirmDialog>
                   style: config.dialogueTextStyle.copyWith(
                     fontSize: config.dialogueTextStyle.fontSize! * textScale,
                     color: isNegative
-                      ? config.themeColors.onSurfaceVariant
-                      : config.themeColors.primary,
+                        ? config.themeColors.onSurfaceVariant
+                        : config.themeColors.primary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),

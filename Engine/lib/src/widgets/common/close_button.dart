@@ -3,15 +3,18 @@ import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/material.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/utils/ui_sound_manager.dart';
+import 'package:sakiengine/src/widgets/common/square_icon_button.dart';
 
 class CommonCloseButton extends StatefulWidget {
   final VoidCallback onClose;
   final double scale;
+  final bool bare;
 
   const CommonCloseButton({
     super.key,
     required this.onClose,
     required this.scale,
+    this.bare = false,
   });
 
   @override
@@ -29,6 +32,19 @@ class _CommonCloseButtonState extends State<CommonCloseButton> {
     final isMobile = !kIsWeb && (Platform.isIOS || Platform.isAndroid);
     final buttonSize = isMobile ? 56.0 : 36.0;
     final iconSize = isMobile ? 32.0 : 20.0;
+
+    if (widget.bare) {
+      return Tooltip(
+        message: '关闭 (Esc)',
+        child: SquareIconButton(
+          icon: Icons.close,
+          onTap: widget.onClose,
+          size: buttonSize * widget.scale,
+          iconSize: iconSize * widget.scale,
+          bare: true,
+        ),
+      );
+    }
 
     return MouseRegion(
       onEnter: (_) => _uiSoundManager.playButtonHover(),
@@ -62,8 +78,3 @@ class _CommonCloseButtonState extends State<CommonCloseButton> {
     );
   }
 }
-
-
-
-
-

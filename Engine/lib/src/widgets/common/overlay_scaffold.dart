@@ -21,6 +21,8 @@ class OverlayScaffold extends StatefulWidget {
   final bool clearBackdropInWindowedMode;
   final bool disableWindowTintOverlay;
   final double windowedDragHandleHeight;
+  final Future<bool> Function()? beforeClose;
+  final bool bareCloseButton;
   final void Function(bool triggeredByOverscroll) onClose;
 
   const OverlayScaffold({
@@ -33,6 +35,8 @@ class OverlayScaffold extends StatefulWidget {
     this.clearBackdropInWindowedMode = false,
     this.disableWindowTintOverlay = false,
     this.windowedDragHandleHeight = 56.0,
+    this.beforeClose,
+    this.bareCloseButton = false,
     required this.onClose,
   });
 
@@ -77,38 +81,35 @@ class OverlayScaffoldState extends State<OverlayScaffold>
       key: PhysicalKeyboardKey.escape,
       scope: HotKeyScope.inapp,
     );
-    HotKeyManager.instance.register(_escHotKey, keyDownHandler: (_) {
-      close();
-    });
+    HotKeyManager.instance.register(
+      _escHotKey,
+      keyDownHandler: (_) {
+        close();
+      },
+    );
 
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 400),
       vsync: this,
     );
 
-    _scaleAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.elasticOut,
-    ));
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
+    );
 
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
-    ));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.8, curve: Curves.easeOut),
+      ),
+    );
 
-    _backdropAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
-    ));
+    _backdropAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
+      ),
+    );
 
     _animationController.forward();
   }
@@ -141,6 +142,11 @@ class OverlayScaffoldState extends State<OverlayScaffold>
       return;
     }
     _isClosing = true;
+    if (widget.beforeClose != null && !await widget.beforeClose!()) {
+      _isClosing = false;
+      return;
+    }
+    if (!mounted) return;
     await _animationController.reverse();
     if (mounted) {
       widget.onClose(triggeredByOverscroll);
@@ -184,10 +190,12 @@ class OverlayScaffoldState extends State<OverlayScaffold>
     final uiScale = context.scaleFor(ComponentType.ui);
     final textScale = context.scaleFor(ComponentType.text);
     final isFullscreen = _menuDisplayMode == 'fullscreen';
-    final windowWidth =
-        isFullscreen ? screenSize.width : screenSize.width * 0.85;
-    final windowHeight =
-        isFullscreen ? screenSize.height : screenSize.height * 0.8;
+    final windowWidth = isFullscreen
+        ? screenSize.width
+        : screenSize.width * 0.85;
+    final windowHeight = isFullscreen
+        ? screenSize.height
+        : screenSize.height * 0.8;
     final windowSize = Size(windowWidth, windowHeight);
     final clampedWindowDelta = isFullscreen
         ? Offset.zero
@@ -197,18 +205,17 @@ class OverlayScaffoldState extends State<OverlayScaffold>
       builder: (context, child) {
         final backdropColor =
             (widget.clearBackdropInWindowedMode && !isFullscreen)
-                ? Colors.transparent
-                : config.themeColors.primaryDark
-                    .withOpacity(0.5 * _backdropAnimation.value);
+            ? Colors.transparent
+            : config.themeColors.primaryDark.withOpacity(
+                0.5 * _backdropAnimation.value,
+              );
         return GestureDetector(
           onTap: _handleClose,
           onSecondaryTap: _handleClose,
           child: Container(
             width: double.infinity,
             height: double.infinity,
-            decoration: BoxDecoration(
-              color: backdropColor,
-            ),
+            decoration: BoxDecoration(color: backdropColor),
             child: GestureDetector(
               onTap: () {},
               onSecondaryTap: _handleClose,
@@ -230,11 +237,13 @@ class OverlayScaffoldState extends State<OverlayScaffold>
                                 ? null
                                 : BoxDecoration(
                                     borderRadius: BorderRadius.circular(
-                                        config.baseWindowBorder),
+                                      config.baseWindowBorder,
+                                    ),
                                     boxShadow: [
                                       BoxShadow(
                                         color: Colors.black.withOpacity(
-                                            0.3 * _fadeAnimation.value),
+                                          0.3 * _fadeAnimation.value,
+                                        ),
                                         blurRadius: 20 * uiScale,
                                         offset: Offset(0, 8 * uiScale),
                                       ),
@@ -244,7 +253,8 @@ class OverlayScaffoldState extends State<OverlayScaffold>
                               borderRadius: isFullscreen
                                   ? BorderRadius.zero
                                   : BorderRadius.circular(
-                                      config.baseWindowBorder),
+                                      config.baseWindowBorder,
+                                    ),
                               child: Stack(
                                 children: [
                                   // 底层：纯色背景
@@ -261,9 +271,10 @@ class OverlayScaffoldState extends State<OverlayScaffold>
                                         opacity:
                                             config.baseWindowBackgroundAlpha,
                                         child: ColorFiltered(
-                                          colorFilter: SvgColorFilterUtils
-                                              .getSvgColorTemperatureFilter(
-                                                  config),
+                                          colorFilter:
+                                              SvgColorFilterUtils.getSvgColorTemperatureFilter(
+                                                config,
+                                              ),
                                           child: Align(
                                             alignment: Alignment(
                                               (config.baseWindowXAlign - 0.5) *
@@ -289,13 +300,17 @@ class OverlayScaffoldState extends State<OverlayScaffold>
                                     color: widget.disableWindowTintOverlay
                                         ? Colors.transparent
                                         : config.themeColors.background
-                                            .withOpacity(
-                                                config.baseWindowAlpha),
+                                              .withOpacity(
+                                                config.baseWindowAlpha,
+                                              ),
                                     child: Column(
                                       children: [
                                         if (widget.showHeader)
                                           _buildHeader(
-                                              uiScale, textScale, config),
+                                            uiScale,
+                                            textScale,
+                                            config,
+                                          ),
                                         Expanded(child: widget.content),
                                         if (widget.footer != null)
                                           widget.footer!,
@@ -342,7 +357,10 @@ class OverlayScaffoldState extends State<OverlayScaffold>
   }
 
   Widget _buildHeader(
-      double uiScale, double textScale, SakiEngineConfig config) {
+    double uiScale,
+    double textScale,
+    SakiEngineConfig config,
+  ) {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(
@@ -371,6 +389,7 @@ class OverlayScaffoldState extends State<OverlayScaffold>
           const Spacer(),
           CommonCloseButton(
             scale: uiScale,
+            bare: widget.bareCloseButton,
             onClose: _handleClose,
           ),
         ],

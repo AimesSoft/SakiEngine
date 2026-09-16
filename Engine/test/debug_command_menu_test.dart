@@ -17,6 +17,7 @@ void main() {
         LogicalKeyboardKey.keyC,
         LogicalKeyboardKey.keyD,
         LogicalKeyboardKey.keyE,
+        LogicalKeyboardKey.keyL,
         LogicalKeyboardKey.keyP,
         LogicalKeyboardKey.keyR,
         LogicalKeyboardKey.keyV,

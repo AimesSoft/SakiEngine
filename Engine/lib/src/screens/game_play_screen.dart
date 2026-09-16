@@ -53,6 +53,7 @@ import 'package:sakiengine/src/widgets/expression_radial_wheel.dart';
 import 'package:sakiengine/src/widgets/command_grid_menu.dart';
 import 'package:sakiengine/src/widgets/command_radial_wheel.dart';
 import 'package:sakiengine/src/widgets/floating_script_editor_overlay.dart';
+import 'package:sakiengine/src/widgets/floating_localization_editor.dart';
 import 'package:sakiengine/src/utils/expression_selector_manager.dart';
 import 'package:sakiengine/src/utils/expression_offset_manager.dart';
 import 'package:sakiengine/src/utils/key_sequence_detector.dart';
@@ -252,6 +253,11 @@ class _GamePlayScreenState extends State<GamePlayScreen>
   bool _projectDebugApplying = false;
   HotKey? _reloadHotKey;
   HotKey? _developerPanelHotKey; // Shift+D快捷键
+  bool _showLocalizationEditor = false;
+  bool get _isScriptEditorOpen =>
+      _showFloatingScriptEditor || _showLocalizationEditor;
+  final _localizationEditorKey = GlobalKey<FloatingLocalizationEditorState>();
+  HotKey? _localizationEditorHotKey;
   HotKey? _floatingScriptEditorHotKey; // Shift+P 快捷键
   KeySequenceDetector? _consoleSequenceDetector; // console序列检测器
   ExpressionSelectorManager? _expressionSelectorManager; // 表情选择器管理器
@@ -891,6 +897,9 @@ class _GamePlayScreenState extends State<GamePlayScreen>
       if (_developerPanelHotKey != null) {
         hotKeyManager.unregister(_developerPanelHotKey!);
       }
+      if (_localizationEditorHotKey != null) {
+        hotKeyManager.unregister(_localizationEditorHotKey!);
+      }
       if (_floatingScriptEditorHotKey != null) {
         hotKeyManager.unregister(_floatingScriptEditorHotKey!);
       }
@@ -933,7 +942,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
         if (signal is PointerScrollEvent) {
           _lastPointerPosition = signal.localPosition;
         }
-        if (_showFloatingScriptEditor) {
+        if (_isScriptEditorOpen) {
           return;
         }
         _mouseWheelHandler.handlePointerSignal(signal);
@@ -949,7 +958,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
       },
       onPointerPanZoomUpdate: (event) {
         _lastPointerPosition = event.localPosition;
-        if (_showFloatingScriptEditor) {
+        if (_isScriptEditorOpen) {
           return;
         }
         _mouseWheelHandler.handlePanZoomUpdate(event);
@@ -971,7 +980,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
               return KeyEventResult.handled;
             }
             if (kEngineDebugMode &&
-                !_showFloatingScriptEditor &&
+                !_isScriptEditorOpen &&
                 _handleExpressionWheelKeyEvent(event)) {
               return KeyEventResult.handled;
             }
@@ -995,7 +1004,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   _showDeveloperPanel ||
                   _showDebugPanel ||
                   _showExpressionSelector ||
-                  _showFloatingScriptEditor ||
+                  _isScriptEditorOpen ||
                   _isAnyCommandMenuOpen;
               // 选项界面允许“回滚->观看记录”，但仍视为推进输入的阻断态。
               final hasOverlayOpenExceptMenu =
@@ -1006,7 +1015,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                   _showDeveloperPanel ||
                   _showDebugPanel ||
                   _showExpressionSelector ||
-                  _showFloatingScriptEditor ||
+                  _isScriptEditorOpen ||
                   _isAnyCommandMenuOpen;
 
               if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -1175,7 +1184,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                                         _showDeveloperPanel ||
                                         _showDebugPanel ||
                                         _showExpressionSelector ||
-                                        _showFloatingScriptEditor ||
+                                        _isScriptEditorOpen ||
                                         _isAnyCommandMenuOpen;
 
                                     final isBlockingCinematic =
@@ -1517,6 +1526,18 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                                               _applyProjectDebugSelection,
                                           onDismiss:
                                               _dismissCommandMenuForEscape,
+                                        ),
+                                      if (kEngineDebugMode &&
+                                          _showLocalizationEditor)
+                                        FloatingLocalizationEditor(
+                                          key: _localizationEditorKey,
+                                          gameManager: _gameManager,
+                                          onReload: _handleHotReload,
+                                          onNotify: _showNotificationMessage,
+                                          onClose: () => _setStateIfMounted(
+                                            () =>
+                                                _showLocalizationEditor = false,
+                                          ),
                                         ),
                                       if (kEngineDebugMode &&
                                           _showFloatingScriptEditor)

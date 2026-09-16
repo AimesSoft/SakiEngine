@@ -20,6 +20,7 @@ class SquareIconButton extends StatefulWidget {
   final Duration animationDuration;
   final Curve animationCurve;
   final double hoverScale;
+  final bool bare;
 
   const SquareIconButton({
     super.key,
@@ -39,6 +40,7 @@ class SquareIconButton extends StatefulWidget {
     this.animationDuration = const Duration(milliseconds: 200),
     this.animationCurve = Curves.easeInOut,
     this.hoverScale = 1.1,
+    this.bare = false,
   });
 
   @override
@@ -47,6 +49,7 @@ class SquareIconButton extends StatefulWidget {
 
 class _SquareIconButtonState extends State<SquareIconButton> {
   bool _isHovered = false;
+  bool _isFocused = false;
   final _uiSoundManager = UISoundManager();
 
   @override
@@ -55,55 +58,67 @@ class _SquareIconButtonState extends State<SquareIconButton> {
     final buttonSize = widget.size ?? 24.0;
     final iconSize = widget.iconSize ?? buttonSize * 0.6;
 
-    final backgroundColor = widget.backgroundColor ??
+    final backgroundColor =
+        widget.backgroundColor ??
         config.themeColors.background.withOpacity(0.9);
-    final borderColor = widget.borderColor ??
-        config.themeColors.primary.withOpacity(0.3);
-    final iconColor = widget.iconColor ??
-        config.themeColors.primary.withOpacity(0.7);
+    final borderColor =
+        widget.borderColor ?? config.themeColors.primary.withOpacity(0.3);
+    final iconColor =
+        widget.iconColor ?? config.themeColors.primary.withOpacity(0.7);
 
-    final hoverBackgroundColor = widget.hoverBackgroundColor ??
+    final hoverBackgroundColor =
+        widget.hoverBackgroundColor ??
         config.themeColors.primary.withOpacity(0.15);
-    final hoverBorderColor = widget.hoverBorderColor ??
-        config.themeColors.primary.withOpacity(0.6);
-    final hoverIconColor = widget.hoverIconColor ??
-        config.themeColors.primary;
+    final hoverBorderColor =
+        widget.hoverBorderColor ?? config.themeColors.primary.withOpacity(0.6);
+    final hoverIconColor = widget.hoverIconColor ?? config.themeColors.primary;
 
     Widget button = Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: widget.enabled ? () {
-          _uiSoundManager.playButtonClick();
-          widget.onTap();
-        } : null,
-        onHover: widget.enabled ? (hovering) {
-          if (mounted) {
-            setState(() {
-              _isHovered = hovering;
-            });
-            if (hovering) {
-              _uiSoundManager.playButtonHover();
-            }
-          }
-        } : null,
+        splashColor: widget.bare ? Colors.transparent : null,
+        highlightColor: widget.bare ? Colors.transparent : null,
+        hoverColor: widget.bare ? Colors.transparent : null,
+        focusColor: widget.bare ? Colors.transparent : null,
+        onFocusChange: (value) => setState(() => _isFocused = value),
+        onTap: widget.enabled
+            ? () {
+                _uiSoundManager.playButtonClick();
+                widget.onTap();
+              }
+            : null,
+        onHover: widget.enabled
+            ? (hovering) {
+                if (mounted) {
+                  setState(() {
+                    _isHovered = hovering;
+                  });
+                  if (hovering) {
+                    _uiSoundManager.playButtonHover();
+                  }
+                }
+              }
+            : null,
         borderRadius: BorderRadius.circular(
-          config.baseWindowBorder * widget.borderRadius
+          config.baseWindowBorder * widget.borderRadius,
         ),
         child: AnimatedContainer(
           duration: widget.animationDuration,
           curve: widget.animationCurve,
           width: buttonSize,
           height: buttonSize,
-          decoration: BoxDecoration(
-            color: _isHovered ? hoverBackgroundColor : backgroundColor,
-            borderRadius: BorderRadius.circular(
-              config.baseWindowBorder * widget.borderRadius
-            ),
-            border: Border.all(
-              color: _isHovered ? hoverBorderColor : borderColor,
-              width: widget.borderWidth,
-            ),
-          ),
+          decoration: widget.bare
+              ? null
+              : BoxDecoration(
+                  color: _isHovered ? hoverBackgroundColor : backgroundColor,
+                  borderRadius: BorderRadius.circular(
+                    config.baseWindowBorder * widget.borderRadius,
+                  ),
+                  border: Border.all(
+                    color: _isHovered ? hoverBorderColor : borderColor,
+                    width: widget.borderWidth,
+                  ),
+                ),
           child: AnimatedScale(
             duration: widget.animationDuration,
             curve: widget.animationCurve,
@@ -112,7 +127,7 @@ class _SquareIconButtonState extends State<SquareIconButton> {
               widget.icon,
               size: iconSize,
               color: widget.enabled
-                  ? (_isHovered ? hoverIconColor : iconColor)
+                  ? (_isHovered || _isFocused ? hoverIconColor : iconColor)
                   : iconColor.withOpacity(0.3),
             ),
           ),

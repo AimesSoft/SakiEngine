@@ -251,6 +251,12 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     return Platform.isWindows || Platform.isMacOS || Platform.isLinux;
   }
 
+  bool get _isEditingText {
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    return focusContext?.widget is EditableText ||
+        focusContext?.findAncestorWidgetOfExactType<EditableText>() != null;
+  }
+
   // 设置系统级热键
   Future<void> _setupHotkey() async {
     // hotkey_manager 只在桌面平台可用
@@ -268,6 +274,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       await hotKeyManager.register(
         _reloadHotKey!,
         keyDownHandler: (hotKey) {
+          if (_isEditingText) return;
           sakiDiagnosticLog('热键触发: ${hotKey.toJson()}');
           if (mounted) {
             _handleHotReload();
@@ -287,6 +294,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         await hotKeyManager.register(
           _reloadHotKey!,
           keyDownHandler: (hotKey) {
+            if (_isEditingText) return;
             sakiDiagnosticLog('应用内热键触发: ${hotKey.toJson()}');
             if (mounted) {
               _handleHotReload();
@@ -311,6 +319,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         await hotKeyManager.register(
           _developerPanelHotKey!,
           keyDownHandler: (hotKey) {
+            if (_showLocalizationEditor || _isEditingText) return;
             print('开发者面板热键触发: ${hotKey.toJson()}');
             _setStateIfMounted(() {
               _showDeveloperPanel = !_showDeveloperPanel;
@@ -332,6 +341,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         await hotKeyManager.register(
           _floatingScriptEditorHotKey!,
           keyDownHandler: (hotKey) {
+            if (_showLocalizationEditor || _isEditingText) return;
             if (kSakiDiagnosticLogs) {
               print('悬浮脚本编辑器热键触发: ${hotKey.toJson()}');
             }
@@ -347,6 +357,35 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         sakiDiagnosticLog('快捷键 Shift+P 注册成功 (脚本浮窗)');
       } catch (e) {
         print('脚本浮窗快捷键注册失败: $e');
+      }
+    }
+
+    if (kEngineDebugMode) {
+      _localizationEditorHotKey = HotKey(
+        key: PhysicalKeyboardKey.keyL,
+        modifiers: [HotKeyModifier.shift],
+        scope: HotKeyScope.inapp,
+      );
+      try {
+        await hotKeyManager.register(
+          _localizationEditorHotKey!,
+          keyDownHandler: (_) {
+            // Shift+L must remain a capital L while a text field is being edited.
+            if (_isEditingText) return;
+            if (_showLocalizationEditor) {
+              unawaited(_localizationEditorKey.currentState?.requestClose());
+            } else if (_showFloatingScriptEditor) {
+              _showNotificationMessage('请先关闭脚本编辑器，再打开多语言编辑器');
+            } else {
+              _setStateIfMounted(() {
+                _showLocalizationEditor = true;
+                _isShiftKeyPressed = false;
+              });
+            }
+          },
+        );
+      } catch (error) {
+        print('多语言编辑器快捷键注册失败: $error');
       }
     }
 
@@ -366,7 +405,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       },
       shouldIgnoreHotkey: () =>
           _isAnyCommandMenuOpen ||
-          _showFloatingScriptEditor ||
+          _isScriptEditorOpen ||
           _showDeveloperPanel ||
           _showDebugPanel ||
           _showSettings ||
@@ -386,7 +425,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
                 showSettings: _showSettings,
                 showDeveloperPanel: _showDeveloperPanel,
                 showDebugPanel: _showDebugPanel,
-                showFloatingScriptEditor: _showFloatingScriptEditor,
+                showFloatingScriptEditor: _isScriptEditorOpen,
                 isShowingMenu: _isShowingMenu,
               );
 
@@ -407,10 +446,14 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         event.logicalKey != LogicalKeyboardKey.escape) {
       return false;
     }
+    if (_showLocalizationEditor) {
+      unawaited(_localizationEditorKey.currentState?.requestClose());
+      return true;
+    }
     if (_projectDebugApplying) return true;
 
     final hadEditorOpen =
-        _showFloatingScriptEditor ||
+        _isScriptEditorOpen ||
         _showDeveloperPanel ||
         _showDebugPanel ||
         _showExpressionSelector ||
@@ -698,7 +741,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
         !_showFlowchart &&
         !_showDeveloperPanel &&
         !_showDebugPanel &&
-        !_showFloatingScriptEditor &&
+        !_isScriptEditorOpen &&
         !_showExpressionSelector &&
         !_isShowingMenu &&
         !_isBlockingCinematicInput;
@@ -1918,7 +1961,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       },
       sequenceTimeout: const Duration(seconds: 3),
       shouldIgnore: () =>
-          _showFloatingScriptEditor ||
+          _isScriptEditorOpen ||
           _showDeveloperPanel ||
           _showExpressionSelector ||
           _showDebugPanel ||
@@ -1953,7 +1996,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showFloatingScriptEditor ||
+            _isScriptEditorOpen ||
             _isAnyCommandMenuOpen;
         return !hasOverlayOpen && !_isBlockingCinematicInput;
       },
@@ -1996,7 +2039,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showFloatingScriptEditor ||
+            _isScriptEditorOpen ||
             _isAnyCommandMenuOpen;
         return !hasOverlayOpen && !_isBlockingCinematicInput;
       },
@@ -2020,7 +2063,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showFloatingScriptEditor ||
+            _isScriptEditorOpen ||
             _isAnyCommandMenuOpen;
         if (hasOverlayOpen || _isBlockingCinematicInput) {
           return;
@@ -2044,7 +2087,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDeveloperPanel ||
             _showDebugPanel ||
             _showExpressionSelector ||
-            _showFloatingScriptEditor ||
+            _isScriptEditorOpen ||
             _isAnyCommandMenuOpen;
 
         final isUIHidden = GlobalRightClickUIManager().isUIHidden;
@@ -2081,6 +2124,7 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
             _showDebugPanel ||
             _showExpressionSelector ||
             _isAnyCommandMenuOpen ||
+            _isScriptEditorOpen ||
             _isFastForwarding; // 快进时不能自动播放
         return !hasOverlayOpen && !_isBlockingCinematicInput;
       },
