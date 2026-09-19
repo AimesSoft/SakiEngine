@@ -14,11 +14,29 @@ import 'package:sakiengine/src/widgets/settings/gameplay_settings_tab.dart';
 import 'package:sakiengine/src/widgets/settings/control_settings_tab.dart';
 import 'package:sakiengine/src/widgets/settings/developer_settings_tab.dart';
 
+/// 项目追加到设置界面的页签。
+///
+/// 引擎只提供挂载点，页签内容由项目模块提供，这样项目专属内容（例如制作人员
+/// 名单）不会进入引擎；任何项目都可以按需追加自己的页签。
+class SettingsTabContribution {
+  /// 页签标题解析器。每次重建页签栏都会调用一次，因此界面语言切换后标题
+  /// 能立即更新，不需要重新打开设置界面。
+  final String Function() title;
+
+  /// 页签内容构建器。
+  final WidgetBuilder builder;
+
+  const SettingsTabContribution({required this.title, required this.builder});
+}
+
 class SettingsScreen extends StatefulWidget {
   final VoidCallback onClose;
   final bool useOverlayScaffold;
   final bool showHeader;
   final bool showFooter;
+
+  /// 追加在引擎内建页签之后的项目自定义页签。
+  final List<SettingsTabContribution> extraTabs;
 
   const SettingsScreen({
     super.key,
@@ -26,6 +44,7 @@ class SettingsScreen extends StatefulWidget {
     this.useOverlayScaffold = true,
     this.showHeader = true,
     this.showFooter = true,
+    this.extraTabs = const [],
   });
 
   @override
@@ -245,7 +264,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildTabBar(SakiEngineConfig config, double scale) {
     final localization = LocalizationManager();
-    final tabTitles = _tabTitleKeys.map(localization.t).toList();
+    final tabTitles = <String>[
+      ..._tabTitleKeys.map(localization.t),
+      ...widget.extraTabs.map((tab) => tab.title()),
+    ];
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -281,6 +303,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildTabContent(SakiEngineConfig config, double scale) {
+    // 项目追加的页签排在内建页签之后。
+    final extraIndex = _selectedTabIndex - _tabTitleKeys.length;
+    if (extraIndex >= 0 && extraIndex < widget.extraTabs.length) {
+      return widget.extraTabs[extraIndex].builder(context);
+    }
+
     switch (_selectedTabIndex) {
       case 0: // 画面设置
         return const VideoSettingsTab();
