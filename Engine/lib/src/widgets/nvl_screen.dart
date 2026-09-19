@@ -210,8 +210,11 @@ class _NvlScreenState extends State<NvlScreen> with TickerProviderStateMixin imp
     _topBarController.dispose();
     _bottomBarController.dispose();
     _scrollController.dispose();
-    // 从推进管理器注销打字机
-    widget.progressionManager?.registerTypewriter(null);
+    // 从推进管理器注销打字机（仅当当前注册的仍是本实例时）
+    final typewriter = _currentTypewriterController;
+    if (typewriter != null) {
+      widget.progressionManager?.unregisterTypewriter(typewriter);
+    }
     _currentTypewriterController?.dispose();
     // 清理所有文本淡入动画控制器
     for (final controller in _textFadeControllers.values) {

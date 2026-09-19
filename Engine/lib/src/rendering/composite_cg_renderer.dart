@@ -632,11 +632,23 @@ class CompositeCgRenderer {
     return _preloadedImages.remove(cacheKey);
   }
 
+  /// 延迟一小段时间再释放已被移出缓存的纹理。
+  ///
+  /// 缓存淘汰会在 build / 剧情执行过程中同步发生，而光栅线程可能仍在绘制刚刚
+  /// 提交的同一张图。同步 dispose 就是"绘制已释放的 ui.Image"，在 Windows 上
+  /// 表现为 flutter_windows.dll 里的 0xc0000005 访问违例。与
+  /// CharacterCompositeCache 的处理保持一致。
+  static const Duration _deferredDisposeDelay = Duration(milliseconds: 250);
+
+  static void _disposeImageDeferred(ui.Image image) {
+    unawaited(Future<void>.delayed(_deferredDisposeDelay, image.dispose));
+  }
+
   static void _storePreloadedImage(String cacheKey, ui.Image image) {
     final previous = _preloadedImages.remove(cacheKey);
     if (previous != null && !identical(previous, image)) {
       try {
-        previous.dispose();
+        _disposeImageDeferred(previous);
       } catch (_) {}
     }
 
@@ -679,7 +691,10 @@ class CompositeCgRenderer {
     for (final key in keysToRemove) {
       final removed = _preloadedImages.remove(key);
       try {
-        removed?.dispose();
+        final image = removed;
+        if (image != null) {
+          _disposeImageDeferred(image);
+        }
       } catch (_) {}
     }
   }
@@ -737,7 +752,10 @@ class CompositeCgRenderer {
       return;
     }
 
-    final protectedKeys = _collectActiveGpuKeys();
+    final protectedKeys = _collectActiveGpuKeys()
+      // 正在被扁平化的结果不能淘汰：_flattenGpuResultToImage 还在用它的图层
+      // 纹理记录 Picture，此时释放纹理就可能绘制到已释放的图像上。
+      ..addAll(_gpuFlattenTasks.keys);
     final keysToRemove = <String>[];
     for (final key in _gpuResultCache.keys) {
       if (_gpuResultCache.length - keysToRemove.length <=
@@ -773,7 +791,10 @@ class CompositeCgRenderer {
     _completedPaths.remove(key);
     final preloaded = _preloadedImages.remove(key);
     try {
-      preloaded?.dispose();
+      final image = preloaded;
+      if (image != null) {
+        _disposeImageDeferred(image);
+      }
     } catch (_) {}
     _gpuCompositor.removeEntry(key);
   }
@@ -901,7 +922,7 @@ class CompositeCgRenderer {
 
     for (final image in _preloadedImages.values) {
       try {
-        image.dispose();
+        _disposeImageDeferred(image);
       } catch (_) {}
     }
     _preloadedImages.clear();

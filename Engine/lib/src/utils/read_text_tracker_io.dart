@@ -135,6 +135,12 @@ class ReadTextTracker extends ChangeNotifier {
     int scriptIndex,
     int contentHash,
   ) {
+    // 没有任何已读记录时无需做兼容扫描。旧记录的兼容查找要为每个候选索引
+    // 重新做一次 UTF-8 编码 + FNV 哈希，快进时会逐句触发，属于纯粹的浪费。
+    if (_stableReadHashes.isEmpty && _readDialogues.isEmpty) {
+      return false;
+    }
+
     final cached = _legacyIndexAgnosticMatchCache[contentHash];
     if (cached != null) {
       return cached;
@@ -148,6 +154,11 @@ class ReadTextTracker extends ChangeNotifier {
     )) {
       _legacyIndexAgnosticMatchCache[contentHash] = true;
       return true;
+    }
+    // 旧格式的标识符只有在确实读到过旧记录时才可能存在。
+    if (_readDialogues.isEmpty) {
+      _legacyIndexAgnosticMatchCache[contentHash] = false;
+      return false;
     }
     final firstIndex = scriptIndex > _legacyIndexScanRadius
         ? scriptIndex - _legacyIndexScanRadius

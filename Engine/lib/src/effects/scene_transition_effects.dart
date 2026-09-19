@@ -30,6 +30,7 @@ class SceneTransitionEffectManager {
 
   OverlayEntry? _overlayEntry;
   bool _isTransitioning = false;
+  Completer<void>? _completer;
 
   /// 执行场景转场
   /// [context] 用于创建覆盖层的上下文
@@ -39,6 +40,10 @@ class SceneTransitionEffectManager {
   /// [duration] 转场时长
   /// [oldBackground] 旧背景名称（用于diss效果）
   /// [newBackground] 新背景名称（用于diss效果）
+  ///
+  /// 约定：返回的 Future 必定完成，[onMidTransition] 必定被调用。剧情执行器
+  /// await 本方法之后才会启动恢复计时器，所以只要它悬挂、或者回调被丢弃，本次
+  /// 场景切换就再也不会提交，剧情会永久停住（无对白、点击无反应），只能强杀。
   Future<void> transition({
     required BuildContext context,
     required TransitionType transitionType,
@@ -48,144 +53,124 @@ class SceneTransitionEffectManager {
     String? newBackground,
     Future<ui.Image?> Function()? captureFrame,
   }) async {
-    //print('[SceneTransition] 请求${transitionType.name}转场，当前状态: isTransitioning=$_isTransitioning');
-    if (_isTransitioning) return;
+    if (_isTransitioning) {
+      // 上一个转场还在播放。不要静默丢弃本次请求：那会丢掉这次场景切换，而且
+      // 调用方永远等不到 onMidTransition。直接提交状态并立即报告完成。
+      _invokeSafely(onMidTransition);
+      return;
+    }
 
     // 对于diss转场，如果新旧背景相同，直接跳过转场
     if (transitionType == TransitionType.diss &&
         oldBackground == newBackground) {
-      //print('[SceneTransition] diss转场检测到相同背景($oldBackground -> $newBackground)，跳过转场效果');
-      onMidTransition();
+      _invokeSafely(onMidTransition);
       return;
     }
 
-    final overlay = Overlay.of(context);
-    // Resolve from the requesting scene; an OverlayEntry is built outside any
-    // theme overrides local to that scene.
-    final backdropColor = ScenePresentationTheme.backdropColorOf(context);
-    final transitionRect = transitionType == TransitionType.pixel ||
-            transitionType == TransitionType.diss
-        ? _resolveTransitionRect(context, overlay)
-        : null;
-
-    _isTransitioning = true;
-    //print('[SceneTransition] 开始${transitionType.name}转场，时长: ${duration.inMilliseconds}ms');
-
     final completer = Completer<void>();
-    final frameCapturer =
-        captureFrame ?? (() => _captureTransitionFrame(context));
-    // Pixel and dissolve transitions both need the complete rendered scene.
-    // Loading only the old background drops characters, items, filters and
-    // project layers before the visual transition has even started.
-    final oldFrame = transitionType == TransitionType.pixel ||
-            transitionType == TransitionType.diss
-        ? await frameCapturer()
-        : null;
+    _completer = completer;
+    _isTransitioning = true;
 
-    // 根据转场类型创建不同的覆盖层
-    Widget transitionWidget;
-    switch (transitionType) {
-      case TransitionType.fade:
-        transitionWidget = _FadeTransitionOverlay(
-          backdropColor: backdropColor,
-          duration: duration,
-          onMidTransition: onMidTransition,
-          onComplete: () {
-            //print('[SceneTransition] fade转场完成，移除覆盖层');
-            _removeOverlay();
-            _isTransitioning = false;
-            completer.complete();
-          },
-        );
-        break;
-      case TransitionType.diss:
-        transitionWidget = _DissTransitionOverlay(
-          backdropColor: backdropColor,
-          duration: duration,
-          onMidTransition: onMidTransition,
-          onComplete: () {
-            //print('[SceneTransition] diss转场完成，移除覆盖层');
-            _removeOverlay();
-            _isTransitioning = false;
-            completer.complete();
-          },
-          oldBackgroundName: oldBackground,
-          newBackgroundName: newBackground,
-          oldFrame: oldFrame,
-          captureFrame: oldFrame != null ? frameCapturer : null,
-        );
-        break;
-      case TransitionType.wipe:
-        transitionWidget = _WipeTransitionOverlay(
-          backdropColor: backdropColor,
-          duration: duration * 2, // wipe转场持续时间翻倍
-          onMidTransition: onMidTransition,
-          onComplete: () {
-            //print('[SceneTransition] wipe转场完成，移除覆盖层');
-            _removeOverlay();
-            _isTransitioning = false;
-            completer.complete();
-          },
-        );
-        break;
-      case TransitionType.blink:
-        transitionWidget = _BlinkTransitionOverlay(
-          backdropColor: backdropColor,
-          duration: duration,
-          onMidTransition: onMidTransition,
-          onComplete: () {
-            //print('[SceneTransition] blink转场完成，移除覆盖层');
-            _removeOverlay();
-            _isTransitioning = false;
-            completer.complete();
-          },
-        );
-        break;
-      case TransitionType.pixel:
-        transitionWidget = _PixelTransitionOverlay(
-          duration: duration,
-          oldFrame: oldFrame,
-          captureFrame: frameCapturer,
-          onMidTransition: onMidTransition,
-          onComplete: () {
-            //print('[SceneTransition] pixel转场完成，移除覆盖层');
-            _removeOverlay();
-            _isTransitioning = false;
-            completer.complete();
-          },
-        );
-        break;
-      default:
-        // 默认使用fade效果
-        transitionWidget = _FadeTransitionOverlay(
-          backdropColor: backdropColor,
-          duration: duration,
-          onMidTransition: onMidTransition,
-          onComplete: () {
-            //print('[SceneTransition] 默认fade转场完成，移除覆盖层');
-            _removeOverlay();
-            _isTransitioning = false;
-            completer.complete();
-          },
-        );
+    try {
+      final overlay = Overlay.of(context);
+      // Resolve from the requesting scene; an OverlayEntry is built outside any
+      // theme overrides local to that scene.
+      final backdropColor = ScenePresentationTheme.backdropColorOf(context);
+      final transitionRect = transitionType == TransitionType.pixel ||
+              transitionType == TransitionType.diss
+          ? _resolveTransitionRect(context, overlay)
+          : null;
+
+      final frameCapturer =
+          captureFrame ?? (() => _captureTransitionFrame(context));
+      // Pixel and dissolve transitions both need the complete rendered scene.
+      // Loading only the old background drops characters, items, filters and
+      // project layers before the visual transition has even started.
+      final oldFrame = transitionType == TransitionType.pixel ||
+              transitionType == TransitionType.diss
+          ? await frameCapturer()
+          : null;
+
+      // 根据转场类型创建不同的覆盖层
+      Widget transitionWidget;
+      switch (transitionType) {
+        case TransitionType.fade:
+          transitionWidget = _FadeTransitionOverlay(
+            backdropColor: backdropColor,
+            duration: duration,
+            onMidTransition: () => _invokeSafely(onMidTransition),
+            onComplete: _finishTransition,
+          );
+          break;
+        case TransitionType.diss:
+          transitionWidget = _DissTransitionOverlay(
+            backdropColor: backdropColor,
+            duration: duration,
+            onMidTransition: () => _invokeSafely(onMidTransition),
+            onComplete: _finishTransition,
+            oldBackgroundName: oldBackground,
+            newBackgroundName: newBackground,
+            oldFrame: oldFrame,
+            captureFrame: oldFrame != null ? frameCapturer : null,
+          );
+          break;
+        case TransitionType.wipe:
+          transitionWidget = _WipeTransitionOverlay(
+            backdropColor: backdropColor,
+            duration: duration * 2, // wipe转场持续时间翻倍
+            onMidTransition: () => _invokeSafely(onMidTransition),
+            onComplete: _finishTransition,
+          );
+          break;
+        case TransitionType.blink:
+          transitionWidget = _BlinkTransitionOverlay(
+            backdropColor: backdropColor,
+            duration: duration,
+            onMidTransition: () => _invokeSafely(onMidTransition),
+            onComplete: _finishTransition,
+          );
+          break;
+        case TransitionType.pixel:
+          transitionWidget = _PixelTransitionOverlay(
+            duration: duration,
+            oldFrame: oldFrame,
+            captureFrame: frameCapturer,
+            onMidTransition: () => _invokeSafely(onMidTransition),
+            onComplete: _finishTransition,
+          );
+          break;
+        default:
+          // 默认使用fade效果
+          transitionWidget = _FadeTransitionOverlay(
+            backdropColor: backdropColor,
+            duration: duration,
+            onMidTransition: () => _invokeSafely(onMidTransition),
+            onComplete: _finishTransition,
+          );
+      }
+
+      // 创建覆盖层
+      _overlayEntry = OverlayEntry(
+        builder: (context) {
+          if (transitionRect == null) {
+            return transitionWidget;
+          }
+          return Positioned.fromRect(
+            rect: transitionRect,
+            child: ClipRect(child: transitionWidget),
+          );
+        },
+      );
+
+      // 插入覆盖层
+      overlay.insert(_overlayEntry!);
+    } catch (error, stackTrace) {
+      // 帧捕获失败、取不到 Overlay（界面正在销毁）等异常绝不能让
+      // _isTransitioning 永远停在 true：那会丢弃之后所有转场，剧情再也无法恢复。
+      debugPrint('[SceneTransition] 创建${transitionType.name}转场失败: $error\n$stackTrace');
+      _invokeSafely(onMidTransition);
+      _finishTransition();
     }
-
-    // 创建覆盖层
-    _overlayEntry = OverlayEntry(
-      builder: (context) {
-        if (transitionRect == null) {
-          return transitionWidget;
-        }
-        return Positioned.fromRect(
-          rect: transitionRect,
-          child: ClipRect(child: transitionWidget),
-        );
-      },
-    );
-
-    // 插入覆盖层
-    //print('[SceneTransition] 插入${transitionType.name}转场覆盖层');
-    overlay.insert(_overlayEntry!);
 
     return completer.future;
   }
@@ -248,6 +233,26 @@ class SceneTransitionEffectManager {
         print('[PixelTransition] 捕获转场帧失败: $e');
       }
       return null;
+    }
+  }
+
+  /// 结束转场：清理覆盖层、复位状态并唤醒等待中的剧情执行器。
+  void _finishTransition() {
+    _removeOverlay();
+    _isTransitioning = false;
+    final completer = _completer;
+    _completer = null;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+  }
+
+  /// 转场回调里的异常不能向外冒泡，否则可能打断动画帧回调并让转场无法收尾。
+  void _invokeSafely(VoidCallback callback) {
+    try {
+      callback();
+    } catch (error, stackTrace) {
+      debugPrint('[SceneTransition] 转场回调异常: $error\n$stackTrace');
     }
   }
 

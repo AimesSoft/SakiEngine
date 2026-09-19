@@ -267,12 +267,16 @@ class TypewriterAnimationManager extends ChangeNotifier {
       }
     }
 
-    if (guard >= 10000) {
+    if (guard >= 10000 && _state == TypewriterState.typing) {
       _debugLog(
-        'typing guard reached, force break: '
+        'typing guard reached, force complete: '
         'progress=$_currentCharIndex/${_cleanedText.length}, '
         'segment=$_currentSegmentIndex/${_textSegments.length}',
       );
+      // 预算被耗尽说明这一帧一次性消化了大量积压时间（例如窗口被挂起后恢复）。
+      // 绝不能停留在 typing：那一行会永远显示不完整，玩家点击也只会停在"跳字"上。
+      _completeTyping();
+      return;
     }
 
     if (hasVisualUpdate && _state == TypewriterState.typing) {
@@ -350,6 +354,16 @@ class TypewriterAnimationManager extends ChangeNotifier {
       _currentCharIndex = _cleanedText.length;
       _state = TypewriterState.completed;
       _stopFrameLoop();
+      notifyListeners();
+      return;
+    }
+
+    if (_animationController == null) {
+      // 未 initialize()（拿不到 Ticker）时打字机永远不会推进：必须直接显示
+      // 完整文本，否则这一行对白会永远停在空白状态，玩家点什么都没有反应。
+      _displayedText = _cleanedText;
+      _currentCharIndex = _cleanedText.length;
+      _state = TypewriterState.completed;
       notifyListeners();
       return;
     }
@@ -502,7 +516,32 @@ class _TypewriterTextState extends State<TypewriterText>
   @override
   void didUpdateWidget(TypewriterText oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
+    // 控制器可能被换掉：NVL 每换一行都会传入新的 manager，并把旧的 dispose。
+    // 如果这里不跟着换，界面会继续渲染那个已经被销毁的旧 manager（永远是空白，
+    // 因为它从未开始打字），而 DialogueProgressionManager 里注册的却是新
+    // manager（一直 isTyping）。表现为"文字完全不显示 + 点击毫无反应"。
+    if (widget.controller != oldWidget.controller) {
+      _typewriterController.removeListener(_onTypewriterStateChanged);
+      if (widget.controller != null) {
+        _typewriterController = widget.controller!;
+        _isExternalController = true;
+      } else if (_isExternalController) {
+        // 由外部控制器改为自持：需要自己创建并初始化 ticker。
+        _typewriterController = TypewriterAnimationManager()..initialize(this);
+        _isExternalController = false;
+      }
+      _typewriterController.addListener(_onTypewriterStateChanged);
+      if (widget.autoStart) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _typewriterController.startTyping(widget.text);
+          }
+        });
+      }
+      return;
+    }
+
     if (widget.text != oldWidget.text) {
       if (widget.autoStart) {
         WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -18,6 +18,10 @@ extension _GameManagerLifecycle on GameManager {
   }
 
   Future<void> _startGameLifecycle(String scriptName) async {
+    // 新游戏开始：作废上一局可能残留的转场等待，避免旧看门狗在新时间线上恢复剧情。
+    _endSceneTransitionWait();
+    _isWaitingForTimer = false;
+
     // 平滑清除主菜单音乐
     await MusicManager().clearBackgroundMusic(
       fadeOut: true,
@@ -118,6 +122,8 @@ extension _GameManagerLifecycle on GameManager {
     // 重置所有处理标志，确保恢复状态时没有遗留的锁定状态
     _isProcessing = false;
     _isWaitingForTimer = false;
+    // 读档/回退会切换到新时间线，旧的转场等待与看门狗必须一并作废。
+    _endSceneTransitionWait();
 
     // 修复快进回退bug：强制重置快进状态为非快进
     // 回退到历史状态时，应该始终处于正常播放模式，而不是快进模式

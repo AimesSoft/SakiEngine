@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -389,9 +390,23 @@ class GpuImageCompositor {
     entry.refCount -= 1;
     if (entry.refCount <= 0) {
       _decodedLayerBytes -= entry.image.width * entry.image.height * 4;
-      entry.image.dispose();
+      _disposeImageDeferred(entry.image);
       _layerCache.remove(cacheKey);
     }
+  }
+
+  /// 延迟一小段时间再真正释放纹理。
+  ///
+  /// 缓存淘汰（LRU 限额）会在 build / 剧情执行过程中同步触发，而光栅线程可能
+  /// 仍在绘制上一帧提交的同一张纹理。此时同步 dispose 就是"绘制已释放的
+  /// ui.Image"——在 Windows 上表现为 flutter_windows.dll 里的 0xc0000005 访问
+  /// 违例。这里与 CharacterCompositeCache 的处理保持一致，给上一帧留出退场时间。
+  static const Duration _deferredDisposeDelay = Duration(milliseconds: 250);
+
+  void _disposeImageDeferred(ui.Image image) {
+    unawaited(
+      Future<void>.delayed(_deferredDisposeDelay, image.dispose),
+    );
   }
 
   _LayerHandle? _retainLayer(String cacheKey) {
@@ -431,7 +446,8 @@ class GpuImageCompositor {
 
     if (_layerCache.isNotEmpty) {
       for (final cacheEntry in _layerCache.values) {
-        cacheEntry.image.dispose();
+        // teardown 只给了一帧时间，光栅线程可能仍在使用这些纹理，必须延迟释放。
+        _disposeImageDeferred(cacheEntry.image);
       }
       _layerCache.clear();
     }

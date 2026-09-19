@@ -21,6 +21,12 @@ class CgScriptPreAnalyzer {
   int _generation = 0;
   bool _active = false;
 
+  /// 快进模式下同时只允许一个批量预合成在跑。
+  bool _skipBatchInFlight = false;
+
+  /// 快进模式下已经被批量预合成覆盖到的脚本索引。
+  int _skipBatchCoveredUntil = -1;
+
   /// 性能优化开关
   bool _useGpuAcceleration = true;
   bool _useBatchProcessing = true;
@@ -29,6 +35,8 @@ class CgScriptPreAnalyzer {
   void initialize() {
     _generation++;
     _active = true;
+    _skipBatchInFlight = false;
+    _skipBatchCoveredUntil = -1;
 
     // 预热GPU加速器
     if (_useGpuAcceleration) {
@@ -40,6 +48,8 @@ class CgScriptPreAnalyzer {
   void dispose() {
     _active = false;
     _generation++;
+    _skipBatchInFlight = false;
+    _skipBatchCoveredUntil = -1;
     cancelAllTasks();
   }
 
@@ -86,7 +96,20 @@ class CgScriptPreAnalyzer {
 
       // 快进模式下并行预合成，否则序列预合成
       if (isSkipping) {
-        await _batchPrecomposition(upcomingCgCommands);
+        // 快进时本方法会被每一个脚本节点调用（而且是 un-awaited），每次都会
+        // 预合成 50-200 个 CG。如果没有闸门，批次会不断叠加：合成结果不会进入
+        // CompositeCgRenderer 的限额 LRU，纹理会无上限增长，最终拖垮渲染。
+        // 因此同时只允许一个批次，并且已经覆盖过的范围不再重复预合成。
+        if (_skipBatchInFlight || currentIndex < _skipBatchCoveredUntil) {
+          return;
+        }
+        _skipBatchInFlight = true;
+        _skipBatchCoveredUntil = endIndex;
+        try {
+          await _batchPrecomposition(upcomingCgCommands);
+        } finally {
+          _skipBatchInFlight = false;
+        }
       } else {
         // 异步预合成CG图像
         for (final cgNode in upcomingCgCommands) {
