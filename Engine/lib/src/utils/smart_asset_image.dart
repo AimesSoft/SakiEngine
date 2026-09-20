@@ -15,6 +15,13 @@ class SmartAssetImage extends StatelessWidget {
   final bool? loop; // 新增：控制WebP动图是否循环播放
   final VoidCallback? onAnimationComplete; // 新增：动画完成回调
 
+  /// 解码尺寸上限，透传给底层 [Image] 的 `cacheWidth`/`cacheHeight`。
+  ///
+  /// 只对走标准解码器的格式（PNG / JPG / GIF / AVIF）生效；SVG 与 WebP
+  /// 动图由各自的组件渲染，不支持该参数。
+  final int? cacheWidth;
+  final int? cacheHeight;
+
   const SmartAssetImage({
     super.key,
     required this.assetName,
@@ -24,6 +31,8 @@ class SmartAssetImage extends StatelessWidget {
     this.errorWidget,
     this.loop,
     this.onAnimationComplete, // 新增
+    this.cacheWidth,
+    this.cacheHeight,
   });
 
   @override
@@ -83,6 +92,8 @@ class SmartAssetImage extends StatelessWidget {
               errorWidget: errorWidget,
               loop: loop, // 传递loop参数
               onAnimationComplete: onAnimationComplete, // 传递动画完成回调
+              cacheWidth: cacheWidth,
+              cacheHeight: cacheHeight,
             );
           }
         } else if (snapshot.hasError) {

@@ -28,6 +28,14 @@ class SmartImage extends StatelessWidget {
   final bool? loop; // 新增：控制WebP动图是否循环播放
   final VoidCallback? onAnimationComplete; // 新增：动画完成回调
 
+  /// 解码尺寸上限，透传给底层 [Image] 的 `cacheWidth`/`cacheHeight`。
+  ///
+  /// 标准解码路径（PNG / JPG / GIF / AVIF）都会生效，用于限制大图在
+  /// 网格/缩略图场景下的内存占用。WebP 动图由 [AnimatedWebPImage] 渲染，
+  /// 并复用按资源路径索引的帧缓存，尺寸无法逐处变化，故该参数对 WebP 无效。
+  final int? cacheWidth;
+  final int? cacheHeight;
+
   const SmartImage.asset(
     this.assetPath, {
     super.key,
@@ -37,6 +45,8 @@ class SmartImage extends StatelessWidget {
     this.errorWidget,
     this.loop,
     this.onAnimationComplete, // 新增
+    this.cacheWidth,
+    this.cacheHeight,
   });
 
   @override
@@ -86,6 +96,8 @@ class SmartImage extends StatelessWidget {
           fit: fit ?? BoxFit.contain,
           width: width,
           height: height,
+          cacheWidth: cacheWidth,
+          cacheHeight: cacheHeight,
           filterQuality: filterQuality,
           errorBuilder: errorWidget != null
               ? (context, error, stackTrace) => errorWidget!
@@ -101,6 +113,8 @@ class SmartImage extends StatelessWidget {
           width: width,
           height: height,
           errorWidget: errorWidget,
+          cacheWidth: cacheWidth,
+          cacheHeight: cacheHeight,
         );
       } else {
         return Image.asset(
@@ -108,6 +122,8 @@ class SmartImage extends StatelessWidget {
           fit: fit ?? BoxFit.contain,
           width: width,
           height: height,
+          cacheWidth: cacheWidth,
+          cacheHeight: cacheHeight,
           filterQuality: filterQuality,
           errorBuilder: errorWidget != null
               ? (context, error, stackTrace) => errorWidget!
@@ -127,6 +143,8 @@ class SmartImage extends StatelessWidget {
         fit: fit ?? BoxFit.contain,
         width: width,
         height: height,
+        cacheWidth: cacheWidth,
+        cacheHeight: cacheHeight,
         filterQuality: filterQuality,
         gaplessPlayback: true,
         errorBuilder: errorWidget != null
@@ -141,6 +159,8 @@ class SmartImage extends StatelessWidget {
       width: width,
       height: height,
       errorWidget: errorWidget,
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
     );
   }
 
@@ -188,6 +208,8 @@ class SmartImage extends StatelessWidget {
                 fit: fit ?? BoxFit.contain,
                 width: width,
                 height: height,
+                cacheWidth: cacheWidth,
+                cacheHeight: cacheHeight,
                 filterQuality: filterQuality,
                 errorBuilder: errorWidget != null
                     ? (context, error, stackTrace) => errorWidget!
@@ -203,6 +225,8 @@ class SmartImage extends StatelessWidget {
                 width: width,
                 height: height,
                 errorWidget: errorWidget,
+                cacheWidth: cacheWidth,
+                cacheHeight: cacheHeight,
               );
             } else {
               return Image.asset(
@@ -210,6 +234,8 @@ class SmartImage extends StatelessWidget {
                 fit: fit ?? BoxFit.contain,
                 width: width,
                 height: height,
+                cacheWidth: cacheWidth,
+                cacheHeight: cacheHeight,
                 filterQuality: filterQuality,
                 errorBuilder: errorWidget != null
                     ? (context, error, stackTrace) => errorWidget!
@@ -235,6 +261,8 @@ class SmartImage extends StatelessWidget {
                   fit: fit ?? BoxFit.contain,
                   isAntiAlias: true,
                   filterQuality: filterQuality,
+                  cacheWidth: cacheWidth,
+                  cacheHeight: cacheHeight,
                   errorBuilder: errorWidget != null
                       ? (context, error, stackTrace) => errorWidget!
                       : null,
@@ -248,12 +276,16 @@ class SmartImage extends StatelessWidget {
                       width: width,
                       height: height,
                       errorWidget: errorWidget,
+                      cacheWidth: cacheWidth,
+                      cacheHeight: cacheHeight,
                     )
                   : AvifImage.asset(
                       assetPath,
                       fit: fit ?? BoxFit.contain,
                       isAntiAlias: true,
                       filterQuality: filterQuality,
+                      cacheWidth: cacheWidth,
+                      cacheHeight: cacheHeight,
                       errorBuilder: errorWidget != null
                           ? (context, error, stackTrace) => errorWidget!
                           : null,
@@ -373,6 +405,8 @@ class SmartImage extends StatelessWidget {
       fit: fit ?? BoxFit.contain,
       width: width,
       height: height,
+      cacheWidth: cacheWidth,
+      cacheHeight: cacheHeight,
       filterQuality: ImageSamplingManager().resolveWidgetFilterQuality(
         defaultQuality: FilterQuality.high,
       ),

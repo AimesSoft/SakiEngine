@@ -12,6 +12,8 @@ Widget buildImageFile(
   double? width,
   double? height,
   Widget? errorWidget,
+  int? cacheWidth,
+  int? cacheHeight,
 }) {
   final filterQuality = ImageSamplingManager().resolveWidgetFilterQuality(
     defaultQuality: FilterQuality.high,
@@ -21,6 +23,8 @@ Widget buildImageFile(
     fit: fit ?? BoxFit.contain,
     width: width,
     height: height,
+    cacheWidth: cacheWidth,
+    cacheHeight: cacheHeight,
     filterQuality: filterQuality,
     errorBuilder: errorWidget != null
         ? (context, error, stackTrace) => errorWidget!
@@ -34,6 +38,8 @@ Widget buildAvifFile(
   double? width,
   double? height,
   Widget? errorWidget,
+  int? cacheWidth,
+  int? cacheHeight,
 }) {
   final filterQuality = ImageSamplingManager().resolveWidgetFilterQuality(
     defaultQuality: FilterQuality.high,
@@ -43,6 +49,8 @@ Widget buildAvifFile(
     fit: fit ?? BoxFit.contain,
     isAntiAlias: true,
     filterQuality: filterQuality,
+    cacheWidth: cacheWidth,
+    cacheHeight: cacheHeight,
     errorBuilder: errorWidget != null
         ? (context, error, stackTrace) => errorWidget!
         : null,
