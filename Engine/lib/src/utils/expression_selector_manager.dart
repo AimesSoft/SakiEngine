@@ -214,7 +214,9 @@ class ExpressionSelectorManager {
         }
       }
 
-      // 如果没找到完全匹配的resourceId，使用第一个非narrator角色作为fallback
+      // 如果没找到完全匹配的resourceId，使用第一个非narrator角色作为fallback。
+      // 脚本简写必须跟着这个角色走，不能沿用说话人的简写，否则"脚本简写"与
+      // "资源ID"会分别指向两个角色。
       for (final entry in gameState.characters.entries) {
         final characterState = entry.value;
         final resourceId = characterState.resourceId as String;
@@ -226,7 +228,10 @@ class ExpressionSelectorManager {
             currentPose: characterState.pose ?? 'pose1',
             currentExpression: characterState.expression ?? 'happy',
             currentAnimation: gameManager.currentDialogueAnimation,
-            scriptCharacterKey: characterKey, // 保留characterKey用于脚本修改
+            scriptCharacterKey: _aliasForResourceId(
+              resourceId,
+              entryKey: entry.key.toString(),
+            ),
           );
         }
       }
@@ -248,10 +253,36 @@ class ExpressionSelectorManager {
         currentPose: characterState.pose ?? 'pose1',
         currentExpression: characterState.expression ?? 'happy',
         currentAnimation: gameManager.currentDialogueAnimation,
+        scriptCharacterKey: _aliasForResourceId(
+          resourceId,
+          entryKey: entry.key.toString(),
+        ),
       );
     }
 
     return null;
+  }
+
+  /// 由资源ID反查脚本简写，保证简写与资源ID指向同一个角色。
+  ///
+  /// [entryKey] 是角色在舞台上的渲染槽 key，优先匹配槽位相同的配置，避免
+  /// 多个简写共用同一资源时的歧义。
+  String _aliasForResourceId(String resourceId, {String? entryKey}) {
+    final configs = gameManager.characterConfigs;
+    String? match;
+    for (final entry in configs.entries) {
+      if (entry.value.resourceId != resourceId) {
+        continue;
+      }
+      if (entryKey != null &&
+          entryKey.isNotEmpty &&
+          _targetAliasOrSlot(entry.key, entry.value) == entryKey) {
+        return entry.key;
+      }
+      match ??= entry.key;
+    }
+    // 配置里没有对应角色时（例如脚本直接写资源ID），保持资源ID作为写回键。
+    return match ?? resourceId;
   }
 
   SpeakerInfo? _findTailSpeakerInfo(dynamic gameState) {
@@ -454,10 +485,19 @@ class ExpressionSelectorManager {
         return;
       }
 
-      // 获取当前说话角色信息，确定用于脚本修改的characterKey
+      // 获取当前说话/可操作立绘信息，确定被改角色的脚本身份
       final speakerInfo = getCurrentSpeakerInfo();
-      final scriptCharacterKey = speakerInfo?.scriptCharacterKey ?? characterId;
-      final scriptWriteCharacterId = speakerInfo?.characterId ?? characterId;
+
+      // 被改角色必须解析成"脚本里能写、运行时能解析"的身份。旁白或玩家在
+      // 说话时，说话人身份属于它们，不能拿来当被改角色的身份，否则会把
+      // 立绘属性写到玩家名下。
+      final target = _resolveExpressionTarget(
+        speakerInfo: speakerInfo,
+        fallbackResourceId: characterId,
+        fallbackScriptKey: characterId,
+      );
+      final scriptCharacterKey = target.scriptKey;
+      final scriptWriteCharacterId = target.resourceId;
       if (kEngineDebugMode) {
         print('ExpressionSelector: 脚本角色Key: $scriptCharacterKey');
         print('ExpressionSelector: 脚本写入角色ID: $scriptWriteCharacterId');
@@ -467,18 +507,41 @@ class ExpressionSelectorManager {
         print('ExpressionSelector: 目标脚本文件名: $scriptFileForWrite');
       }
 
-      // 修改脚本文件 - 需要创建新的方法来同时修改pose和expression
-      final success = await ScriptContentModifier.modifyDialogueLineWithPose(
-        scriptFilePath: scriptPath,
-        targetDialogue: dialogue,
-        characterId: scriptCharacterKey,
-        writeCharacterId: scriptWriteCharacterId,
-        newPose: pose,
-        newExpression: expression,
-        updateAnimation: true,
-        newAnimation: animation,
-        targetLineNumber: sourceLine,
+      // 差分对象不一定正在说话：旁白、玩家或别的角色说话时，把差分写进当前
+      // 对话行会被解析成"说话人的属性"（甚至写到玩家 id 后面），属于错误
+      // 语义。只有说话人就是被改角色时才更新对话行。
+      final displayName = target.scriptKey ?? target.resourceId;
+      final useShowStatement = !_dialogueSpeakerMatchesCharacter(
+        target.scriptKey,
+        target.resourceId,
       );
+
+      final bool success;
+      if (useShowStatement) {
+        if (kEngineDebugMode) {
+          print('ExpressionSelector: 说话人不是被改角色，改写 show: $displayName');
+        }
+        success = await ScriptContentModifier.modifyCharacterShowNearDialogue(
+          scriptFilePath: scriptPath,
+          characterId: displayName,
+          pose: pose,
+          expression: expression,
+          targetLineNumber: sourceLine,
+          targetDialogue: dialogue,
+        );
+      } else {
+        success = await ScriptContentModifier.modifyDialogueLineWithPose(
+          scriptFilePath: scriptPath,
+          targetDialogue: dialogue,
+          characterId: scriptCharacterKey ?? displayName,
+          writeCharacterId: scriptWriteCharacterId,
+          newPose: pose,
+          newExpression: expression,
+          updateAnimation: true,
+          newAnimation: animation,
+          targetLineNumber: sourceLine,
+        );
+      }
 
       if (kEngineDebugMode) {
         print('ExpressionSelector: 脚本修改结果: $success');
@@ -487,7 +550,9 @@ class ExpressionSelectorManager {
       if (success) {
         final animationLabel = animation ?? '无动画';
         showNotificationCallback(
-          '已应用差分: $pose / $expression / $animationLabel',
+          useShowStatement
+              ? '已更新立绘: $displayName $pose $expression'
+              : '已应用差分: $pose / $expression / $animationLabel',
         );
 
         // 触发脚本重载
@@ -504,6 +569,85 @@ class ExpressionSelectorManager {
       }
       showNotificationCallback('处理表情变更失败: $e');
     }
+  }
+
+  /// 解析被改角色在脚本里的身份。
+  ///
+  /// [SpeakerInfo] 同时携带"说话人"与"当前可操作立绘"的信息：旁白或玩家在
+  /// 说话时，`characterId` 是它们的 narrator 资源而 `scriptCharacterKey` 是
+  /// 玩家别名，两者并不指向同一个角色。这里统一按"先看角色状态、再看配置"
+  /// 的顺序解析出一致的 (脚本简写, 资源ID)。
+  ({String? scriptKey, String resourceId}) _resolveExpressionTarget({
+    required SpeakerInfo? speakerInfo,
+    required String fallbackResourceId,
+    required String fallbackScriptKey,
+  }) {
+    if (speakerInfo == null) {
+      return (scriptKey: fallbackScriptKey, resourceId: fallbackResourceId);
+    }
+
+    final targetResourceId = speakerInfo.characterId.trim();
+    final configs = gameManager.characterConfigs;
+    final onStage = _findOnStageCharacterState(targetResourceId);
+
+    // 说话人就是台上这个角色时，`scriptCharacterKey` 才是权威简写。
+    if (onStage != null) {
+      final stateResourceId = (onStage.value.resourceId as String).trim();
+      if (stateResourceId == targetResourceId) {
+        return (
+          scriptKey: speakerInfo.scriptCharacterKey,
+          resourceId: stateResourceId,
+        );
+      }
+    }
+
+    // 否则以 resourceId 为准，避免把玩家的脚本简写安到别的角色身上。
+    for (final entry in configs.entries) {
+      if (entry.value.resourceId == targetResourceId) {
+        return (scriptKey: entry.key, resourceId: targetResourceId);
+      }
+    }
+    return (scriptKey: speakerInfo.scriptCharacterKey, resourceId: targetResourceId);
+  }
+
+  MapEntry<String, dynamic>? _findOnStageCharacterState(String resourceId) {
+    for (final entry in gameManager.currentState.characters.entries) {
+      if ((entry.value.resourceId as String).trim() == resourceId) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  /// 判断当前对话的说话人是否就是被改角色。
+  ///
+  /// 旁白（narrator）与玩家等不渲染立绘的说话人一律返回 false，让调用方改走
+  /// `show`，避免把立绘属性写到它们名下。
+  bool _dialogueSpeakerMatchesCharacter(
+    String? characterKey,
+    String resourceId,
+  ) {
+    final speakerAlias = gameManager.currentSpeakerAlias;
+    if (speakerAlias == null || speakerAlias.isEmpty) {
+      return false;
+    }
+
+    final configs = gameManager.characterConfigs;
+    final speakerConfig = configs[speakerAlias];
+    final speakerResourceId = speakerConfig?.resourceId ?? speakerAlias;
+    if (speakerResourceId == 'narrator') {
+      return false;
+    }
+
+    if (characterKey != null &&
+        characterKey.isNotEmpty &&
+        speakerAlias == characterKey) {
+      return true;
+    }
+    if (speakerResourceId == resourceId) {
+      return true;
+    }
+    return configs[characterKey]?.resourceId == speakerResourceId;
   }
 }
 

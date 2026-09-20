@@ -1,5 +1,7 @@
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 import 'package:sakiengine/src/sks_parser/sks_line_utils.dart';
+import 'package:sakiengine/src/utils/character_attribute_parser.dart';
+import 'package:sakiengine/src/utils/character_expression_layers.dart';
 
 class SksParser {
   static const bool _musicParseDiagnostics = bool.fromEnvironment(
@@ -820,14 +822,9 @@ class SksParser {
               // show character pose1 happy at pose an jump repeat 3
               final attributeParts = parts.sublist(2, atIndex);
               if (attributeParts.isNotEmpty) {
-                if (attributeParts.length == 1) {
-                  // 只有一个参数时，视为expression，pose使用默认值pose1
-                  expression = attributeParts[0];
-                } else {
-                  // 有两个或更多参数时，第一个是pose，第二个是expression
-                  pose = attributeParts[0];
-                  expression = attributeParts[1];
-                }
+                final resolved = _resolveCharacterAttributes(attributeParts);
+                pose = resolved.pose;
+                expression = resolved.expression;
               }
               if (atIndex + 1 < anIndex) {
                 position = parts[atIndex + 1];
@@ -836,33 +833,39 @@ class SksParser {
               // x happy an jump repeat 3
               final attributeParts = parts.sublist(2, anIndex);
               if (attributeParts.isNotEmpty) {
-                expression = attributeParts[0];
+                final resolved = _resolveCharacterAttributes(attributeParts);
+                pose = resolved.pose;
+                expression = resolved.expression;
               }
             }
           } else if (atIndex >= 0 && atIndex < endIndex) {
             // 原有at语法，无动画
             final attributeParts = parts.sublist(2, atIndex);
             if (attributeParts.isNotEmpty) {
-              if (attributeParts.length == 1) {
-                // 只有一个参数时，视为expression，pose使用默认值pose1
-                expression = attributeParts[0];
-              } else {
-                // 有两个或更多参数时，第一个是pose，第二个是expression
-                pose = attributeParts[0];
-                expression = attributeParts[1];
-              }
+              final resolved = _resolveCharacterAttributes(attributeParts);
+              pose = resolved.pose;
+              expression = resolved.expression;
             }
             if (atIndex + 1 < endIndex) {
               position = parts[atIndex + 1];
             }
           } else {
-            // 原有pose:语法
+            // 没有 at/an/repeat：同时支持 `pose:1` 前缀写法和空格分隔的普通属性
+            // （`show xiayo1 pose1 happy mask`）。
+            final plainAttributes = <String>[];
             for (int i = 2; i < endIndex; i++) {
               if (parts[i].startsWith('pose:')) {
                 pose = parts[i].substring(5);
               } else if (parts[i].startsWith('expression:')) {
                 expression = parts[i].substring(11);
+              } else {
+                plainAttributes.add(parts[i]);
               }
+            }
+            if (plainAttributes.isNotEmpty) {
+              final resolved = _resolveCharacterAttributes(plainAttributes);
+              pose = resolved.pose ?? pose;
+              expression = resolved.expression ?? expression;
             }
           }
 
@@ -944,13 +947,15 @@ class SksParser {
 
           if (!hasPosePrefix && attributeParts.isNotEmpty) {
             if (hasPositionModifier && attributeParts.length >= 2) {
+              // `pose:` / `expression:` 之外的位置语法：第一个是姿态，其余是差分。
               pose = attributeParts[0];
-              expression = attributeParts[1];
-            } else if (hasAnimationModifier) {
-              expression = attributeParts[0];
+              expression = _encodeExpressionTokens(
+                attributeParts.sublist(1),
+              );
             } else {
               // 保持既有差分语义，但不再把 `with diss` 拼进差分名。
-              expression = attributeParts.join(' ');
+              // 多层差分（`cg x happy --mask`）在这里归一成规范组合格式。
+              expression = _encodeExpressionTokens(attributeParts);
             }
           }
 
@@ -1206,6 +1211,7 @@ class SksParser {
 
     ({
       String? pose,
+      String? expression,
       String? position,
       String? inlineApiToken,
       String? animation,
@@ -1214,6 +1220,7 @@ class SksParser {
     parseTimedPrefixAttributes(String raw) {
       final result = (
         pose: null as String?,
+        expression: null as String?,
         position: null as String?,
         inlineApiToken: null as String?,
         animation: null as String?,
@@ -1272,18 +1279,17 @@ class SksParser {
         regularAttrs = attrs.sublist(0, endIndex);
       }
 
-      String? pose;
+      final resolvedAttrs = _resolveCharacterAttributes(regularAttrs);
       String? inlineApiToken;
       for (final attr in regularAttrs) {
         if (_isInlineApiToken(attr)) {
           inlineApiToken = attr;
-        } else if (attr.startsWith('pose') || attr.contains('pose')) {
-          pose = attr;
         }
       }
 
       return (
-        pose: pose,
+        pose: resolvedAttrs.pose,
+        expression: resolvedAttrs.expression,
         position: position,
         inlineApiToken: inlineApiToken,
         animation: animation,
@@ -1317,6 +1323,7 @@ class SksParser {
       final afterAttrs = parseTimedPrefixAttributes(afterBracketAttrsRaw);
 
       final pose = afterAttrs.pose ?? beforeAttrs.pose;
+      final expression = afterAttrs.expression ?? beforeAttrs.expression;
       final position = afterAttrs.position ?? beforeAttrs.position;
       final inlineApiToken =
           afterAttrs.inlineApiToken ?? beforeAttrs.inlineApiToken;
@@ -1329,6 +1336,7 @@ class SksParser {
         character: character,
         dialogue: dialogue,
         pose: pose,
+        expression: expression,
         inlineApiToken: inlineApiToken,
         dialogueTag: tailMeta.dialogueTag,
         tailCharacter: tailMeta.tailCharacter,
@@ -1435,14 +1443,13 @@ class SksParser {
               regularAttrs = attrs.sublist(0, endIndex);
             }
 
-            // 解析普通属性
+            // 解析普通属性：pose + 多层差分
+            final resolvedAttrs = _resolveCharacterAttributes(regularAttrs);
+            pose = resolvedAttrs.pose;
+            expression = resolvedAttrs.expression;
             for (final attr in regularAttrs) {
               if (_isInlineApiToken(attr)) {
                 inlineApiToken = attr;
-              } else if (attr.startsWith('pose') || attr.contains('pose')) {
-                pose = attr;
-              } else {
-                expression = attr;
               }
             }
           }
@@ -1594,14 +1601,13 @@ class SksParser {
         regularAttrs = attrs.sublist(0, endIndex);
       }
 
-      // 解析普通属性
+      // 解析普通属性：pose + 多层差分
+      final resolvedAttrs = _resolveCharacterAttributes(regularAttrs);
+      pose = resolvedAttrs.pose;
+      expression = resolvedAttrs.expression;
       for (final attr in regularAttrs) {
         if (_isInlineApiToken(attr)) {
           inlineApiToken = attr;
-        } else if (attr.startsWith('pose') || attr.contains('pose')) {
-          pose = attr;
-        } else {
-          expression = attr;
         }
       }
 
@@ -1643,11 +1649,43 @@ class SksParser {
     );
   }
 
-  bool _isInlineApiToken(String token) {
-    final trimmed = token.trim();
-    if (trimmed.isEmpty) {
-      return false;
+  static bool _isInlineApiToken(String token) =>
+      CharacterAttributeParser.isInlineApiToken(token);
+
+  /// 把角色属性归并成 pose + 多层差分表达式。
+  ///
+  /// 规则集中在 [CharacterAttributeParser]，脚本改写使用同一套逻辑。
+  static ({String? pose, String? expression}) _resolveCharacterAttributes(
+    Iterable<String> attributes,
+  ) {
+    final tokens = [
+      for (final attribute in attributes)
+        if (attribute.trim().isNotEmpty) attribute.trim(),
+    ];
+
+    // yuyu 兼容状态串（`yu_...`）是已经解析好的姿态状态，跟在它后面的
+    // `__none` 是"无表情"哨兵：这一对按 pose/expression 原样保留，兼容映射的
+    // 组合表才能命中。普通差分 token 不走这条路径。
+    if (tokens.isNotEmpty &&
+        tokens.first.startsWith(CharacterExpressionLayers.opaqueStatePrefix)) {
+      final pose = tokens.first;
+      final expression = _encodeExpressionTokens(
+        tokens
+            .skip(1)
+            .where((token) => !CharacterAttributeParser.isPoseToken(token)),
+      );
+      return (pose: pose, expression: expression);
     }
-    return trimmed.toLowerCase().startsWith('api');
+
+    final resolved = CharacterAttributeParser.resolve(attributes);
+    return (pose: resolved.pose, expression: resolved.expression);
+  }
+
+  /// 把一组差分 token 编码成规范表达式；空集合返回 null。
+  static String? _encodeExpressionTokens(Iterable<String> tokens) {
+    final encoded = CharacterExpressionLayers.fromTokens(
+      tokens,
+    ).encodeScriptForm();
+    return encoded.isEmpty ? null : encoded;
   }
 }

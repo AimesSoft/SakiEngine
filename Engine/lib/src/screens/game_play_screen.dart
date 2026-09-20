@@ -14,6 +14,7 @@ import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/game/save_load_manager.dart';
 import 'package:sakiengine/src/game/screenshot_generator.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
+import 'package:sakiengine/src/utils/character_expression_layers.dart';
 import 'package:sakiengine/src/screens/save_load_screen.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 import 'package:sakiengine/src/widgets/choice_menu.dart';
@@ -1563,7 +1564,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
                                         ))
                                   Positioned.fill(
                                     child: IgnorePointer(
-                                      child: _FilteredBackground(
+                                      child: SceneFilteredBackground(
                                         filter: gameState.sceneFilter!,
                                         child: const SizedBox.expand(),
                                       ),
@@ -1939,7 +1940,7 @@ class _GamePlayScreenState extends State<GamePlayScreen>
 
     // 应用场景滤镜
     if (sceneFilter != null) {
-      backgroundWidget = _FilteredBackground(
+      backgroundWidget = SceneFilteredBackground(
         filter: sceneFilter,
         child: backgroundWidget,
       );
@@ -2277,17 +2278,22 @@ class _CompositeCharacterWidgetState extends State<_CompositeCharacterWidget> {
   }
 }
 
-class _FilteredBackground extends StatefulWidget {
+/// Animated scene filter shared by the background and full-scene render paths.
+class SceneFilteredBackground extends StatefulWidget {
   final SceneFilter filter;
   final Widget child;
 
-  const _FilteredBackground({required this.filter, required this.child});
+  const SceneFilteredBackground({
+    super.key,
+    required this.filter,
+    required this.child,
+  });
 
   @override
-  State<_FilteredBackground> createState() => _FilteredBackgroundState();
+  State<SceneFilteredBackground> createState() => _SceneFilteredBackgroundState();
 }
 
-class _FilteredBackgroundState extends State<_FilteredBackground>
+class _SceneFilteredBackgroundState extends State<SceneFilteredBackground>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
 
@@ -2296,7 +2302,7 @@ class _FilteredBackgroundState extends State<_FilteredBackground>
     super.initState();
     if (_GamePlayScreenState._fxDiagLogs) {
       debugPrint(
-        '[FX_DIAG] _FilteredBackground init '
+        '[FX_DIAG] SceneFilteredBackground init '
         'filter=${widget.filter.type}/${widget.filter.intensity}/${widget.filter.animation}/${widget.filter.duration}',
       );
     }
@@ -2305,18 +2311,16 @@ class _FilteredBackgroundState extends State<_FilteredBackground>
       vsync: this,
     );
 
-    if (widget.filter.animation != AnimationType.none) {
-      _animationController.repeat();
-    }
+    _startFilterAnimation();
   }
 
   @override
-  void didUpdateWidget(_FilteredBackground oldWidget) {
+  void didUpdateWidget(SceneFilteredBackground oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.filter != widget.filter) {
       if (_GamePlayScreenState._fxDiagLogs) {
         debugPrint(
-          '[FX_DIAG] _FilteredBackground update '
+          '[FX_DIAG] SceneFilteredBackground update '
           'old=${oldWidget.filter.type}/${oldWidget.filter.intensity}/${oldWidget.filter.animation}/${oldWidget.filter.duration} '
           'new=${widget.filter.type}/${widget.filter.intensity}/${widget.filter.animation}/${widget.filter.duration}',
         );
@@ -2324,11 +2328,19 @@ class _FilteredBackgroundState extends State<_FilteredBackground>
       _animationController.duration = Duration(
         milliseconds: (widget.filter.duration * 1000).round(),
       );
-      if (widget.filter.animation != AnimationType.none) {
+      _startFilterAnimation();
+    }
+  }
+
+  void _startFilterAnimation() {
+    switch (widget.filter.animation) {
+      case AnimationType.fade:
+        _animationController.forward(from: 0);
+      case AnimationType.pulse:
+      case AnimationType.wave:
         _animationController.repeat();
-      } else {
+      case AnimationType.none:
         _animationController.stop();
-      }
     }
   }
 

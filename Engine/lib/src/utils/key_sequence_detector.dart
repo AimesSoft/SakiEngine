@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/game/game_script_localization.dart';
 import 'package:sakiengine/src/localization/script_text_localizer.dart';
+import 'package:sakiengine/src/utils/character_attribute_parser.dart';
 
 /// 按键序列检测器
 /// 用于检测特定按键序列，如连续按下 c-o-n-s-o-l-e
@@ -432,19 +433,11 @@ class ScriptContentModifier {
     String? expression;
     final extraTokens = <String>[];
     if (baseTokens.isNotEmpty) {
-      if (baseTokens.length == 1) {
-        if (baseTokens[0].toLowerCase().startsWith('pose')) {
-          pose = baseTokens[0];
-        } else {
-          expression = baseTokens[0];
-        }
-      } else {
-        pose = baseTokens[0];
-        expression = baseTokens[1];
-        if (baseTokens.length > 2) {
-          extraTokens.addAll(baseTokens.sublist(2));
-        }
-      }
+      // 与 SKS 解析器共用同一套规则：姿态取包含 pose 的最后一个 token，
+      // 其余 token 归并成多层差分表达式。
+      final resolved = CharacterAttributeParser.resolve(baseTokens);
+      pose = resolved.pose;
+      expression = resolved.expression;
     }
 
     final nextPose = newPose ?? pose;
@@ -455,7 +448,10 @@ class ScriptContentModifier {
       nextTail.add(nextPose);
     }
     if (nextExpression != null && nextExpression.isNotEmpty) {
-      nextTail.add(nextExpression);
+      // 多层差分写回时保持空格分层语法：`happy mask`。
+      nextTail.addAll(
+        CharacterAttributeParser.expressionTokens(nextExpression),
+      );
     }
     if (extraTokens.isNotEmpty) {
       nextTail.addAll(extraTokens);
@@ -770,26 +766,11 @@ class ScriptContentModifier {
       String? pose;
       String? expression;
       if (baseTokens.isNotEmpty) {
-        var lastPoseIndex = -1;
-        for (var j = 0; j < baseTokens.length; j++) {
-          if (baseTokens[j].toLowerCase().startsWith('pose')) {
-            lastPoseIndex = j;
-          }
-        }
-
-        if (lastPoseIndex >= 0) {
-          pose = baseTokens[lastPoseIndex];
-          if (lastPoseIndex + 1 < baseTokens.length) {
-            expression = baseTokens[lastPoseIndex + 1];
-          } else if (lastPoseIndex > 0) {
-            expression = baseTokens[lastPoseIndex - 1];
-          }
-        } else if (baseTokens.length == 1) {
-          expression = baseTokens[0];
-        } else {
-          pose = baseTokens[0];
-          expression = baseTokens[1];
-        }
+        // 与 SKS 解析器共用同一套规则：包含 pose 的最后一个 token 是姿态，
+        // 其余按出现顺序归并成多层差分（happy mask -> happy + 第二层 mask）。
+        final resolved = CharacterAttributeParser.resolve(baseTokens);
+        pose = resolved.pose;
+        expression = resolved.expression;
       }
 
       return (
@@ -827,7 +808,10 @@ class ScriptContentModifier {
           rebuiltPrefix.add(pose);
         }
         if (expression.isNotEmpty) {
-          rebuiltPrefix.add(expression);
+          // 多层差分写回时保持空格分层语法：`happy mask`。
+          rebuiltPrefix.addAll(
+            CharacterAttributeParser.expressionTokens(expression),
+          );
         }
         if (parsed.position != null && parsed.position!.trim().isNotEmpty) {
           rebuiltPrefix
@@ -1560,6 +1544,296 @@ class ScriptContentModifier {
       }
       return false;
     }
+  }
+
+  /// 以当前对话行为锚点写入/更新角色的 `show` 语句。
+  ///
+  /// 差分修改的对象不一定正在说话：旁白、玩家或别的角色在说话时，把差分写进
+  /// 当前对话行会被解析成"说话人的属性"，属于错误语义。这种情况下改用
+  /// `show`，并且：
+  /// 1. 若目标行上方紧邻命令块里已有同一角色的 `show`，只更新那一条；
+  /// 2. 否则在目标行前插入新的 `show`。
+  ///
+  /// [characterId] 是写入脚本的角色简写（alias），引擎会在运行时解析成
+  /// resourceId。
+  static Future<bool> modifyCharacterShowNearDialogue({
+    required String scriptFilePath,
+    required String characterId,
+    required String pose,
+    required String expression,
+    String? animation,
+    int? targetLineNumber,
+    String? targetDialogue,
+  }) async {
+    try {
+      final character = characterId.trim();
+      final poseToken = pose.trim();
+      final expressionToken = expression.trim();
+      if (character.isEmpty ||
+          poseToken.isEmpty ||
+          expressionToken.contains('\n') ||
+          character.contains(RegExp(r'\s'))) {
+        return false;
+      }
+
+      final file = File(scriptFilePath);
+      if (!await file.exists()) {
+        return false;
+      }
+      final lines = (await file.readAsString()).split('\n');
+      if (lines.isEmpty) {
+        return false;
+      }
+
+      // 行号只在确实命中目标对话时才作为锚点；否则回退到全文定位，避免把
+      // show 插到脚本末尾。
+      int? anchorIndex;
+      final lineNumber = targetLineNumber;
+      if (lineNumber != null &&
+          lineNumber > 0 &&
+          lineNumber <= lines.length &&
+          (targetDialogue == null ||
+              targetDialogue.trim().isEmpty ||
+              _lineHasTargetDialogue(lines[lineNumber - 1], targetDialogue))) {
+        anchorIndex = lineNumber - 1;
+      } else if (targetDialogue != null && targetDialogue.trim().isNotEmpty) {
+        for (int i = 0; i < lines.length; i++) {
+          if (_lineHasTargetDialogue(lines[i], targetDialogue)) {
+            anchorIndex = i;
+            break;
+          }
+        }
+      }
+      final targetIndex = anchorIndex ?? lines.length;
+
+      // 只在目标行上方的紧邻命令块里找同角色的 show，避免误改很远处那条。
+      // 命令块里可能夹着别的命令（`play sound` 之类），需要一路往上看完。
+      int? replaceIndex;
+      if (anchorIndex != null) {
+        for (int i = targetIndex - 1; i >= 0; i--) {
+          final trimmed = lines[i].trim();
+          if (trimmed.isEmpty ||
+              trimmed.startsWith('//') ||
+              trimmed.startsWith('#') ||
+              trimmed.startsWith('label ')) {
+            continue;
+          }
+          if (_isDialogueLine(trimmed) || _isBlockBoundaryLine(trimmed)) {
+            break;
+          }
+          final parsed = _parseShowLine(trimmed);
+          if (parsed != null &&
+              _isCharacterIdCompatible(
+                lineCharacterId: parsed.character,
+                expectedCharacterId: character,
+              )) {
+            replaceIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (replaceIndex != null) {
+        final originalLine = lines[replaceIndex];
+        final changed = _rebuildShowLine(
+          originalLine.trim(),
+          pose: poseToken,
+          expression: expressionToken,
+          animation: animation,
+        );
+        if (changed == null) {
+          return false;
+        }
+        lines[replaceIndex] = originalLine.replaceFirst(
+          originalLine.trim(),
+          changed,
+        );
+      } else {
+        lines.insert(
+          targetIndex.clamp(0, lines.length),
+          _buildShowLine(
+            character: character,
+            pose: poseToken,
+            expression: expressionToken,
+            animation: animation,
+          ),
+        );
+      }
+
+      await _writeScriptFile(file, lines.join('\n'));
+      return true;
+    } catch (e) {
+      if (kEngineDebugMode) {
+        print('ScriptModifier: 写入角色 show 失败: $e');
+      }
+      return false;
+    }
+  }
+
+  static final RegExp _showLinePattern = RegExp(r'^show\s+(\S+)(.*)$');
+
+  /// 判断一行是否是对话行（`角色 "..."` 或 `"..."` 旁白/尾语法）。
+  static bool _isDialogueLine(String trimmed) {
+    if (trimmed.isEmpty) {
+      return false;
+    }
+    if (trimmed.startsWith('"')) {
+      return true;
+    }
+    final quoteIndex = trimmed.indexOf('"');
+    if (quoteIndex <= 0) {
+      return false;
+    }
+    final firstToken = trimmed.substring(0, quoteIndex).trim().split(' ').first;
+    // 命令关键字开头的行不算对话。
+    const commands = {
+      'show',
+      'hide',
+      'scene',
+      'movie',
+      'cg',
+      'play',
+      'stop',
+      'jump',
+      'label',
+      'menu',
+      'if',
+      'endif',
+      'nvl',
+      'nvlm',
+      'canvas',
+      'anime',
+      'pause',
+      'voice',
+      'api',
+    };
+    return !commands.contains(firstToken);
+  }
+
+  /// 判断一行是否意味着当前位置已经离开了同一个连续命令块。
+  static bool _isBlockBoundaryLine(String trimmed) {
+    for (final prefix in const [
+      'scene ',
+      'movie ',
+      'jump ',
+      'call ',
+      'label ',
+      'menu',
+      'return',
+    ]) {
+      if (trimmed == prefix.trim() || trimmed.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// 解析 `show <角色> [pose] [差分] [at 位置] [an 动画] [repeat n]`。
+  static ({String character, String attributes})? _parseShowLine(String line) {
+    final match = _showLinePattern.firstMatch(line.trim());
+    if (match == null) {
+      return null;
+    }
+    return (
+      character: match.group(1)!,
+      attributes: match.group(2)?.trim() ?? '',
+    );
+  }
+
+  /// 用新的姿态/差分重建一条已有的 show 行。
+  ///
+  /// 位置、动画、repeat 等其它参数原样保留；[animation] 显式给出时才覆盖。
+  static String? _rebuildShowLine(
+    String line, {
+    required String pose,
+    required String expression,
+    String? animation,
+  }) {
+    final parsed = _parseShowLine(line);
+    if (parsed == null) {
+      return null;
+    }
+
+    final tokens = parsed.attributes
+        .split(RegExp(r'\s+'))
+        .where((token) => token.isNotEmpty)
+        .toList();
+
+    String? position;
+    String? existingAnimation;
+    String? repeatRaw;
+    final baseTokens = <String>[];
+    for (var i = 0; i < tokens.length; i++) {
+      final lower = tokens[i].toLowerCase();
+      if (lower == 'at' && i + 1 < tokens.length) {
+        position = tokens[i + 1];
+        i++;
+        continue;
+      }
+      if (lower == 'an' && i + 1 < tokens.length) {
+        existingAnimation = tokens[i + 1];
+        i++;
+        continue;
+      }
+      if (lower == 'repeat' && i + 1 < tokens.length) {
+        repeatRaw = tokens[i + 1];
+        i++;
+        continue;
+      }
+      baseTokens.add(tokens[i]);
+    }
+
+    // 保留行内既有的动画，除非调用方明确要求替换。
+    final nextAnimation = animation?.trim().isNotEmpty == true
+        ? animation!.trim()
+        : existingAnimation;
+
+    return _buildShowLine(
+      character: parsed.character,
+      pose: pose,
+      expression: expression,
+      position: position,
+      animation: nextAnimation,
+      repeatRaw: repeatRaw,
+    );
+  }
+
+  static String _buildShowLine({
+    required String character,
+    required String pose,
+    required String expression,
+    String? position,
+    String? animation,
+    String? repeatRaw,
+  }) {
+    final tokens = <String>[
+      'show',
+      character,
+      pose,
+      ...CharacterAttributeParser.expressionTokens(expression),
+    ];
+    final positionToken = position?.trim();
+    if (positionToken != null && positionToken.isNotEmpty) {
+      tokens
+        ..add('at')
+        ..add(positionToken);
+    }
+    final animationToken = animation?.trim();
+    if (animationToken != null && animationToken.isNotEmpty) {
+      tokens
+        ..add('an')
+        ..add(animationToken);
+    }
+    final repeatToken = repeatRaw?.trim();
+    if (repeatToken != null &&
+        repeatToken.isNotEmpty &&
+        animationToken != null &&
+        animationToken.isNotEmpty) {
+      tokens
+        ..add('repeat')
+        ..add(repeatToken);
+    }
+    return tokens.join(' ');
   }
 
   /// 写入脚本文件，使用多种方法确保成功

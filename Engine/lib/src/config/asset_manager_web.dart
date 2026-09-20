@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:sakiengine/src/utils/foundation_compat.dart';
+import 'package:sakiengine/src/utils/character_expression_layers.dart';
+import 'package:sakiengine/src/utils/character_expression_resolver.dart';
 import 'package:flutter/services.dart' show rootBundle, AssetManifest;
 import 'package:path/path.dart' as p;
 import 'package:sakiengine/src/game/game_script_localization.dart';
@@ -407,25 +409,78 @@ class AssetManager {
     return null;
   }
 
-  /// Web平台返回空列表
+  /// 扫描角色目录，返回去掉了 `<characterId>-` 前缀的图层名。
+  ///
+  /// Web 端从 AssetManifest 读取，因此可以像桌面端一样拿到 `pose1`、
+  /// `happy`、`--mask` 这些图层名，供差分分层和选择器使用。
+  static Future<List<String>> _scanCharacterLayers(String characterId) async {
+    final availableLayers = <String>[];
+    final manager = AssetManager();
+    await manager._loadManifest();
+    final manifest = manager._assetManifest;
+    if (manifest == null) {
+      return availableLayers;
+    }
+
+    const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.avif'];
+    final prefix = '$characterId-';
+    final seen = <String>{};
+
+    for (final assetPath in manifest.keys) {
+      final lowerPath = assetPath.toLowerCase();
+      if (!lowerPath.contains('assets/images/characters/')) {
+        continue;
+      }
+      if (!imageExtensions.any(lowerPath.endsWith)) {
+        continue;
+      }
+      final stem = p.basenameWithoutExtension(assetPath);
+      if (!stem.startsWith(prefix)) {
+        continue;
+      }
+      // 按 `$characterId-` 截断会把 `xiayo1--mask` 剩下 `-mask`，这里恢复出
+      // `--mask`，第二层的层级信息才不会丢。
+      final layerName = CharacterExpressionLayers.canonicalLayerToken(
+        stem,
+        characterId,
+      );
+      if (layerName.isNotEmpty && seen.add(layerName)) {
+        availableLayers.add(layerName);
+      }
+    }
+
+    availableLayers.sort();
+    return availableLayers;
+  }
+
   static Future<List<String>> getAvailableCharacterLayersRecursive(
     String characterId,
   ) async {
-    return <String>[];
+    return _scanCharacterLayers(characterId);
   }
 
-  /// Web平台返回空列表
   static Future<List<String>> getAvailableCharacterLayers(
     String characterId,
   ) async {
-    return <String>[];
+    return _scanCharacterLayers(characterId);
   }
 
-  /// Web平台返回null
+  /// 返回该层按字母序第一个可用图层名（不含层级前缀）。
   static Future<String?> getDefaultLayerForLevel(
     String characterId,
     int layerLevel,
   ) async {
-    return null;
+    final availableLayers = await _scanCharacterLayers(characterId);
+    final name = CharacterExpressionResolver.defaultLayerNameForLevel(
+      availableLayers,
+      layerLevel,
+    );
+    if (name == null || name.isEmpty) {
+      return null;
+    }
+    return CharacterExpressionLayers.normalizedLayerToken(
+      name,
+      level: layerLevel,
+    );
   }
 }

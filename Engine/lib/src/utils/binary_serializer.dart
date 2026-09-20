@@ -3,11 +3,12 @@ import 'dart:typed_data';
 import 'dart:math' show min;
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
+import 'package:sakiengine/src/effects/scene_filter.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 
 /// 二进制序列化工具类，用于将游戏数据序列化为二进制格式
 class BinarySerializer {
-  static const int _version = 19; // NVL presentation and layout state
+  static const int _version = 20; // Executed music state and scene filter
   static const String _magicNumber = 'SAKI';
 
   static Uint8List serializeGameStateSnapshot(GameStateSnapshot snapshot) =>
@@ -285,6 +286,22 @@ class BinarySerializer {
     buffer.addAll(_writeNullableString(state.nvlPresentation));
     buffer.addAll(_writeNullableString(state.nvlLayout));
     buffer.add(state.nvlAccumulate ? 1 : 0);
+    buffer.add(state.hasMusicState ? 1 : 0);
+    buffer.addAll(_writeNullableString(state.currentMusicRegion?.musicFile));
+    if (state.currentMusicRegion case final music?) {
+      buffer.addAll(_writeInt32(music.startScriptIndex));
+      buffer.addAll(_writeNullableString(music.endScriptIndex?.toString()));
+    }
+    final filter = state.sceneFilter;
+    buffer.addAll(
+      _writeNullableString(
+        filter == null
+            ? null
+            : '${filter.type.name.toLowerCase()} intensity:${filter.intensity} '
+                  'animation:${filter.animation.name} duration:${filter.duration}'
+                  '${filter.color == null ? '' : ' color:#${filter.color!.toARGB32().toRadixString(16).padLeft(8, '0')}'}',
+      ),
+    );
 
     return Uint8List.fromList(buffer);
   }
@@ -403,6 +420,23 @@ class BinarySerializer {
     final nvlAccumulate = version != null && version >= 19
         ? reader.readByte() == 1
         : true;
+    final hasMusicState = version != null && version >= 20
+        ? reader.readByte() == 1
+        : false;
+    MusicRegion? music;
+    SceneFilter? sceneFilter;
+    if (version != null && version >= 20) {
+      final musicFile = reader.readNullableString();
+      if (musicFile != null) {
+        music = MusicRegion(
+          musicFile: musicFile,
+          startScriptIndex: reader.readInt32(),
+          endScriptIndex: int.tryParse(reader.readNullableString() ?? ''),
+        );
+      }
+      final filter = reader.readNullableString();
+      sceneFilter = filter == null ? null : SceneFilter.fromString(filter);
+    }
 
     return GameState(
       background: background,
@@ -423,6 +457,9 @@ class BinarySerializer {
       nvlPresentation: nvlPresentation,
       nvlLayout: nvlLayout,
       nvlAccumulate: nvlAccumulate,
+      hasMusicState: hasMusicState,
+      currentMusicRegion: music,
+      sceneFilter: sceneFilter,
       currentNode: currentNode, // 添加 currentNode
       scriptOverlayText: scriptOverlayText,
       scriptOverlayBackgroundColor: scriptOverlayBackgroundColor,

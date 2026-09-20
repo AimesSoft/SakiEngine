@@ -215,6 +215,16 @@ class GameUILayerState extends State<GameUILayer> {
     final latestDialogueEntry = dialogueHistory.isNotEmpty
         ? dialogueHistory.last
         : null;
+    // A choice callback may rebuild this widget before the new state-stream
+    // event arrives. The manager's history can already contain the next line;
+    // keep the typing identity attached to the text this frame actually shows.
+    final displayedDialogueEntry = dialogueHistory
+        .reversed
+        .where((entry) =>
+            entry.dialogue == widget.gameState.dialogue &&
+            entry.speaker == widget.gameState.speaker &&
+            entry.dialogueTag == widget.gameState.dialogueTag)
+        .firstOrNull;
     final choiceMenuDisplaysLeadingDialogue =
         isMenuNode && widget.gameModule.choiceMenuDisplaysLeadingDialogue;
     final menuDialogueHistoryIndex = resolveMenuDialogueHistoryIndex(
@@ -237,7 +247,7 @@ class GameUILayerState extends State<GameUILayer> {
     final speakerAliasForDialogueBox = widget.gameState.speakerAlias;
     final scriptIndexForDialogueBox =
         menuDialogueEntry?.scriptIndex ??
-        latestDialogueEntry?.scriptIndex ??
+        displayedDialogueEntry?.scriptIndex ??
         widget.gameManager.currentScriptIndex;
     final shouldShowNormalDialogue =
         dialogueForDialogueBox != null && !widget.gameState.isNvlMode;

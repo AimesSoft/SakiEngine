@@ -77,8 +77,8 @@ class ExpressionPreviewMetadataRepository {
   bool _isDisposed = false;
 
   Future<ExpressionPreviewMetadata?> load({
-    required String poseAssetName,
-    required String expressionAssetName,
+    required List<String> baseAssetNames,
+    required String overlayAssetName,
     required ExpressionPreviewTransform expressionTransform,
   }) {
     if (_isDisposed) {
@@ -86,7 +86,7 @@ class ExpressionPreviewMetadataRepository {
     }
 
     final cacheKey =
-        '$poseAssetName\u0000$expressionAssetName\u0000'
+        '${baseAssetNames.join('|')}\u0000$overlayAssetName\u0000'
         '${expressionTransform.xOffset}\u0000${expressionTransform.yOffset}\u0000'
         '${expressionTransform.opacity}\u0000${expressionTransform.scale}';
     final cached = _metadata[cacheKey];
@@ -103,45 +103,42 @@ class ExpressionPreviewMetadataRepository {
       }
 
       try {
-        final pose = await _posePixels.putIfAbsent(
-          poseAssetName,
-          () => _loadPixels(poseAssetName),
-        );
-        final expression = await _loadPixels(expressionAssetName);
-        if (pose == null || expression == null) {
+        final base = await _loadBlendedBase(baseAssetNames);
+        final expression = await _loadPixels(overlayAssetName);
+        if (base == null || expression == null) {
           completer.complete(null);
           return;
         }
 
         final changedBounds = findExpressionDifferenceBounds(
-          base: pose,
+          base: base,
           overlay: expression,
           transform: expressionTransform,
         );
         final fallbackBounds = findVisibleExpressionBounds(
-          baseSize: ui.Size(pose.width.toDouble(), pose.height.toDouble()),
+          baseSize: ui.Size(base.width.toDouble(), base.height.toDouble()),
           expression: expression,
           transform: expressionTransform,
         );
 
         completer.complete(
           ExpressionPreviewMetadata(
-            canvasSize: ui.Size(pose.width.toDouble(), pose.height.toDouble()),
+            canvasSize: ui.Size(base.width.toDouble(), base.height.toDouble()),
             focusBounds:
                 changedBounds ??
                 fallbackBounds ??
                 ui.Rect.fromLTWH(
                   0,
                   0,
-                  pose.width.toDouble(),
-                  pose.height.toDouble(),
+                  base.width.toDouble(),
+                  base.height.toDouble(),
                 ),
             expressionTransform: expressionTransform,
           ),
         );
       } catch (error, stackTrace) {
         debugPrint(
-          'Expression preview analysis failed for $expressionAssetName: '
+          'Expression preview analysis failed for $overlayAssetName: '
           '$error\n$stackTrace',
         );
         completer.complete(null);
@@ -149,6 +146,48 @@ class ExpressionPreviewMetadataRepository {
     });
 
     return completer.future;
+  }
+
+  /// 把多个基础层按绘制顺序合成到同一张像素图，作为差分对比基准。
+  ///
+  /// 第一层差分与姿态对比；第二层差分与前一层合成结果对比，这样焦点框才会
+  /// 落在第二层自己新增的像素上，而不是整个表情区域。
+  Future<ExpressionPreviewPixels?> _loadBlendedBase(
+    List<String> baseAssetNames,
+  ) async {
+    if (baseAssetNames.isEmpty) {
+      return null;
+    }
+    if (baseAssetNames.length == 1) {
+      return _loadPixels(baseAssetNames.single);
+    }
+
+    // 姿态像素按资源名缓存；差分基础层逐次合成，量级很小。
+    final first = await _posePixels.putIfAbsent(
+      baseAssetNames.first,
+      () => _loadPixels(baseAssetNames.first),
+    );
+    if (first == null) {
+      return null;
+    }
+
+    var width = first.width;
+    var height = first.height;
+    var pixels = Uint8List.fromList(first.rgba);
+
+    for (final assetName in baseAssetNames.skip(1)) {
+      final layer = await _loadPixels(assetName);
+      if (layer == null) {
+        continue;
+      }
+      if (layer.width != width || layer.height != height) {
+        // 不同画布的层无法像素级对齐，退回第一张可用基准图。
+        continue;
+      }
+      pixels = _blendStraightRgba(pixels, layer.rgba);
+    }
+
+    return ExpressionPreviewPixels(width: width, height: height, rgba: pixels);
   }
 
   Future<ExpressionPreviewPixels?> _loadPixels(String assetName) async {
@@ -412,8 +451,21 @@ class ExpressionFocusPreview extends StatefulWidget {
   final ExpressionPreviewMetadataRepository metadataRepository;
   final String characterId;
   final String pose;
+
+  /// 被高亮的差分名（不含层级前缀）。
   final String expression;
-  final bool showPoseLayer;
+
+  /// [expression] 所在层级。第二层的磁盘资源名是
+  /// `characters/<id>--<name>`，这里据此拼接预览资源。
+  final int layerLevel;
+
+  /// 参与"变化焦点"对比的垫底资源名，按绘制顺序排列。
+  ///
+  /// * 第一层差分：`[characters/<id>-<pose>]`
+  /// * 第二层差分：`[characters/<id>-<pose>, characters/<id>-<第一层>]`
+  ///
+  /// 焦点框因此只包住被高亮层新增的像素，而不是整块表情区域。
+  final List<String> baseLayerAssetNames;
   final double paddingFraction;
 
   const ExpressionFocusPreview({
@@ -422,7 +474,8 @@ class ExpressionFocusPreview extends StatefulWidget {
     required this.characterId,
     required this.pose,
     required this.expression,
-    this.showPoseLayer = true,
+    this.layerLevel = 1,
+    this.baseLayerAssetNames = const [],
     this.paddingFraction = 0.18,
   });
 
@@ -433,10 +486,19 @@ class ExpressionFocusPreview extends StatefulWidget {
 class _ExpressionFocusPreviewState extends State<ExpressionFocusPreview> {
   late Future<ExpressionPreviewMetadata?> _metadata;
 
-  String get _poseAssetName =>
-      'characters/${widget.characterId}-${widget.pose}';
+  String get _poseAssetName => 'characters/${widget.characterId}-${widget.pose}';
+
+  /// 层级 1 是 `characters/<id>-<name>`，层级 2 是 `characters/<id>--<name>`：
+  /// 分隔符已经占掉一个横线，前缀只补 `level - 1` 个。
   String get _expressionAssetName =>
-      'characters/${widget.characterId}-${widget.expression}';
+      'characters/${widget.characterId}-${'-' * (widget.layerLevel - 1)}'
+      '${widget.expression}';
+
+  /// 参与对比的基准图层资源名，按绘制顺序排列。
+  List<String> get _baseAssetNames =>
+      widget.baseLayerAssetNames.isEmpty
+      ? [_poseAssetName]
+      : widget.baseLayerAssetNames;
 
   @override
   void initState() {
@@ -450,7 +512,12 @@ class _ExpressionFocusPreviewState extends State<ExpressionFocusPreview> {
     if (oldWidget.metadataRepository != widget.metadataRepository ||
         oldWidget.characterId != widget.characterId ||
         oldWidget.pose != widget.pose ||
-        oldWidget.expression != widget.expression) {
+        oldWidget.expression != widget.expression ||
+        oldWidget.layerLevel != widget.layerLevel ||
+        !listEquals(
+          oldWidget.baseLayerAssetNames,
+          widget.baseLayerAssetNames,
+        )) {
       _reloadMetadata();
     }
   }
@@ -460,11 +527,11 @@ class _ExpressionFocusPreviewState extends State<ExpressionFocusPreview> {
         .getExpressionOffset(
           characterId: widget.characterId,
           pose: widget.pose,
-          layerType: 'expression',
+          layerType: 'expression_layer_${widget.layerLevel}',
         );
     _metadata = widget.metadataRepository.load(
-      poseAssetName: _poseAssetName,
-      expressionAssetName: _expressionAssetName,
+      baseAssetNames: _baseAssetNames,
+      overlayAssetName: _expressionAssetName,
       expressionTransform: ExpressionPreviewTransform(
         xOffset: xOffset,
         yOffset: yOffset,
@@ -544,14 +611,14 @@ class _ExpressionFocusPreviewState extends State<ExpressionFocusPreview> {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  if (widget.showPoseLayer)
+                  for (final assetName in _baseAssetNames)
                     Positioned(
                       left: left,
                       top: top,
                       width: canvasWidth,
                       height: canvasHeight,
                       child: SmartAssetImage(
-                        assetName: _poseAssetName,
+                        assetName: assetName,
                         fit: BoxFit.fill,
                         width: canvasWidth,
                         height: canvasHeight,
@@ -577,8 +644,8 @@ class _ExpressionFocusPreviewState extends State<ExpressionFocusPreview> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (widget.showPoseLayer)
-          SmartAssetImage(assetName: _poseAssetName, fit: BoxFit.contain),
+        for (final assetName in _baseAssetNames)
+          SmartAssetImage(assetName: assetName, fit: BoxFit.contain),
         SmartAssetImage(assetName: _expressionAssetName, fit: BoxFit.contain),
       ],
     );
@@ -589,6 +656,39 @@ bool _hasValidPixelBuffer(ExpressionPreviewPixels pixels) {
   return pixels.width > 0 &&
       pixels.height > 0 &&
       pixels.rgba.length >= pixels.width * pixels.height * 4;
+}
+
+/// 以 straight alpha 的方式把 [overlay] 叠到 [base] 上，返回新的像素缓冲。
+///
+/// 只用于预览焦点分析的基准图合成，采样范围是整张角色画布，因此使用与
+/// [findExpressionDifferenceBounds] 相同的整数合成公式，避免两处结果不一致。
+Uint8List _blendStraightRgba(Uint8List base, Uint8List overlay) {
+  final length = math.min(base.length, overlay.length);
+  final output = Uint8List(length);
+  for (var i = 0; i + 3 < length; i += 4) {
+    final baseAlpha = base[i + 3];
+    final overlayAlpha = overlay[i + 3];
+    final inverseOverlayAlpha = 255 - overlayAlpha;
+    final outputAlpha =
+        overlayAlpha + (baseAlpha * inverseOverlayAlpha + 127) ~/ 255;
+    for (var channel = 0; channel < 3; channel++) {
+      final basePremultiplied =
+          (base[i + channel] * baseAlpha + 127) ~/ 255;
+      final overlayPremultiplied =
+          (overlay[i + channel] * overlayAlpha + 127) ~/ 255;
+      final premultiplied =
+          overlayPremultiplied +
+          (basePremultiplied * inverseOverlayAlpha + 127) ~/ 255;
+      output[i + channel] = outputAlpha == 0
+          ? 0
+          : ((premultiplied * 255 + outputAlpha ~/ 2) ~/ outputAlpha).clamp(
+              0,
+              255,
+            );
+    }
+    output[i + 3] = outputAlpha > 255 ? 255 : outputAlpha;
+  }
+  return output;
 }
 
 int? _lowerHistogramBound(List<int> histogram, int discardHits) {

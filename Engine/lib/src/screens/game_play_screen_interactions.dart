@@ -1190,10 +1190,17 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
     final isPose = expression.toLowerCase().startsWith('pose');
     final pose = isPose ? expression : currentPose;
     final exp = isPose ? 'normal' : expression;
+    // 轮盘里第二层以 `--mask` 出现，磁盘资源同样带前缀；同时保留裸名字作为
+    // 旧命名的兜底。
+    final expLevel = CharacterExpressionLayers.levelOfToken(exp);
+    final expName = CharacterExpressionLayers.stripPrefixes(exp);
+    final canonicalExp = expLevel <= 1
+        ? 'characters/$characterId-$expName'
+        : 'characters/$characterId-${'-' * expLevel}$expName';
 
     final candidates = <String>[
       'characters/$characterId-$pose',
-      'characters/$characterId-$exp',
+      canonicalExp,
       'characters/$characterId-$pose-$exp',
       'characters/$characterId-$expression',
     ];
@@ -1580,19 +1587,24 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       }
       return;
     }
-    if (selectedExpression == speakerInfo.currentExpression) {
-      if (!selectedExpression.toLowerCase().startsWith('pose')) {
-        if (kSakiDiagnosticLogs) {
-          print(
-            'ExpressionWheel: apply skipped (expression unchanged: $selectedExpression)',
-          );
-        }
-        return;
-      }
-    }
 
-    if (selectedExpression == speakerInfo.currentPose &&
-        selectedExpression.toLowerCase().startsWith('pose')) {
+    final selectedIsPose = selectedExpression.toLowerCase().startsWith('pose');
+    final nextPose = selectedIsPose
+        ? selectedExpression
+        : speakerInfo.currentPose;
+
+    // 第二层以 `--mask` 的形式出现在列表里：选它时保留当前第一层，选第一层
+    // 时保留当前第二层。合并结果去重后与当前状态比较，没变化就不写脚本。
+    final mergedExpression = selectedIsPose
+        ? speakerInfo.currentExpression
+        : CharacterExpressionLayers.merge(
+            requested: CharacterExpressionLayers.parse(selectedExpression),
+            other: CharacterExpressionLayers.parse(
+              speakerInfo.currentExpression,
+            ),
+          ).encode();
+
+    if (selectedIsPose && nextPose == speakerInfo.currentPose) {
       if (kSakiDiagnosticLogs) {
         print(
           'ExpressionWheel: apply skipped (pose unchanged: $selectedExpression)',
@@ -1600,24 +1612,26 @@ extension _GamePlayScreenInteractions on _GamePlayScreenState {
       }
       return;
     }
+    if (!selectedIsPose &&
+        mergedExpression == speakerInfo.currentExpression) {
+      if (kSakiDiagnosticLogs) {
+        print(
+          'ExpressionWheel: apply skipped (expression unchanged: $selectedExpression)',
+        );
+      }
+      return;
+    }
 
-    final selectedIsPose = selectedExpression.toLowerCase().startsWith('pose');
-    final nextPose = selectedIsPose
-        ? selectedExpression
-        : speakerInfo.currentPose;
-    final nextExpression = selectedIsPose
-        ? speakerInfo.currentExpression
-        : selectedExpression;
     if (kSakiDiagnosticLogs) {
       print(
-        'ExpressionWheel: apply -> nextPose=$nextPose, nextExpression=$nextExpression',
+        'ExpressionWheel: apply -> nextPose=$nextPose, nextExpression=$mergedExpression',
       );
     }
 
     await _expressionSelectorManager?.handleExpressionSelectionChanged(
       speakerInfo.characterId,
       nextPose,
-      nextExpression,
+      mergedExpression,
       speakerInfo.currentAnimation,
     );
   }

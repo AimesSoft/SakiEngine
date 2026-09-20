@@ -32,6 +32,7 @@ import 'package:sakiengine/src/utils/cg_image_compositor.dart';
 import 'package:sakiengine/src/utils/cg_pre_warm_manager.dart';
 import 'package:sakiengine/src/utils/gpu_image_compositor.dart';
 import 'package:sakiengine/src/utils/expression_offset_manager.dart';
+import 'package:sakiengine/src/utils/character_expression_layers.dart';
 import 'package:sakiengine/src/utils/character_composite_cache.dart';
 import 'package:sakiengine/src/rendering/color_background_renderer.dart';
 import 'package:sakiengine/src/game/story_flowchart_manager.dart';
@@ -1011,6 +1012,22 @@ class GameManager {
   String get currentDialogueText =>
       _dialogueHistory.isNotEmpty ? _dialogueHistory.last.dialogue : '';
 
+  /// 当前对话的说话角色简写（alias）。
+  ///
+  /// Debug 差分写入需要判断"被改角色是否就是当前说话人"：是则更新对话行，
+  /// 否则必须改用 `show`，不然差分会被解析成说话人的属性。
+  String? get currentSpeakerAlias {
+    final alias = _currentState.speakerAlias?.trim();
+    if (alias != null && alias.isNotEmpty) {
+      return alias;
+    }
+    final speaker = _currentState.speaker?.trim();
+    if (speaker != null && speaker.isNotEmpty) {
+      return speaker;
+    }
+    return null;
+  }
+
   /// 获取当前显示对话的精确来源行号（1-based）。
   /// 该值由解析器在构建节点时写入，优先作为脚本修改定位依据。
   int? get currentDialogueSourceLine =>
@@ -1365,10 +1382,47 @@ class GameManager {
       pose:
           requestedPose ??
           (resourceChanged ? 'pose1' : (currentState.pose ?? 'pose1')),
-      expression:
-          requestedExpression ??
-          (resourceChanged ? 'happy' : (currentState.expression ?? 'happy')),
+      expression: _mergeExpressionWithCurrent(
+        requested: requestedExpression,
+        currentExpression: currentState.expression,
+        resourceChanged: resourceChanged,
+      ),
     );
+  }
+
+  /// 合并剧本请求的差分与角色当前的差分状态。
+  ///
+  /// 第二层差分是"叠加"语义：剧本只写第一层（`x happy`）时保留角色当前的
+  /// 第二层；只有剧本显式写了第二层（`x happy mask` / `x happy --mask`）或
+  /// 清除标记（`x happy --none`）才改动它。没有请求也没有当前值时回退到
+  /// [defaultExpression]。
+  String _mergeExpressionWithCurrent({
+    required String? requested,
+    required String? currentExpression,
+    required bool resourceChanged,
+    String defaultExpression = 'happy',
+  }) {
+    final requestedLayers = CharacterExpressionLayers.parse(requested);
+    final hasRequest = requested != null && requested.trim().isNotEmpty;
+
+    if (!hasRequest) {
+      if (resourceChanged) {
+        return defaultExpression;
+      }
+      final current = (currentExpression ?? '').trim();
+      return current.isEmpty ? defaultExpression : current;
+    }
+
+    // 切换资源时旧差分不再适用，只保留本次请求的层。
+    final base = resourceChanged
+        ? CharacterExpressionLayers.empty
+        : CharacterExpressionLayers.parse(currentExpression);
+    final merged = CharacterExpressionLayers.merge(
+      requested: requestedLayers,
+      other: base,
+    );
+    final encoded = merged.encode();
+    return encoded.isEmpty ? defaultExpression : encoded;
   }
 
   ({String alias, CharacterConfig config})?
@@ -1435,7 +1489,14 @@ class GameManager {
     final targetKey = target.key;
     final targetState = target.value;
     final nextPose = pose ?? targetState.pose ?? 'pose1';
-    final nextExpression = expression ?? targetState.expression ?? 'normal';
+    // 行尾 tag 只指定角色时，保留角色当前的差分（含第二层）；显式写出差分
+    // 时按层覆盖，避免旁白行把已有的第二层抹掉。
+    final nextExpression = _mergeExpressionWithCurrent(
+      requested: expression,
+      currentExpression: targetState.expression,
+      resourceChanged: false,
+      defaultExpression: 'normal',
+    );
     final nextResourceId = targetConfig?.resourceId ?? targetState.resourceId;
     final newCharacters = Map.of(_currentState.characters);
     newCharacters[targetKey] = targetState.copyWith(
@@ -2214,88 +2275,26 @@ class GameManager {
     return null;
   }
 
-  /// 检查当前位置是否应该播放音乐
-  /// 如果当前位置不在任何音乐区间内，则停止音乐
-  Future<void> _checkMusicRegionAtCurrentIndex({
-    bool forceCheck = false,
-  }) async {
+  /// Restore the music recorded by executed cues, including intentional silence.
+  /// Lexical script ranges cross unvisited branches and cannot determine what
+  /// the player heard at a branch join or in a saved/history snapshot.
+  Future<void> _restoreCurrentMusic() async {
     if (_disableRuntimeSideEffectsForTesting || _isSeekingNextChoice) return;
-    if (!forceCheck &&
-        _scriptIndex >= 0 &&
-        _scriptIndex < _script.children.length &&
-        _script.children[_scriptIndex] is PlayMusicNode) {
-      if (kEngineDebugMode && _musicRegionVerboseLogs) {
-        print(
-          '[MusicRegion] 跳过区间触发播放：当前位置($_scriptIndex)是 PlayMusicNode，由节点执行阶段处理',
-        );
-      }
+    final region = _currentState.currentMusicRegion;
+    if (region == null) {
+      await MusicManager().forceStopBackgroundMusic(
+        fadeOut: true,
+        fadeDuration: const Duration(milliseconds: 800),
+      );
       return;
     }
-
-    final currentRegion = _getMusicRegionForIndex(_scriptIndex);
-    final stateRegion = _currentState.currentMusicRegion;
-
-    if (kEngineDebugMode) {
-      //print('[MusicRegion] 检查位置($_scriptIndex): currentRegion=${currentRegion?.toString() ?? 'null'}, stateRegion=${stateRegion?.toString() ?? 'null'}');
-    }
-
-    // 强制检查时，即使区间相同也要验证音乐状态
-    if (forceCheck || currentRegion != stateRegion) {
-      if (currentRegion == null) {
-        // 当前位置不在任何音乐区间内，应该停止音乐
-        if (kEngineDebugMode) {
-          //print('[MusicRegion] 当前位置($_scriptIndex)不在音乐区间内，停止音乐');
-        }
-        await MusicManager().forceStopBackgroundMusic(
-          fadeOut: true,
-          fadeDuration: const Duration(milliseconds: 800),
-        );
-        _currentState = _currentState.copyWith(clearCurrentMusicRegion: true);
-      } else {
-        // 当前位置在音乐区间内
-        final fullMusicPath = _buildMusicAssetPath(currentRegion.musicFile);
-        if (fullMusicPath.isEmpty) {
-          if (kEngineDebugMode) {
-            print(
-              '[MusicRegion] 当前位置($_scriptIndex)音乐名为空，跳过播放: region=$currentRegion',
-            );
-          }
-          _currentState = _currentState.copyWith(clearCurrentMusicRegion: true);
-          return;
-        }
-
-        final isExpectedMusicPlaying = MusicManager().isPlayingMusic(
-          fullMusicPath,
-        );
-        final shouldPlayMusic =
-            !isExpectedMusicPlaying ||
-            (stateRegion != null &&
-                stateRegion.musicFile != currentRegion.musicFile);
-
-        // 检查是否需要开始播放或切换音乐。强制检查只验证状态，不重复重播同一首正在播放的音乐。
-        if (shouldPlayMusic) {
-          if (kEngineDebugMode && _musicRegionVerboseLogs) {
-            print(
-              '[MusicRegion] 当前位置($_scriptIndex)需要播放音乐: regionMusic="${currentRegion.musicFile}", resolvedPath="$fullMusicPath", forceCheck=$forceCheck',
-            );
-          }
-
-          if (!_isSeekingNextChoice && !_disableRuntimeSideEffectsForTesting) {
-            await MusicManager().playBackgroundMusic(
-              fullMusicPath,
-              fadeTransition: true,
-              fadeDuration: const Duration(milliseconds: 1200),
-            );
-          }
-          _currentState = _currentState.copyWith(
-            currentMusicRegion: currentRegion,
-          );
-        } else if (currentRegion != stateRegion) {
-          _currentState = _currentState.copyWith(
-            currentMusicRegion: currentRegion,
-          );
-        }
-      }
+    final path = _buildMusicAssetPath(region.musicFile);
+    if (path.isNotEmpty && !MusicManager().isPlayingMusic(path)) {
+      await MusicManager().playBackgroundMusic(
+        path,
+        fadeTransition: true,
+        fadeDuration: const Duration(milliseconds: 1200),
+      );
     }
   }
 
@@ -2353,8 +2352,7 @@ class GameManager {
         //////print('[GameManager] 跳转到标签: $label, 索引: $_scriptIndex');
       }
 
-      // 检查跳转后位置的音乐区间（强制检查）
-      await _checkMusicRegionAtCurrentIndex(forceCheck: true);
+      // A branch jump preserves music until an executed play/stop cue.
       await _executeScript();
     } else {
       if (kEngineDebugMode) {
@@ -2390,8 +2388,6 @@ class GameManager {
       _emitCurrentState();
     }
 
-    // 在用户点击继续时检查音乐区间
-    await _checkMusicRegionAtCurrentIndex();
     if (_disposed || presentationRevision != _characterPresentationRevision) {
       return;
     }
@@ -3163,9 +3159,14 @@ class GameManager {
             positionId: positionId,
           );
         } else if (currentCharacterState != null) {
+          // 同一 CG 的差分更新：保留未显式改写的层（例如第二层蒙版）。
           updatedState = currentCharacterState.copyWith(
             pose: newPose,
-            expression: newExpression,
+            expression: _mergeExpressionWithCurrent(
+              requested: newExpression,
+              currentExpression: currentCharacterState.expression,
+              resourceChanged: false,
+            ),
             clearAnimationProperties: false,
           );
         } else {
@@ -3404,7 +3405,11 @@ class GameManager {
 
             newCharacters[finalCharacterKey] = currentCharacterState.copyWith(
               pose: node.pose,
-              expression: node.expression,
+              expression: _mergeExpressionWithCurrent(
+                requested: node.expression,
+                currentExpression: null,
+                resourceChanged: true,
+              ),
               clearAnimationProperties: false,
             );
 
@@ -3526,18 +3531,16 @@ class GameManager {
           final followingMenuNodeIndex = _findFollowingMenuNodeIndex(
             currentNodeIndex,
           );
-          if (followingMenuNodeIndex == null) {
-            _currentState = _currentState.copyWith(
-              dialogue: resolvedDialogue,
-              dialogueTag: node.dialogueTag,
-              speaker: characterConfig?.name,
-              speakerAlias: node.character ?? tailSpeakerAlias, // 传入角色简写
-              currentNode: null,
-              clearDialogueAndSpeaker: false,
-              forceNullSpeaker: node.character == null,
-              everShownCharacters: _everShownCharacters,
-            );
-          }
+          _currentState = _currentState.copyWith(
+            dialogue: resolvedDialogue,
+            dialogueTag: node.dialogueTag,
+            speaker: characterConfig?.name,
+            speakerAlias: node.character ?? tailSpeakerAlias,
+            currentNode: null,
+            clearDialogueAndSpeaker: false,
+            forceNullSpeaker: node.character == null,
+            everShownCharacters: _everShownCharacters,
+          );
 
           _addToDialogueHistory(
             speaker: characterConfig?.name,
@@ -3553,9 +3556,6 @@ class GameManager {
             final menuNode =
                 _script.children[followingMenuNodeIndex] as MenuNode;
             final localizedMenuNode = _localizeMenuNode(menuNode);
-            final previousDialogueEntry = _dialogueHistory.length >= 2
-                ? _dialogueHistory[_dialogueHistory.length - 2]
-                : null;
 
             // 分支选择前创建运行时自动存档
             await _createRuntimeAutoSave(reason: '分支选择');
@@ -3566,10 +3566,6 @@ class GameManager {
             );
 
             _currentState = _currentState.copyWith(
-              dialogue: previousDialogueEntry?.dialogue,
-              dialogueTag: previousDialogueEntry?.dialogueTag,
-              speaker: previousDialogueEntry?.speaker,
-              forceNullSpeaker: previousDialogueEntry?.speaker == null,
               currentNode: localizedMenuNode,
               clearDialogueAndSpeaker: false,
               everShownCharacters: _everShownCharacters,
@@ -3636,6 +3632,7 @@ class GameManager {
 
               // 处理时序差分切换
               String? finalExpression = node.expression;
+              var timedSwitchPending = false;
               if (node.hasTimedExpression) {
                 if (_skipPresentation) {
                   // 快进模式下直接使用目标差分
@@ -3644,6 +3641,7 @@ class GameManager {
                 } else {
                   // 先设置起始差分
                   finalExpression = node.startExpression;
+                  timedSwitchPending = true;
                   //print('[GameManager] 时序差分切换: 起始差分 ${node.startExpression}, ${node.switchDelay}秒后切换到 ${node.endExpression}');
 
                   // 启动定时器进行差分切换
@@ -3653,6 +3651,16 @@ class GameManager {
                     delay: node.switchDelay!,
                   );
                 }
+              }
+              if (timedSwitchPending) {
+                // 起始差分同样只覆盖它写出的层，保留角色当前的第二层。
+                final merged = CharacterExpressionLayers.merge(
+                  requested: CharacterExpressionLayers.parse(finalExpression),
+                  other: CharacterExpressionLayers.parse(
+                    currentCharacterState.expression,
+                  ),
+                ).encode();
+                finalExpression = merged;
               }
 
               // 如果角色已存在且有正在播放的动画，继承动画属性
@@ -3769,7 +3777,11 @@ class GameManager {
 
               newCharacters[finalCharacterKey] = currentCharacterState.copyWith(
                 pose: node.pose,
-                expression: finalExpression,
+                expression: _mergeExpressionWithCurrent(
+                  requested: finalExpression,
+                  currentExpression: null,
+                  resourceChanged: true,
+                ),
                 clearAnimationProperties: false,
               );
 
@@ -3894,8 +3906,8 @@ class GameManager {
         } else {
           // 普通对话模式
           // 在CG背景下，如果之前已经设置了对话内容，就不要重复设置
-          if (followingMenuNodeIndex == null &&
-              !(_isCurrentBackgroundCG() && node.character != null)) {
+          if (!(_isCurrentBackgroundCG() && node.character != null) ||
+              followingMenuNodeIndex != null) {
             _currentState = _currentState.copyWith(
               dialogue: resolvedDialogue,
               dialogueTag: node.dialogueTag,
@@ -3941,9 +3953,6 @@ class GameManager {
             final menuNode =
                 _script.children[followingMenuNodeIndex] as MenuNode;
             final localizedMenuNode = _localizeMenuNode(menuNode);
-            final previousDialogueEntry = _dialogueHistory.length >= 2
-                ? _dialogueHistory[_dialogueHistory.length - 2]
-                : null;
 
             // 分支选择前创建运行时自动存档
             await _createRuntimeAutoSave(reason: '分支选择');
@@ -3954,10 +3963,6 @@ class GameManager {
             );
 
             _currentState = _currentState.copyWith(
-              dialogue: previousDialogueEntry?.dialogue,
-              dialogueTag: previousDialogueEntry?.dialogueTag,
-              speaker: previousDialogueEntry?.speaker,
-              forceNullSpeaker: previousDialogueEntry?.speaker == null,
               currentNode: localizedMenuNode,
               clearDialogueAndSpeaker: false,
               everShownCharacters: _everShownCharacters,
@@ -4756,6 +4761,10 @@ class GameManager {
             ? node.dialogueTag
             : _currentState.dialogueTag,
         speaker: newSpeaker,
+        speakerAlias: node is SayNode
+            ? node.character ?? node.tailCharacter
+            : _currentState.speakerAlias,
+        forceNullSpeaker: node is SayNode && node.character == null,
         everShownCharacters: _everShownCharacters,
       );
 
@@ -4840,7 +4849,7 @@ class GameManager {
         _emitCurrentState();
       }
       _scriptIndex = nextScriptIndex;
-      await _checkMusicRegionAtCurrentIndex(forceCheck: true);
+      await _restoreCurrentMusic();
     }
 
     if (_context != null && currentBackground != targetBackground) {
@@ -4939,9 +4948,17 @@ class GameManager {
       if (currentCharacter != null) {
         //print('[GameManager] 执行时序差分切换: $characterKey -> $targetExpression');
 
+        // 目标差分只覆盖它显式写出的层，其余层沿用当前状态，避免时序切换
+        // 把第二层差分连带清掉。
+        final mergedExpression = CharacterExpressionLayers.merge(
+          requested: CharacterExpressionLayers.parse(targetExpression),
+          other: CharacterExpressionLayers.parse(currentCharacter.expression),
+        ).encode();
         final newCharacters = Map.of(_currentState.characters);
         newCharacters[characterKey] = currentCharacter.copyWith(
-          expression: targetExpression,
+          expression: mergedExpression.isEmpty
+              ? targetExpression
+              : mergedExpression,
           clearAnimationProperties: false,
         );
 
@@ -5865,6 +5882,8 @@ class GameState {
   final List<String>? sceneLayers; // 新增：多图层支持
   final String? sceneTopRightStatusText; // 场景右上角状态文本（项目层可自定义）
   final MusicRegion? currentMusicRegion; // 新增：当前音乐区间
+  // Pre-v20 saves omitted music, including the distinction from authored silence.
+  final bool hasMusicState;
   final Map<String, double>? sceneAnimationProperties; // 新增：场景动画属性
   final String? sceneAnimation; // 新增：当前场景动画名称
   final int? sceneAnimationRepeat; // 新增：场景动画重复次数
@@ -5917,6 +5936,7 @@ class GameState {
     this.sceneLayers,
     this.sceneTopRightStatusText,
     this.currentMusicRegion,
+    this.hasMusicState = true,
     this.sceneAnimationProperties,
     this.sceneAnimation,
     this.sceneAnimationRepeat,
@@ -5985,6 +6005,7 @@ class GameState {
     String? sceneTopRightStatusText,
     bool clearSceneTopRightStatusText = false,
     MusicRegion? currentMusicRegion,
+    bool? hasMusicState,
     bool clearCurrentMusicRegion = false,
     Map<String, double>? sceneAnimationProperties,
     bool clearSceneAnimation = false,
@@ -6077,6 +6098,7 @@ class GameState {
       currentMusicRegion: clearCurrentMusicRegion
           ? null
           : (currentMusicRegion ?? this.currentMusicRegion),
+      hasMusicState: hasMusicState ?? this.hasMusicState,
       sceneAnimationProperties: clearSceneAnimation
           ? null
           : (sceneAnimationProperties ?? this.sceneAnimationProperties),

@@ -5,6 +5,7 @@ import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/utils/animation_manager.dart';
+import 'package:sakiengine/src/utils/character_expression_layers.dart';
 import 'package:sakiengine/src/utils/expression_offset_manager.dart';
 import 'package:sakiengine/src/utils/scaling_manager.dart';
 import 'package:sakiengine/src/widgets/common/overlay_scaffold.dart';
@@ -74,11 +75,17 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
   final ExpressionPreviewMetadataRepository _previewMetadataRepository =
       ExpressionPreviewMetadataRepository();
   List<ExpressionOption> _poses = [];
-  List<ExpressionOption> _expressions = [];
+  List<ExpressionOption> _layer1Expressions = [];
+  List<ExpressionOption> _layer2Expressions = [];
   List<String> _animations = [];
   bool _isLoading = true;
   String _selectedPose = '';
-  String _selectedExpression = '';
+
+  /// 第一层差分名（不含层级前缀），空字符串表示未选择。
+  String _selectedLayer1 = '';
+
+  /// 第二层差分名（不含层级前缀），空字符串表示没有第二层。
+  String _selectedLayer2 = '';
   String? _selectedAnimation;
   Map<String, double> _previewAnimationProperties = Map.of(
     _previewAnimationBaseProperties,
@@ -90,9 +97,44 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
   void initState() {
     super.initState();
     _selectedPose = widget.currentPose;
-    _selectedExpression = widget.currentExpression;
+    final current = CharacterExpressionLayers.parse(widget.currentExpression);
+    _selectedLayer1 = current.nameAt(1) ?? '';
+    _selectedLayer2 = current.nameAt(2) ?? '';
     _selectedAnimation = widget.currentAnimation;
     _loadCharacterLayers();
+  }
+
+  /// 当前选择编码出的差分表达式，例如 `happy+--mask`。
+  String get _selectedExpression {
+    final layers = <CharacterExpressionLayer>[
+      if (_selectedLayer1.isNotEmpty)
+        CharacterExpressionLayer(
+          name: _selectedLayer1,
+          level: 1,
+          explicit: false,
+        ),
+      if (_selectedLayer2.isNotEmpty)
+        CharacterExpressionLayer(
+          name: _selectedLayer2,
+          level: 2,
+          explicit: true,
+        ),
+    ];
+    return CharacterExpressionLayers(layers: layers).encode();
+  }
+
+  /// 层级 1 是 `characters/<id>-<name>`，层级 2 是 `characters/<id>--<name>`。
+  String _assetNameForLayer(int level, String name) => level <= 1
+      ? 'characters/${widget.characterId}-$name'
+      : 'characters/${widget.characterId}-${'-' * (level - 1)}$name';
+
+  /// 高亮某一层时的垫底资源：第一层只垫姿态，第二层再垫上第一层。
+  List<String> _baseAssetNamesForLayer(int level) {
+    return <String>[
+      'characters/${widget.characterId}-$_selectedPose',
+      if (level >= 2 && _selectedLayer1.isNotEmpty)
+        _assetNameForLayer(1, _selectedLayer1),
+    ];
   }
 
   @override
@@ -205,13 +247,21 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
       );
     }
 
-    if (_selectedExpression.isNotEmpty) {
+    if (_selectedLayer1.isNotEmpty) {
       layers.add(
         SmartAssetImage(
-          key: ValueKey(
-            'expression_${widget.characterId}_$_selectedExpression',
-          ),
-          assetName: 'characters/${widget.characterId}-$_selectedExpression',
+          key: ValueKey('layer1_${widget.characterId}_$_selectedLayer1'),
+          assetName: _assetNameForLayer(1, _selectedLayer1),
+          fit: BoxFit.contain,
+        ),
+      );
+    }
+
+    if (_selectedLayer2.isNotEmpty) {
+      layers.add(
+        SmartAssetImage(
+          key: ValueKey('layer2_${widget.characterId}_$_selectedLayer2'),
+          assetName: _assetNameForLayer(2, _selectedLayer2),
           fit: BoxFit.contain,
         ),
       );
@@ -295,12 +345,16 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
       );
 
       final poses = <ExpressionOption>[];
-      final expressions = <ExpressionOption>[];
+      final layer1 = <ExpressionOption>[];
+      final layer2 = <ExpressionOption>[];
 
       for (final layer in layers) {
-        // 判断是pose还是expression - 基于文件名内容而不是"-"数量
-        if (layer.startsWith('pose') || layer.contains('pose')) {
-          // 这是pose（姿势）
+        if (layer.isEmpty) {
+          continue;
+        }
+        // 姿态只认 `pose` 开头（含 `pose1` 这类）；差分名里出现 "pose"
+        // 不应再被误判成姿态。
+        if (layer.toLowerCase().startsWith('pose')) {
           poses.add(
             ExpressionOption(
               name: layer,
@@ -308,36 +362,42 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
               layerLevel: 0,
             ),
           );
-        } else {
-          // 这是expression（表情差分）
-          // 解析层级 - 基于开头的"-"数量
-          int dashCount = 0;
-          for (int i = 0; i < layer.length; i++) {
-            if (layer[i] == '-') {
-              dashCount++;
-            } else {
-              break;
-            }
-          }
-          final layerLevel = dashCount > 0 ? dashCount : 1;
+          continue;
+        }
 
-          expressions.add(
-            ExpressionOption(
-              name: layer,
-              displayName: _formatDisplayName(layer),
-              layerLevel: layerLevel,
-            ),
-          );
+        final tokenLevel = CharacterExpressionLayers.levelOfToken(layer);
+        final name = CharacterExpressionLayers.stripPrefixes(layer);
+        if (name.isEmpty) {
+          continue;
+        }
+        final option = ExpressionOption(
+          name: name,
+          displayName: _formatDisplayName(name),
+          layerLevel: tokenLevel,
+        );
+        if (tokenLevel <= 1) {
+          layer1.add(option);
+        } else if (tokenLevel == 2) {
+          layer2.add(option);
         }
       }
 
-      // 按层级和名称排序
+      // 同一层可能出现"带前缀"和"裸名字"两种磁盘命名，去重后展示。
+      List<ExpressionOption> dedupe(List<ExpressionOption> options) {
+        final seen = <String>{};
+        final result = <ExpressionOption>[];
+        for (final option in options) {
+          if (seen.add(option.name)) {
+            result.add(option);
+          }
+        }
+        result.sort((a, b) => a.displayName.compareTo(b.displayName));
+        return result;
+      }
+
       poses.sort((a, b) => a.displayName.compareTo(b.displayName));
-      expressions.sort((a, b) {
-        final levelCompare = a.layerLevel.compareTo(b.layerLevel);
-        if (levelCompare != 0) return levelCompare;
-        return a.displayName.compareTo(b.displayName);
-      });
+      final layer1Options = dedupe(layer1);
+      final layer2Options = dedupe(layer2);
       final animations = AnimationManager.getAnimationNames();
       final currentAnimation = widget.currentAnimation?.trim();
       if (currentAnimation != null &&
@@ -351,11 +411,13 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
       }
       _preloadPreviewMetadata(
         pose: _selectedPose,
-        expression: _selectedExpression,
+        layer1: _selectedLayer1,
+        layer2: _selectedLayer2,
       );
       setState(() {
         _poses = poses;
-        _expressions = expressions;
+        _layer1Expressions = layer1Options;
+        _layer2Expressions = layer2Options;
         _animations = animations;
         _isLoading = false;
       });
@@ -371,29 +433,37 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
 
   void _preloadPreviewMetadata({
     required String pose,
-    required String expression,
+    required String layer1,
+    required String layer2,
   }) {
-    if (pose.isEmpty || expression.isEmpty) {
+    if (pose.isEmpty) {
       return;
     }
-    final (xOffset, yOffset, opacity, scale) = ExpressionOffsetManager()
-        .getExpressionOffset(
-          characterId: widget.characterId,
-          pose: pose,
-          layerType: 'expression',
-        );
-    unawaited(
-      _previewMetadataRepository.load(
-        poseAssetName: 'characters/${widget.characterId}-$pose',
-        expressionAssetName: 'characters/${widget.characterId}-$expression',
-        expressionTransform: ExpressionPreviewTransform(
-          xOffset: xOffset,
-          yOffset: yOffset,
-          opacity: opacity,
-          scale: scale,
+    for (final level in <int>[if (layer1.isNotEmpty) 1, if (layer2.isNotEmpty) 2]) {
+      final name = level == 1 ? layer1 : layer2;
+      final (xOffset, yOffset, opacity, scale) = ExpressionOffsetManager()
+          .getExpressionOffset(
+            characterId: widget.characterId,
+            pose: pose,
+            layerType: 'expression_layer_$level',
+          );
+      unawaited(
+        _previewMetadataRepository.load(
+          baseAssetNames: <String>[
+            'characters/${widget.characterId}-$pose',
+            if (level >= 2 && layer1.isNotEmpty)
+              _assetNameForLayer(1, layer1),
+          ],
+          overlayAssetName: _assetNameForLayer(level, name),
+          expressionTransform: ExpressionPreviewTransform(
+            xOffset: xOffset,
+            yOffset: yOffset,
+            opacity: opacity,
+            scale: scale,
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   String _formatDisplayName(String name) {
@@ -411,10 +481,27 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
   void _applySelection(String pose, String expression) {
     setState(() {
       _selectedPose = pose;
-      _selectedExpression = expression;
+      final layers = CharacterExpressionLayers.parse(expression);
+      _selectedLayer1 = layers.nameAt(1) ?? '';
+      _selectedLayer2 = layers.nameAt(2) ?? '';
     });
 
     // 立即应用更改并关闭对话框
+    widget.onSelectionChanged(pose, expression, _selectedAnimation);
+    widget.onClose();
+  }
+
+  /// 用当前两层选择应用更改（供"应用"按钮与双击使用）。
+  ///
+  /// 两层都为空时写入显式清除标记 `--none`，让脚本改写能把已有的差分摘掉，
+  /// 而不是因为表达式为空而跳过这一行。
+  void _applySelectionFromLayers(String pose) {
+    final expression = _selectedExpression.isEmpty
+        ? CharacterExpressionLayers.removalTokensForLevel(2)
+        : _selectedExpression;
+    setState(() {
+      _selectedPose = pose;
+    });
     widget.onSelectionChanged(pose, expression, _selectedAnimation);
     widget.onClose();
   }
@@ -487,10 +574,39 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
                   SizedBox(height: 16 * uiScale),
                 ],
 
-                if (_expressions.isNotEmpty) ...[
-                  _buildSectionTitle('表情差分 (Expressions)', config, textScale),
+                if (_layer1Expressions.isNotEmpty) ...[
+                  _buildSectionTitle(
+                    '第一层差分 (Layer 1)',
+                    config,
+                    textScale,
+                  ),
                   SizedBox(height: 8 * uiScale),
-                  _buildExpressionList(config, uiScale, textScale),
+                  _buildExpressionLayerGrid(
+                    level: 1,
+                    options: _layer1Expressions,
+                    selectedName: _selectedLayer1,
+                    config: config,
+                    uiScale: uiScale,
+                    textScale: textScale,
+                  ),
+                  SizedBox(height: 16 * uiScale),
+                ],
+
+                if (_layer2Expressions.isNotEmpty) ...[
+                  _buildSectionTitle(
+                    '第二层差分 (Layer 2 · 叠加在第一层之上)',
+                    config,
+                    textScale,
+                  ),
+                  SizedBox(height: 8 * uiScale),
+                  _buildExpressionLayerGrid(
+                    level: 2,
+                    options: _layer2Expressions,
+                    selectedName: _selectedLayer2,
+                    config: config,
+                    uiScale: uiScale,
+                    textScale: textScale,
+                  ),
                   SizedBox(height: 16 * uiScale),
                 ],
 
@@ -501,7 +617,9 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
                   SizedBox(height: 16 * uiScale),
                 ],
 
-                if (_poses.isEmpty && _expressions.isEmpty) ...[
+                if (_poses.isEmpty &&
+                    _layer1Expressions.isEmpty &&
+                    _layer2Expressions.isEmpty) ...[
                   Center(
                     child: Padding(
                       padding: EdgeInsets.symmetric(vertical: 32 * uiScale),
@@ -690,7 +808,8 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
           children: [
             Expanded(
               child: Text(
-                '当前选择: $_selectedPose / $_selectedExpression\n'
+                '当前选择: $_selectedPose / '
+                '${_selectedExpression.isEmpty ? '无差分' : _selectedExpression}\n'
                 '动画: ${_selectedAnimation ?? '无动画'}',
                 style: config.dialogueTextStyle.copyWith(
                   fontSize:
@@ -774,7 +893,8 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
                     onTap: () {
                       _preloadPreviewMetadata(
                         pose: pose.name,
-                        expression: _selectedExpression,
+                        layer1: _selectedLayer1,
+                        layer2: _selectedLayer2,
                       );
                       setState(() {
                         _selectedPose = pose.name;
@@ -811,11 +931,21 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
     );
   }
 
-  Widget _buildExpressionList(
-    SakiEngineConfig config,
-    double uiScale,
-    double textScale,
-  ) {
+  /// 某一层的差分栅格。
+  ///
+  /// [level] 为 1 时列出基础表情，为 2 时列出叠加层；第二层额外提供"清除"
+  /// 项，用来在保留第一层的前提下摘掉叠加层（脚本中写作 `--none`）。
+  Widget _buildExpressionLayerGrid({
+    required int level,
+    required List<ExpressionOption> options,
+    required String selectedName,
+    required SakiEngineConfig config,
+    required double uiScale,
+    required double textScale,
+  }) {
+    final hasClearTile = level >= 2;
+    final itemCount = options.length + (hasClearTile ? 1 : 0);
+
     return GridView.builder(
       padding: EdgeInsets.zero,
       shrinkWrap: true,
@@ -826,58 +956,116 @@ class _ExpressionSelectorDialogState extends State<ExpressionSelectorDialog>
         crossAxisSpacing: 8 * uiScale,
         mainAxisSpacing: 8 * uiScale,
       ),
-      itemCount: _expressions.length,
+      itemCount: itemCount,
       itemBuilder: (context, index) {
-        final expression = _expressions[index];
-        final isSelected = expression.name == _selectedExpression;
+        final isClearTile = hasClearTile && index == 0;
+        if (isClearTile) {
+          final isSelected = selectedName.isEmpty;
+          return _buildLayerTile(
+            title: '清除第二层',
+            subtitle: '不叠加任何层',
+            preview: const SizedBox.shrink(),
+            isSelected: isSelected,
+            onTap: () => setState(() => _selectedLayer2 = ''),
+            onApply: () {
+              setState(() => _selectedLayer2 = '');
+              _applySelectionFromLayers(_selectedPose);
+            },
+            config: config,
+            uiScale: uiScale,
+            textScale: textScale,
+          );
+        }
 
-        return Column(
-          children: [
-            Expanded(
-              child: _buildOptionTile(
-                title: expression.displayName,
-                subtitle: 'Layer ${expression.layerLevel}',
-                preview: ExpressionFocusPreview(
+        final option = options[index - (hasClearTile ? 1 : 0)];
+        final isSelected = option.name == selectedName;
+        return _buildLayerTile(
+          title: option.displayName,
+          subtitle: level >= 2 ? '叠加层' : '基础表情',
+          preview: _selectedPose.isEmpty
+              ? const SizedBox.shrink()
+              : ExpressionFocusPreview(
                   key: ValueKey(
-                    'expression_tile_${widget.characterId}_${_selectedPose}_${expression.name}',
+                    'expression_tile_${widget.characterId}_${_selectedPose}_'
+                    '${level}_${option.name}',
                   ),
                   metadataRepository: _previewMetadataRepository,
                   characterId: widget.characterId,
                   pose: _selectedPose,
-                  expression: expression.name,
+                  expression: option.name,
+                  layerLevel: level,
+                  baseLayerAssetNames: _baseAssetNamesForLayer(level),
                   paddingFraction: 0.14,
                 ),
-                isSelected: isSelected,
-                onTap: () {
-                  setState(() {
-                    _selectedExpression = expression.name;
-                  });
-                },
-                onDoubleTap: () =>
-                    _applySelection(_selectedPose, expression.name),
-                config: config,
-                uiScale: uiScale,
-                textScale: textScale,
-              ),
-            ),
-            SizedBox(height: 4 * uiScale),
-            SizedBox(
-              width: double.infinity,
-              height: 24 * uiScale,
-              child: ElevatedButton(
-                onPressed: () =>
-                    _applySelection(_selectedPose, expression.name),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: config.themeColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 4 * uiScale),
-                ),
-                child: Text('应用', style: TextStyle(fontSize: 10 * textScale)),
-              ),
-            ),
-          ],
+          isSelected: isSelected,
+          onTap: () {
+            setState(() {
+              if (level <= 1) {
+                _selectedLayer1 = option.name;
+              } else {
+                _selectedLayer2 = option.name;
+              }
+            });
+          },
+          onApply: () {
+            setState(() {
+              if (level <= 1) {
+                _selectedLayer1 = option.name;
+              } else {
+                _selectedLayer2 = option.name;
+              }
+            });
+            _applySelectionFromLayers(_selectedPose);
+          },
+          config: config,
+          uiScale: uiScale,
+          textScale: textScale,
         );
       },
+    );
+  }
+
+  Widget _buildLayerTile({
+    required String title,
+    required String subtitle,
+    required Widget preview,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required VoidCallback onApply,
+    required SakiEngineConfig config,
+    required double uiScale,
+    required double textScale,
+  }) {
+    return Column(
+      children: [
+        Expanded(
+          child: _buildOptionTile(
+            title: title,
+            subtitle: subtitle,
+            preview: preview,
+            isSelected: isSelected,
+            onTap: onTap,
+            onDoubleTap: onApply,
+            config: config,
+            uiScale: uiScale,
+            textScale: textScale,
+          ),
+        ),
+        SizedBox(height: 4 * uiScale),
+        SizedBox(
+          width: double.infinity,
+          height: 24 * uiScale,
+          child: ElevatedButton(
+            onPressed: onApply,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: config.themeColors.primary,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 4 * uiScale),
+            ),
+            child: Text('应用', style: TextStyle(fontSize: 10 * textScale)),
+          ),
+        ),
+      ],
     );
   }
 

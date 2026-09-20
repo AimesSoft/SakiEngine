@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
 
 const MAGIC: &[u8; 4] = b"SAKI";
-const MAX_VERSION: i32 = 18;
+const MAX_VERSION: i32 = 20;
 const MAX_FIELD_BYTES: usize = 64 * 1024 * 1024;
 const MAX_COLLECTION: usize = 100_000;
 const MAX_SNAPSHOT_DEPTH: usize = 256;
@@ -466,6 +466,10 @@ impl<'a> Reader<'a> {
             self.nullable_string()?;
         }
         self.i64()?;
+        if version >= 19 {
+            self.nullable_string()?; // presentation
+            self.nullable_string()?; // speakerAlias
+        }
         Ok(())
     }
 
@@ -545,6 +549,19 @@ impl<'a> Reader<'a> {
             self.nullable_string()?; // scriptCanvasId
             self.string()?; // scriptCanvasDurationSeconds
             self.i32()?; // scriptCanvasRevision
+        }
+        if version >= 19 {
+            self.nullable_string()?; // nvlPresentation
+            self.nullable_string()?; // nvlLayout
+            self.bool()?; // nvlAccumulate
+        }
+        if version >= 20 {
+            self.bool()?; // hasMusicState (false for migrated legacy snapshots)
+            if self.nullable_string()?.is_some() {
+                self.i32()?; // music start script index
+                self.nullable_string()?; // optional music end script index
+            }
+            self.nullable_string()?; // scene filter
         }
         Ok(())
     }
@@ -993,6 +1010,18 @@ mod tests {
             string(&mut bytes, Some("2.5"));
             bytes.extend_from_slice(&9_i32.to_le_bytes());
         }
+        if version >= 19 {
+            string(&mut bytes, None);
+            string(&mut bytes, None);
+            bytes.push(1);
+        }
+        if version >= 20 {
+            bytes.push(1);
+            string(&mut bytes, Some("route-theme"));
+            bytes.extend_from_slice(&1_i32.to_le_bytes());
+            string(&mut bytes, None);
+            string(&mut bytes, Some("snowmosaic intensity:0.8 animation:fade duration:1.8"));
+        }
         bytes.extend_from_slice(&0_i32.to_le_bytes());
         bytes.extend_from_slice(&[0, 0, 0, 0]);
         bytes.extend_from_slice(&0_i32.to_le_bytes());
@@ -1002,9 +1031,15 @@ mod tests {
 
     #[test]
     fn validates_current_format() {
-        let metadata = decode(&minimal_save(18)).unwrap();
+        let metadata = decode(&minimal_save(20)).unwrap();
         assert_eq!(metadata.id, 7);
         assert_eq!(metadata.script_index, 3);
+    }
+
+    #[test]
+    fn accepts_nvl_layout_format() {
+        let metadata = decode(&minimal_save(19)).unwrap();
+        assert_eq!(metadata.version, 19);
     }
 
     #[test]

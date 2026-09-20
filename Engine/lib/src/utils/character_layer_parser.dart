@@ -1,5 +1,7 @@
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/config/asset_manager.dart';
+import 'package:sakiengine/src/utils/character_expression_layers.dart';
+import 'package:sakiengine/src/utils/character_expression_resolver.dart';
 
 class CharacterLayerInfo {
   final String assetName;
@@ -149,118 +151,108 @@ class CharacterLayerParser {
     return layers;
   }
 
+  /// 解析 expression 里的差分图层。
+  ///
+  /// 支持的写法：
+  /// * `happy`        -> 第一层
+  /// * `--happy`      -> 第二层（磁盘资源 `characters/<id>--happy`）
+  /// * `happy mask`   -> 第一层 happy + 第二层 mask（剧本语法）
+  /// * `happy+--mask` -> 同上的内部规范格式
+  ///
+  /// 同层最多一个图层，返回值已按 layerLevel 升序排列，渲染时后画的层自然
+  /// 盖在前一层之上。
   static Future<List<CharacterLayerInfo>> _parseExpressionLayers(
     String resourceId,
     String expression,
   ) async {
-    final layers = <CharacterLayerInfo>[];
-
-    // 单层解析逻辑：
-    // "happy" -> level 1 (基础表情)
-    // "-happy" -> level 1 (基础差分表情，与原逻辑兼容)
-    // "--happy" -> level 2 (第二层图层)
-    // "---happy" -> level 3 (第三层图层)
-    //
-    // 使用 "+" 可在一个 expression 中组合多个差分：
-    // "normal+--mask" -> normal(level 1) + mask(level 2)
-
-    if (expression.isEmpty) {
-      return layers;
+    final parsed = CharacterExpressionLayers.parse(expression);
+    if (parsed.layers.isEmpty) {
+      return const [];
     }
 
-    final expressions = expression
-        .split('+')
-        .map((part) => part.trim())
-        .where((part) => part.isNotEmpty);
-    for (final expressionPart in expressions) {
-      final layer = await _parseExpressionLayer(resourceId, expressionPart);
-      if (layer != null) {
-        layers.add(layer);
+    final layers = <CharacterLayerInfo>[];
+    for (final layer in parsed.layers) {
+      final parsedLayer = await _parseExpressionLayer(
+        resourceId,
+        layer.assetToken,
+        layer.level,
+      );
+      if (parsedLayer != null) {
+        layers.add(parsedLayer);
       }
     }
-
     return layers;
   }
 
+  /// 解析单层差分。
+  ///
+  /// [expressionName] 允许是裸名（`mask`）或带层级前缀的 token（`--mask`）；
+  /// [layerLevel] 只在裸名需要补前缀时使用。资源名优先使用规范命名
+  /// `characters/<id>--<name>`，找不到时回退到旧的单横线命名。
   static Future<CharacterLayerInfo?> _parseExpressionLayer(
     String resourceId,
-    String expression,
+    String expressionName,
+    int layerLevel,
   ) async {
-    // 计算开头连续"-"的数量
-    int dashCount = 0;
-    for (int i = 0; i < expression.length; i++) {
-      if (expression[i] == '-') {
-        dashCount++;
-      } else {
-        break;
-      }
-    }
-
-    // 提取实际的表情名称
-    String actualExpression;
-    if (dashCount > 0) {
-      actualExpression = expression.substring(dashCount);
-    } else {
-      actualExpression = expression;
-    }
-
-    if (actualExpression.isEmpty) {
+    final name = expressionName.trim();
+    if (name.isEmpty) {
       return null;
     }
 
-    // 确定图层级别
-    int layerLevel;
-    if (dashCount == 0) {
-      layerLevel = 1; // 无"-"，作为基础表情
-    } else if (dashCount == 1) {
-      layerLevel = 1; // 单"-"，保持与原有逻辑兼容
-    } else {
-      layerLevel = dashCount; // 多"-"，按"-"数量确定层级
+    // token 自带层级前缀（`--mask`），层级由它自己决定。
+    final token = CharacterExpressionLayers.normalizedLayerToken(
+      name,
+      level: layerLevel,
+    );
+    var resolved = await CharacterExpressionResolver.resolveToken(
+      resourceId: resourceId,
+      token: token,
+    );
+    if (resolved == null) {
+      return null;
     }
 
-    // 检查指定表情是否存在，如果不存在则查找该级别的默认表情
-    String finalExpression = actualExpression;
-    final assetName = 'characters/$resourceId-$finalExpression';
-    final exists = await AssetManager().findAsset(assetName) != null;
-
-    if (!exists) {
-      // 查找该级别下字母顺序第一个可用的图层
-      final defaultLayer = await AssetManager.getDefaultLayerForLevel(
-        resourceId,
-        layerLevel,
-      );
-      if (defaultLayer != null) {
-        finalExpression = defaultLayer;
+    // 显式指定的差分缺失时，回退到该层默认差分。
+    //
+    // 第一层保留历史行为（按字母序补位）；第二层及以上不做这种补位：叠加层
+    // 是显式选择的结果，悄悄换成另一个差分比缺图更让人困惑。
+    if (await AssetManager().findAsset(resolved.assetName) == null &&
+        layerLevel <= 1) {
+      final defaultLayerName =
+          CharacterExpressionResolver.defaultLayerNameForLevel(
+            await AssetManager.getAvailableCharacterLayers(resourceId),
+            layerLevel,
+          );
+      if (defaultLayerName != null && defaultLayerName.isNotEmpty) {
+        // 扫描结果可能自带 `--` 前缀，先剥掉再按层级重建，避免重复叠加。
+        final fallbackName = CharacterExpressionLayers.stripPrefixes(
+          defaultLayerName,
+        );
+        final fallback = await CharacterExpressionResolver.resolveToken(
+          resourceId: resourceId,
+          token: fallbackName,
+        );
+        if (fallback != null) {
+          resolved = fallback;
+        }
       }
     }
 
     return CharacterLayerInfo(
-      assetName: 'characters/$resourceId-$finalExpression',
+      assetName: resolved.assetName,
       layerLevel: layerLevel,
       layerType: 'expression_layer_$layerLevel',
     );
   }
 
-  /// 辅助方法：检查表情字符串的层级
+  /// 辅助方法：检查表达式字符串的层级。
   static int getExpressionLayerLevel(String expression) {
-    if (expression.isEmpty) return 1;
-
-    int dashCount = 0;
-    for (int i = 0; i < expression.length; i++) {
-      if (expression[i] == '-') {
-        dashCount++;
-      } else {
-        break;
-      }
-    }
-
-    if (dashCount == 0) {
+    final layers = CharacterExpressionLayers.parse(expression).layers;
+    if (layers.isEmpty) {
       return 1;
-    } else if (dashCount == 1) {
-      return 1; // 保持与原有逻辑兼容
-    } else {
-      return dashCount;
     }
+    // 单个 token 时返回其所在层，多 token 组合时返回最高层。
+    return layers.last.level;
   }
 
   /// 解析帽子图层
@@ -285,20 +277,17 @@ class CharacterLayerParser {
     return null;
   }
 
-  /// 辅助方法：从表情字符串中提取实际的表情名称
+  /// 辅助方法：从单个差分 token 中提取实际的表情名称。
+  ///
+  /// 多层组合表达式请使用 [CharacterExpressionLayers.parse]，这里只处理
+  /// 第一个 token，保持旧调用点的行为不变。
   static String extractExpressionName(String expression) {
-    if (expression.isEmpty) return expression;
-
-    int dashCount = 0;
-    for (int i = 0; i < expression.length; i++) {
-      if (expression[i] == '-') {
-        dashCount++;
-      } else {
-        break;
-      }
+    final parsed = CharacterExpressionLayers.parse(expression);
+    final first = parsed.layers.isEmpty ? null : parsed.layers.first;
+    if (first != null) {
+      return first.name;
     }
-
-    return dashCount > 0 ? expression.substring(dashCount) : expression;
+    return CharacterExpressionLayers.stripPrefixes(expression.trim());
   }
 
   /// 清理缓存（在必要时调用）

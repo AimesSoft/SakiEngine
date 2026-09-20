@@ -6,6 +6,8 @@ import 'package:sakiengine/src/config/game_path_resolver.dart';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:flutter/services.dart' show rootBundle, AssetManifest;
 import 'package:path/path.dart' as p;
+import 'package:sakiengine/src/utils/character_expression_layers.dart';
+import 'package:sakiengine/src/utils/character_expression_resolver.dart';
 import 'package:sakiengine/src/game/game_script_localization.dart';
 import 'package:sakiengine/src/sks_compiler/compiled_sks_bundle.dart';
 import 'package:sakiengine/src/sks_compiler/compiled_sks_registry.dart';
@@ -978,6 +980,24 @@ class AssetManager {
     return null;
   }
 
+  /// 把 `characters/<id>-<layer>` 的文件名转成规范图层 token。
+  ///
+  /// 直接按 `$characterId-` 截断会让 `xiayo1--mask` 剩下 `-mask`，第二层的
+  /// 层级信息就丢了；这里用完整词干恢复出 `--mask`。
+  static String _normalizeScannedLayerName(
+    String characterId,
+    String fileNameWithoutExt,
+  ) {
+    final prefix = '$characterId-';
+    if (!fileNameWithoutExt.startsWith(prefix)) {
+      return '';
+    }
+    return CharacterExpressionLayers.canonicalLayerToken(
+      fileNameWithoutExt,
+      characterId,
+    );
+  }
+
   /// 递归扫描指定角色ID的所有可用图层文件
   /// 使用与findAsset相同的递归搜索逻辑
   static Future<List<String>> getAvailableCharacterLayersRecursive(
@@ -999,7 +1019,10 @@ class AssetManager {
         if (!fileNameWithoutExt.startsWith(prefix)) {
           continue;
         }
-        final layerName = fileNameWithoutExt.substring(prefix.length);
+        final layerName = _normalizeScannedLayerName(
+          characterId,
+          fileNameWithoutExt,
+        );
         if (layerName.isNotEmpty) {
           availableLayers.add(layerName);
         }
@@ -1029,7 +1052,10 @@ class AssetManager {
               !entry.stem.startsWith(prefix)) {
             continue;
           }
-          final layerName = entry.stem.substring(prefix.length);
+          final layerName = _normalizeScannedLayerName(
+            characterId,
+            entry.stem,
+          );
           if (layerName.isNotEmpty) {
             availableLayers.add(layerName);
           }
@@ -1063,8 +1089,11 @@ class AssetManager {
               imageExtensions.any(
                 (ext) => fileName.toLowerCase().endsWith(ext),
               )) {
-            // 提取图层名称（去掉角色ID前缀）
-            final layerName = fileNameWithoutExt.substring(prefix.length);
+            // 提取图层名称（去掉角色ID前缀，并恢复层级前缀）
+            final layerName = _normalizeScannedLayerName(
+              characterId,
+              fileNameWithoutExt,
+            );
             if (layerName.isNotEmpty) {
               availableLayers.add(layerName);
             }
@@ -1083,78 +1112,15 @@ class AssetManager {
     return availableLayers;
   }
 
-  /// 扫描指定角色ID的所有可用图层文件
-  /// 返回按字母顺序排序的文件名列表（不包含扩展名和角色ID前缀）
+  /// 扫描指定角色ID的所有可用图层文件。
+  ///
+  /// 结果与 [getAvailableCharacterLayersRecursive] 一致：角色资源允许放在
+  /// `characters/<文件夹>/` 子目录里，非递归扫描会漏掉这类角色（例如
+  /// `characters/noe_front/noe-happy.png`），导致缺层回退拿不到候选。
   static Future<List<String>> getAvailableCharacterLayers(
     String characterId,
-  ) async {
-    final availableLayers = <String>[];
-
-    final packStore = SakiPackStore.instance;
-    if (await packStore.ensureInitialized()) {
-      final prefix = '$characterId-';
-      final imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.avif'];
-      final fromPack = packStore.listFileNames('Assets/images/characters', '');
-      for (final fileName in fromPack) {
-        final fileNameLower = fileName.toLowerCase();
-        final fileNameWithoutExt = p.basenameWithoutExtension(fileName);
-        if (!imageExtensions.any((ext) => fileNameLower.endsWith(ext))) {
-          continue;
-        }
-        if (!fileNameWithoutExt.startsWith(prefix)) {
-          continue;
-        }
-        final layerName = fileNameWithoutExt.substring(prefix.length);
-        if (layerName.isNotEmpty) {
-          availableLayers.add(layerName);
-        }
-      }
-      if (availableLayers.isNotEmpty) {
-        availableLayers.sort();
-        return availableLayers;
-      }
-    }
-
-    try {
-      final gamePath = await _getGamePath();
-      final charactersDir = Directory(
-        p.join(gamePath, 'Assets', 'images', 'characters'),
-      );
-      if (!await charactersDir.exists()) {
-        return availableLayers;
-      }
-
-      final prefix = '$characterId-';
-      final imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.avif'];
-      var fileCount = 0;
-      await for (final file in charactersDir.list()) {
-        if (file is File) {
-          final fileName = p.basename(file.path);
-          fileCount++;
-          final fileNameWithoutExt = p.basenameWithoutExtension(fileName);
-
-          // 检查是否以指定角色ID开头且是图片文件
-          if (fileNameWithoutExt.startsWith(prefix) &&
-              imageExtensions.any(
-                (ext) => fileName.toLowerCase().endsWith(ext),
-              )) {
-            // 提取图层名称（去掉角色ID前缀）
-            final layerName = fileNameWithoutExt.substring(prefix.length);
-            if (layerName.isNotEmpty) {
-              availableLayers.add(layerName);
-            }
-          }
-        }
-      }
-      // 按字母顺序排序
-      availableLayers.sort();
-    } catch (e) {
-      if (_shouldLoadFromExternal()) {
-        print("AssetManager: 扫描角色图层出错 $characterId: $e");
-      }
-    }
-
-    return availableLayers;
+  ) {
+    return getAvailableCharacterLayersRecursive(characterId);
   }
 
   /// 获取指定角色ID和图层级别的默认图层名称
@@ -1164,48 +1130,16 @@ class AssetManager {
     int layerLevel,
   ) async {
     final availableLayers = await getAvailableCharacterLayers(characterId);
-
-    // 筛选出指定级别的图层
-    final layersForLevel = availableLayers.where((layer) {
-      // 解析图层级别
-      int dashCount = 0;
-      for (int i = 0; i < layer.length; i++) {
-        if (layer[i] == '-') {
-          dashCount++;
-        } else {
-          break;
-        }
-      }
-
-      int currentLayerLevel;
-      if (dashCount == 0) {
-        currentLayerLevel = 1; // 无"-"，作为基础表情
-      } else if (dashCount == 1) {
-        currentLayerLevel = 1; // 单"-"，保持兼容
-      } else {
-        currentLayerLevel = dashCount; // 多"-"，按数量确定层级
-      }
-
-      return currentLayerLevel == layerLevel;
-    }).toList();
-
-    // 提取实际的图层名称（去掉前缀"-"）
-    if (layersForLevel.isNotEmpty) {
-      String firstLayer = layersForLevel.first;
-
-      // 提取实际名称
-      int dashCount = 0;
-      for (int i = 0; i < firstLayer.length; i++) {
-        if (firstLayer[i] == '-') {
-          dashCount++;
-        } else {
-          break;
-        }
-      }
-
-      return dashCount > 0 ? firstLayer.substring(dashCount) : firstLayer;
+    final name = CharacterExpressionResolver.defaultLayerNameForLevel(
+      availableLayers,
+      layerLevel,
+    );
+    if (name == null || name.isEmpty) {
+      return null;
     }
-
-    return null;
+    return CharacterExpressionLayers.normalizedLayerToken(
+      name,
+      level: layerLevel,
+    );
   }
 }

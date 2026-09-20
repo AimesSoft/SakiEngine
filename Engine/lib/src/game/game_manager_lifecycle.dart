@@ -66,8 +66,8 @@ extension _GameManagerLifecycle on GameManager {
       }
     }
 
-    // 检查初始位置的音乐区间
-    await _checkMusicRegionAtCurrentIndex(forceCheck: true);
+    // 初始音乐由实际执行的 play/stop 节点决定
+    await _restoreCurrentMusic();
 
     await _executeScript();
   }
@@ -200,6 +200,10 @@ extension _GameManagerLifecycle on GameManager {
     );
 
     _currentState = snapshot.currentState.copyWith(
+      currentMusicRegion: snapshot.currentState.hasMusicState
+          ? snapshot.currentState.currentMusicRegion
+          : _resolveLegacyMusicRegion(snapshot),
+      hasMusicState: true,
       background: restoredBackground,
       isNvlMode: snapshot.isNvlMode,
       isNvlMovieMode: snapshot.isNvlMovieMode,
@@ -254,8 +258,8 @@ extension _GameManagerLifecycle on GameManager {
       );
     }
 
-    // 检查恢复位置的音乐区间（强制检查）
-    await _checkMusicRegionAtCurrentIndex(forceCheck: true);
+    // 恢复快照中实际播放的音乐，不跨分支推算
+    await _restoreCurrentMusic();
 
     // 检测并恢复当前场景的动画
     await _checkAndRestoreSceneAnimation(notifyListeners: false);
@@ -290,6 +294,24 @@ extension _GameManagerLifecycle on GameManager {
     if (restoreDialogueVoice && !shouldReExecute) {
       await _restoreVoiceForDialogue(displayedDialogueScriptIndex);
     }
+  }
+
+  /// Older saves did not store music. Search only the labels represented by
+  /// their played dialogue history, so adjacent unvisited endings cannot mute
+  /// a successful branch. New saves restore the explicit music/silence field.
+  MusicRegion? _resolveLegacyMusicRegion(GameStateSnapshot snapshot) {
+    for (final index in [
+      snapshot.scriptIndex - 1,
+      ...snapshot.dialogueHistory.reversed.map((entry) => entry.scriptIndex),
+    ]) {
+      for (var i = index.clamp(0, _script.children.length - 1); i >= 0; i--) {
+        final node = _script.children[i];
+        if (node is LabelNode) break;
+        if (node is StopMusicNode) return null;
+        if (node is PlayMusicNode) return _getMusicRegionForIndex(i);
+      }
+    }
+    return null;
   }
 
   Future<String?> _resolveRestoredBackground(
