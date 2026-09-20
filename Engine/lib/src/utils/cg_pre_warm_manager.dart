@@ -106,6 +106,13 @@ class CgPreWarmManager {
   /// 正在执行的预热任务
   final Set<String> _processingTasks = {};
 
+  /// 等待中的预热任务：cacheKey -> task。
+  ///
+  /// 同一个 key 的重复请求必须复用同一个任务的 Future。否则每次请求都会再开
+  /// 一个 20Hz 的轮询等待循环，快进时每个节点都会对同一批前瞻 CG 重复请求，
+  /// 轮询循环会无上限累积，把 UI 线程拖死。
+  final Map<String, PreWarmTask> _pendingTasks = {};
+
   /// 预热工作器是否正在运行
   bool _isWorkerRunning = false;
 
@@ -151,12 +158,22 @@ class CgPreWarmManager {
       return true;
     }
 
+    // 已经在预热中的请求直接复用同一个任务的 Future。
+    final pendingTask = _pendingTasks[cacheKey];
+    if (pendingTask != null) {
+      if (kEngineDebugMode) {
+        //print('[CgPreWarmManager] ⏳ 复用进行中的预热: $cacheKey');
+      }
+      return await pendingTask.completed;
+    }
+
     // 检查是否已在队列中或正在处理
     if (_warmStatus[cacheKey] == PreWarmStatus.warming ||
         _processingTasks.contains(cacheKey)) {
       if (kEngineDebugMode) {
         //print('[CgPreWarmManager] ⏳ 预热中: $cacheKey');
       }
+      // 状态为 warming 却找不到任务引用（异常路径），退化为轮询等待。
       return await _waitForCompletion(cacheKey);
     }
 
@@ -171,6 +188,7 @@ class CgPreWarmManager {
 
     // 添加到队列
     _taskQueue.add(task);
+    _pendingTasks[cacheKey] = task;
     _warmStatus[cacheKey] = PreWarmStatus.warming;
 
     if (kEngineDebugMode) {
@@ -323,6 +341,9 @@ class CgPreWarmManager {
       }
     } finally {
       _processingTasks.remove(task.cacheKey);
+      if (identical(_pendingTasks[task.cacheKey], task)) {
+        _pendingTasks.remove(task.cacheKey);
+      }
     }
   }
 
@@ -392,7 +413,18 @@ class CgPreWarmManager {
 
   /// 清理所有预热任务
   void _clearAllTasks() {
+    // 排队/等待中的任务必须显式结束：否则 `await preWarm(...)` 的调用方
+    // （例如 CG 预分析器）会永远挂起，把整个剧情流程一起拖死。
+    while (!_taskQueue.isEmpty) {
+      _taskQueue.removeFirst().complete(false);
+    }
+    for (final task in _pendingTasks.values) {
+      if (!_processingTasks.contains(task.cacheKey)) {
+        task.complete(false);
+      }
+    }
     _taskQueue.clear();
+    _pendingTasks.clear();
     _warmStatus.clear();
     _processingTasks.clear();
   }

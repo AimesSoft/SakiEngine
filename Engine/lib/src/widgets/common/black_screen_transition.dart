@@ -13,52 +13,82 @@ class TransitionOverlayManager {
   
   OverlayEntry? _overlayEntry;
   bool _isTransitioning = false;
-  
+  Completer<void>? _completer;
+
   /// 执行转场过渡
   /// [context] 用于创建覆盖层的上下文
   /// [onMidTransition] 在黑屏最深时执行的回调（切换场景时机）
   /// [duration] 总过渡时长
+  ///
+  /// 调用方（剧情执行器）会 await 返回的 Future 才会继续推进，所以这里必须保证
+  /// 任何情况下 Future 都会完成、且 [onMidTransition] 一定会被调用。少了任何
+  /// 一个，剧情就会停在一个"永远不会结束的转场"上：对白不再出现、点击也毫无
+  /// 反应，只能强杀进程。
   Future<void> transition({
     required BuildContext context,
     required VoidCallback onMidTransition,
     Duration duration = const Duration(milliseconds: 800),
   }) async {
-    //print('[TransitionManager] 请求转场，当前状态: isTransitioning=$_isTransitioning');
-    if (_isTransitioning) return;
-    
+    if (_isTransitioning) {
+      // 已有一个转场在播。不要静默丢弃这次请求，否则本次场景切换会丢失且
+      // 调用方永远等不到 onMidTransition：立刻提交状态并报告完成。
+      _invokeSafely(onMidTransition);
+      return;
+    }
+
     _isTransitioning = true;
-    //print('[TransitionManager] 开始转场，时长: ${duration.inMilliseconds}ms');
-    
     final completer = Completer<void>();
-    
-    final backdropColor = ScenePresentationTheme.backdropColorOf(context);
-    // 创建覆盖层
-    _overlayEntry = OverlayEntry(
-      builder: (context) => _TransitionOverlay(
-        backdropColor: backdropColor,
-        duration: duration,
-        onMidTransition: onMidTransition,
-        onComplete: () {
-          //print('[TransitionManager] 转场完成，移除覆盖层');
-          _removeOverlay();
-          _isTransitioning = false;
-          completer.complete();
-        },
-      ),
-    );
-    
-    // 插入覆盖层
-    //print('[TransitionManager] 插入转场覆盖层');
-    Overlay.of(context).insert(_overlayEntry!);
-    
+    _completer = completer;
+
+    try {
+      final backdropColor = ScenePresentationTheme.backdropColorOf(context);
+      // 创建覆盖层
+      _overlayEntry = OverlayEntry(
+        builder: (context) => _TransitionOverlay(
+          backdropColor: backdropColor,
+          duration: duration,
+          onMidTransition: () => _invokeSafely(onMidTransition),
+          onComplete: _finishTransition,
+        ),
+      );
+
+      // 插入覆盖层
+      Overlay.of(context).insert(_overlayEntry!);
+    } catch (error, stackTrace) {
+      // 界面已销毁导致取不到 Overlay 等异常，绝不能让 _isTransitioning 永远
+      // 停在 true：那会丢弃之后所有转场，让剧情再也无法恢复。
+      debugPrint('[TransitionManager] 创建转场覆盖层失败: $error\n$stackTrace');
+      _invokeSafely(onMidTransition);
+      _finishTransition();
+    }
+
     return completer.future;
   }
-  
+
+  /// 结束转场：清理覆盖层、复位状态并唤醒等待中的调用方。
+  void _finishTransition() {
+    _removeOverlay();
+    _isTransitioning = false;
+    final completer = _completer;
+    _completer = null;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+  }
+
+  void _invokeSafely(VoidCallback callback) {
+    try {
+      callback();
+    } catch (error, stackTrace) {
+      debugPrint('[TransitionManager] 转场回调异常: $error\n$stackTrace');
+    }
+  }
+
   void _removeOverlay() {
     _overlayEntry?.remove();
     _overlayEntry = null;
   }
-  
+
   bool get isTransitioning => _isTransitioning;
 }
 
@@ -71,49 +101,72 @@ class SceneTransitionManager {
   
   OverlayEntry? _overlayEntry;
   bool _isTransitioning = false;
-  
+  Completer<void>? _completer;
+
   /// 执行Scene转场过渡
+  ///
+  /// 与 [TransitionOverlayManager] 同样保证：Future 必定完成、[onMidTransition]
+  /// 必定被调用，任何异常都不会把 [_isTransitioning] 永久留在 true。
   Future<void> transition({
     required BuildContext context,
     required VoidCallback onMidTransition,
     Duration duration = const Duration(milliseconds: 800),
   }) async {
-    //print('[SceneTransition] 请求scene转场，当前状态: isTransitioning=$_isTransitioning');
-    if (_isTransitioning) return;
-    
+    if (_isTransitioning) {
+      _invokeSafely(onMidTransition);
+      return;
+    }
+
     _isTransitioning = true;
-    //print('[SceneTransition] 开始scene转场，时长: ${duration.inMilliseconds}ms');
-    
     final completer = Completer<void>();
-    
-    final backdropColor = ScenePresentationTheme.backdropColorOf(context);
-    // 创建覆盖层
-    _overlayEntry = OverlayEntry(
-      builder: (context) => _TransitionOverlay(
-        backdropColor: backdropColor,
-        duration: duration,
-        onMidTransition: onMidTransition,
-        onComplete: () {
-          //print('[SceneTransition] scene转场完成，移除覆盖层');
-          _removeOverlay();
-          _isTransitioning = false;
-          completer.complete();
-        },
-      ),
-    );
-    
-    // 插入覆盖层
-    //print('[SceneTransition] 插入scene转场覆盖层');
-    Overlay.of(context).insert(_overlayEntry!);
-    
+    _completer = completer;
+
+    try {
+      final backdropColor = ScenePresentationTheme.backdropColorOf(context);
+      // 创建覆盖层
+      _overlayEntry = OverlayEntry(
+        builder: (context) => _TransitionOverlay(
+          backdropColor: backdropColor,
+          duration: duration,
+          onMidTransition: () => _invokeSafely(onMidTransition),
+          onComplete: _finishTransition,
+        ),
+      );
+
+      // 插入覆盖层
+      Overlay.of(context).insert(_overlayEntry!);
+    } catch (error, stackTrace) {
+      debugPrint('[SceneTransition] 创建转场覆盖层失败: $error\n$stackTrace');
+      _invokeSafely(onMidTransition);
+      _finishTransition();
+    }
+
     return completer.future;
   }
-  
+
+  void _finishTransition() {
+    _removeOverlay();
+    _isTransitioning = false;
+    final completer = _completer;
+    _completer = null;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete();
+    }
+  }
+
+  void _invokeSafely(VoidCallback callback) {
+    try {
+      callback();
+    } catch (error, stackTrace) {
+      debugPrint('[SceneTransition] 转场回调异常: $error\n$stackTrace');
+    }
+  }
+
   void _removeOverlay() {
     _overlayEntry?.remove();
     _overlayEntry = null;
   }
-  
+
   bool get isTransitioning => _isTransitioning;
 }
 

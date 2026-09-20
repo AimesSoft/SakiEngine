@@ -31,6 +31,17 @@ class DialogueProgressionManager {
     _currentTypewriter = typewriter;
   }
 
+  /// 注销打字机，但只在它仍然是当前注册实例时才生效。
+  ///
+  /// 对话框被重建时，旧实例的 dispose 可能晚于新实例的 initState。此时无条件
+  /// 写入 null 会把刚注册的新打字机一起清掉，让推进管理器误以为"没有打字机"，
+  /// 于是点击会立刻跳过打字动画、甚至直接跳过整句对白。
+  void unregisterTypewriter(TypewriterAnimationManager typewriter) {
+    if (identical(_currentTypewriter, typewriter)) {
+      _currentTypewriter = null;
+    }
+  }
+
   /// 统一的对话推进方法
   ///
   /// 所有推进对话的操作都应该调用这个方法，而不是直接调用 gameManager.next()
@@ -43,8 +54,16 @@ class DialogueProgressionManager {
       }
       return false;
     }
-    if (_currentTypewriter?.canProgressDialogue(isAutomated: isAutomated) ==
+    final blockingTypewriter = _currentTypewriter;
+    if (blockingTypewriter?.canProgressDialogue(isAutomated: isAutomated) ==
         false) {
+      // 项目自定义打字机可能在打字期间拒绝推进。手动点击时必须仍然能跳过打字
+      // 动画：否则一旦它卡在 typing 状态，玩家的每一次点击都会被永久吞掉，
+      // 连唯一的自救路径都没有了（表现为"点击屏幕毫无反应"）。
+      if (!isAutomated && blockingTypewriter!.isTyping) {
+        blockingTypewriter.skipToEnd();
+        _lastTypewriterSkipAt = DateTime.now();
+      }
       return false;
     }
     if (!isAutomated) {

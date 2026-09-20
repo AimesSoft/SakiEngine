@@ -124,7 +124,9 @@ class _DialogueBoxState extends State<DialogueBox>
 
   @override
   void dispose() {
-    widget.progressionManager?.registerTypewriter(null);
+    // 只在当前注册的仍是本实例时才注销：旧实例的 dispose 可能晚于新实例的
+    // initState，无条件写 null 会把新打字机一起清掉。
+    widget.progressionManager?.unregisterTypewriter(_typewriterController);
     SettingsManager().removeListener(_onSettingsChanged);
     ReadTextTracker.instance.removeListener(_onReadTextTrackerChanged);
     _typewriterController.removeListener(_onTypewriterStateChanged);

@@ -182,6 +182,13 @@ class GameManager {
   bool _isWaitingForTimer = false; // 新增：专门的计时器等待标志
   Timer? _currentTimer; // 新增：当前活跃的计时器引用
   VoidCallback? _currentTimerCompletion;
+
+  /// 场景/视频转场期间，脚本在等转场回调来恢复。转场本身没有 Timer，所以单独
+  /// 记录这个状态，并配一个看门狗：万一转场的 Future 永远不会完成（覆盖层没建
+  /// 起来、窗口被暂停、渲染异常），输入锁也不能永远握着不放。
+  bool _isAwaitingSceneTransition = false;
+  Timer? _sceneTransitionWatchdog;
+  static const Duration _sceneTransitionWatchdogTimeout = Duration(seconds: 30);
   Map<String, int> _labelIndexMap = {};
   List<MapEntry<String, int>> _sortedLabelEntries = const [];
 
@@ -1825,6 +1832,54 @@ class GameManager {
     return true;
   }
 
+  /// 开始等待一次转场恢复。
+  ///
+  /// 转场正常结束时必须调用 [_endSceneTransitionWait]；如果转场的 Future 始终
+  /// 不回调，看门狗会在超时后强制恢复剧情，避免留下"文字不显示、点击无反应"的
+  /// 永久卡死。
+  void _beginSceneTransitionWait(double resumeSeconds) {
+    _isAwaitingSceneTransition = true;
+    _sceneTransitionWatchdog?.cancel();
+    _sceneTransitionWatchdog = Timer(_sceneTransitionWatchdogTimeout, () {
+      _sceneTransitionWatchdog = null;
+      if (_disposed || !_isAwaitingSceneTransition) return;
+      debugPrint('[GameManager] 转场等待超时，强制恢复剧情执行');
+      _isAwaitingSceneTransition = false;
+      _isWaitingForTimer = true;
+      _startSceneTimer(resumeSeconds);
+    });
+  }
+
+  void _endSceneTransitionWait() {
+    _isAwaitingSceneTransition = false;
+    _sceneTransitionWatchdog?.cancel();
+    _sceneTransitionWatchdog = null;
+  }
+
+  /// 当前的"等待计时器"是否还有真正负责恢复它的宿主。
+  ///
+  /// 正常等待必须由 [_currentTimer]、[_currentTimerCompletion] 或一个正在进行
+  /// 的转场来收尾；三者都没有，就说明这是一个被遗弃的锁。
+  bool _hasLiveTimerWaitOwner() {
+    return _currentTimer != null ||
+        _currentTimerCompletion != null ||
+        _isAwaitingSceneTransition;
+  }
+
+  /// 释放无人负责的等待锁。
+  ///
+  /// 返回 true 表示确实释放了一个坏锁（调用方应当继续走下走，而不是吞掉输入）。
+  /// 这是最后一道保险：只要等待锁没有宿主，玩家的一次点击就应当能把剧情救回来，
+  /// 而不是永久卡死在"点击毫无反应"。
+  bool _releaseStrandedTimerWait() {
+    if (!_isWaitingForTimer || _hasLiveTimerWaitOwner()) {
+      return false;
+    }
+    _isWaitingForTimer = false;
+    debugPrint('[GameManager] 检测到无人负责的等待锁，已自动释放以避免输入永久失效');
+    return true;
+  }
+
   /// 检测背景名称是否包含章节信息
   /// 检测规则：包含以下关键字之一（不区分大小写）：
   /// - "chapter"
@@ -1900,6 +1955,7 @@ class GameManager {
     _currentTimer?.cancel();
     _currentTimer = null;
     _currentTimerCompletion = null;
+    _endSceneTransitionWait();
     _isProcessing = false;
     _isWaitingForTimer = false;
     _isFastForwardMode = false;
@@ -2362,10 +2418,13 @@ class GameManager {
   }
 
   void next() async {
-    if (_disposed ||
-        _isSeekingNextChoice ||
-        _isProcessing ||
-        _isWaitingForTimer) {
+    if (_disposed || _isSeekingNextChoice || _isProcessing) {
+      return;
+    }
+    // 等待计时器期间点击不推进（RenPy 语义）。但如果这个等待已经没有任何人
+    // 负责恢复它（转场回调丢失、计时器被清掉），就必须放行，否则玩家的每一次
+    // 点击都会被吞掉，表现为"点击屏幕毫无反应"。
+    if (_isWaitingForTimer && !_releaseStrandedTimerWait()) {
       return;
     }
     final presentationRevision = _characterPresentationRevision;
@@ -2446,10 +2505,12 @@ class GameManager {
   }
 
   Future<void> _executeScript() async {
-    if (_disposed ||
-        _isSeekingNextChoice ||
-        _isProcessing ||
-        _isWaitingForTimer) {
+    if (_disposed || _isSeekingNextChoice || _isProcessing) {
+      return;
+    }
+    // 与 next() 同样的保险：等待锁如果已经没有宿主，就必须自行解开，
+    // 否则剧情会永远停在原地，任何入口都无法推进。
+    if (_isWaitingForTimer && !_releaseStrandedTimerWait()) {
       return;
     }
     _isProcessing = true;
@@ -2694,6 +2755,7 @@ class GameManager {
           }
 
           final navigationRevision = _choiceSeekRevision;
+          _beginSceneTransitionWait(timerDuration);
           _transitionToNewBackground(
             node.background,
             sceneFilter,
@@ -2704,7 +2766,17 @@ class GameManager {
             shouldClearCG,
           ).then((_) {
             if (_disposed || navigationRevision != _choiceSeekRevision) return;
+            // 看门狗已经恢复过剧情，不要再重复恢复。
+            if (!_isAwaitingSceneTransition) return;
+            _endSceneTransitionWait();
             // 转场完成后启动计时器
+            _startSceneTimer(timerDuration);
+          }).catchError((Object error, StackTrace stackTrace) {
+            if (_disposed || navigationRevision != _choiceSeekRevision) return;
+            // 转场抛异常也必须恢复剧情：否则等待锁再也没人释放，玩家会遇到
+            // "文字不显示 + 点击毫无反应"的永久卡死。
+            debugPrint('[GameManager] 背景转场失败，直接继续执行: $error\n$stackTrace');
+            _endSceneTransitionWait();
             _startSceneTimer(timerDuration);
           });
           return; // 转场过程中暂停脚本执行，将在转场完成后自动恢复
@@ -2786,6 +2858,13 @@ class GameManager {
             if (!_isSeekingNextChoice &&
                 node.timer != null &&
                 node.timer! > 0) {
+              // 必须先把索引推进、并举起等待锁，定时器到点后才能真的恢复脚本。
+              // 只调用 _startSceneTimer 的话，回调会因为 _isWaitingForTimer 仍是
+              // false 而直接失效，剧情会永远停在这个视频节点上：快进时表现为
+              // 画面无对白、点击也推进不了。
+              _scriptIndex += sceneFilter != null ? 2 : 1;
+              _isWaitingForTimer = true;
+              _isProcessing = false;
               _startSceneTimer(node.timer!);
               return;
             }
@@ -2800,6 +2879,7 @@ class GameManager {
           _isProcessing = false;
 
           final navigationRevision = _choiceSeekRevision;
+          _beginSceneTransitionWait(timerDuration);
           _transitionToNewMovie(
             node.movieFile,
             sceneFilter,
@@ -2809,6 +2889,14 @@ class GameManager {
             node.repeatCount,
           ).then((_) {
             if (_disposed || navigationRevision != _choiceSeekRevision) return;
+            // 看门狗已经恢复过剧情，不要再重复恢复。
+            if (!_isAwaitingSceneTransition) return;
+            _endSceneTransitionWait();
+            _startSceneTimer(timerDuration);
+          }).catchError((Object error, StackTrace stackTrace) {
+            if (_disposed || navigationRevision != _choiceSeekRevision) return;
+            debugPrint('[GameManager] 视频转场失败，直接继续执行: $error\n$stackTrace');
+            _endSceneTransitionWait();
             _startSceneTimer(timerDuration);
           });
           return;
@@ -5741,6 +5829,7 @@ class GameManager {
     _cancelCharacterPresentation();
     _isProcessing = false;
     _isWaitingForTimer = false;
+    _endSceneTransitionWait();
     final ownsGlobalResources = _resourceSessionId == _latestResourceSessionId;
     LocalizationManager().removeListener(_languageListener);
     _currentTimer?.cancel(); // 取消活跃的计时器
