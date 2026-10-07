@@ -63,24 +63,9 @@ Desktop window controls target Windows, macOS and Linux; mobile and Web use thei
 
 <a id="performance"></a>
 
-## High-performance design
+## High performance and low memory overhead
 
-**Dart AOT, Rust native services and the Erika player kernel** form the foundation of native release builds. Dart code is compiled to machine code ahead of time. Rust handles data processing such as asset indexes, saves and history snapshots. Erika keeps video playback, rendering and timing in the native layer; Dart passes playback commands and state events.
-
-### Runtime overhead and memory compared with Ren’Py
-
-This compares the architecture of **SakiEngine native Release builds** and **Ren’Py 8 / Python 3**, rather than measured results from matching scenes. Web uses a browser compilation and runtime pipeline and requires a separate evaluation.
-
-| Area | SakiEngine | Ren’Py 8 / Python 3 |
-| --- | --- | --- |
-| **Logic execution** | Dart AOT and Rust execute machine code, avoiding Python bytecode interpretation on these paths | Python-layer logic runs through the interpreter; work in native extensions does not incur the same interpretation overhead |
-| **Script loading** | SKS is converted into Dart script nodes at build time, removing story-text parsing from release execution; node dispatch remains | Compiled `.rpyc` caches accelerate loading; the Ren’Py runtime dispatches story execution |
-| **Rendering and video** | Flutter's native rendering pipeline and in-house Erika; video frames stay out of Dart's processing path | GPU rendering and native components such as FFmpeg; pure Python speed is not a proxy for rendering or decoding performance |
-| **Memory management** | Rust data structures, memory-mapped SakiPack access and LZ4 history snapshots control some data costs; the Dart heap still uses GC | Python objects, rollback state and predictive image caches consume memory, alongside native image and decoder buffers |
-
-**The main performance opportunity is in logic and data processing.** Compared with equivalent pure Python loops and object operations, AOT and Rust generally incur less execution overhead. The benefit depends on how much frame time that work occupies; it does not translate directly into a whole-game frame-rate multiplier.
-
-**Total memory use depends on the scene.** Rust can reduce some object and allocation overhead, but the Flutter engine, Dart heap, decoded images, GPU textures and video buffers also consume memory. AOT does not remove GC or guarantee lower memory use than Ren’Py. No measurements using matching assets and resolutions are presented here, so no memory-reduction percentage is claimed. See [implementation references and measurement criteria (中文)](docs/development.md#performance).
+**Dart AOT and native Rust execution** reduce script and data-processing overhead, while the in-house **Erika** kernel provides native video playback. **In the author's tests with both engines using Release builds, an empty SakiEngine project used approximately half the memory of an empty Ren’Py project.**
 
 <a id="features"></a>
 

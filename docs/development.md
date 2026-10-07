@@ -211,38 +211,11 @@ macOS 宿主可用以下命令请求 Linux x64 / Windows x64 构建：
 
 <a id="performance"></a>
 
-## 性能设计与内存占用
+## 性能与内存
 
-### AOT 与 Rust 降低哪些开销
+原生发布版采用 Dart AOT 与 Rust 原生服务，结合 [SKS 预编译](../Engine/tool/sks_compiler.dart)、[SakiPack 内存映射](../Engine/packages/saki_native/rust/src/api/assets.rs)和[历史快照 LZ4 压缩](../Engine/lib/src/utils/history_snapshot_codec_io.dart)，降低运行开销。自研 [Erika](https://github.com/AimesSoft/Erika) 将视频播放、渲染与时序控制保留在原生层。
 
-原生发布版将 Dart 提前编译为机器码，Rust 服务同样以原生代码运行。相对于等价的纯 Python 3 循环、动态对象访问与数据处理，这种执行方式通常能减少字节码解释和部分动态分派成本。实际收益取决于算法、数据布局、分配次数、桥接开销，以及该路径在总耗时中的占比。
-
-SakiEngine 中可以核对的实现包括：
-
-- **剧情预处理**：[SKS 编译器](../Engine/tool/sks_compiler.dart)在构建阶段生成 Dart 脚本节点与文本数据，发布版直接加载这些数据，省去剧情源文本的运行时解析。它仍由引擎调度节点，并非把每条 SKS 指令都编译成独立的原生控制流。
-- **原生数据服务**：[`saki_native`](../Engine/packages/saki_native/README.md)承担资源索引、存档、脚本索引与历史快照处理；耗时的文件与解析任务使用异步桥接，小型查询使用同步调用。渲染、转场和完整游戏状态机仍在 Flutter 一侧。
-- **视频热路径**：[`erika_flutter`](../third_party/erika_flutter/README.zh.md)将播放、渲染和时序留在原生层，Dart 接收状态事件并发送低频命令，避免逐帧经 Dart 处理视频数据。
-
-这些是实现机制与性能预期。Ren’Py 8 的 Python 层有解释器和对象管理开销，但它也使用 `.rpyc` 编译缓存、GPU 渲染与 FFmpeg 等原生组件；原生组件的速度不能由 Python 循环的速度推算。语言层的优势对 CPU 密集逻辑更相关，对 GPU 或解码器主导的场景未必决定最终帧率。
-
-### 内存设计与成本
-
-Rust 可使用紧凑的类型化数据结构，并通过所有权管理资源，无需为 Rust 对象增加追踪式 GC；Dart AOT 仍保留运行时、堆和垃圾回收。跨语言调用也可能产生序列化、分配和复制成本。
-
-SakiEngine 使用 [SakiPack 内存映射](../Engine/packages/saki_native/rust/src/api/assets.rs)访问包内资源，避免先把整个包复制到应用堆；被访问的映射页仍会占用物理内存，资源读取返回的数据也可能复制。它不等于零内存加载。原生历史快照采用 [LZ4 压缩](../Engine/lib/src/utils/history_snapshot_codec_io.dart)，只在压缩后更小时保留压缩结果，以减少这部分历史数据的存储开销，同时付出压缩与解压成本。
-
-游戏总内存还包含 Flutter 引擎、Dart 对象、图片缓存、GPU 纹理与音视频缓冲。Ren’Py 同样有解释器、Python 对象、回滚状态、图片预测缓存与原生缓冲。素材尺寸、缓存预算和历史保留量都会改变结果，因此 **Dart AOT + Rust 不能单独证明整款游戏的内存一定低于 Ren’Py**。打包文件大小、Dart 堆大小和进程总内存也不是同一个指标。
-
-### 对比测试口径
-
-README 的对比依据架构与当前实现，未给出 SakiEngine 与 Ren’Py 的同场景测试数据。若要发布性能倍数或内存降幅，应在相同设备、系统、分辨率、帧率上限、素材与演出内容下，比较 SakiEngine 原生发布模式和关闭开发功能的 Ren’Py 发行版，并记录版本与构建参数：
-
-- 分别覆盖静态对白、连续快进、角色转场、视频播放与长历史回滚；匹配图片缓存预算、预加载策略和历史保留量。
-- 区分冷启动与热缓存，多次运行并报告中位数和波动范围；除平均帧率外，记录帧耗时的中位数与高分位值、CPU 使用率和加载耗时。
-- 使用同一操作系统工具记录稳定状态与峰值的进程内存，并单独记录 GPU 内存。注明指标口径，例如 Windows 工作集 / 专用字节；不要把一方的语言堆与另一方的进程总量直接比较。
-- Web 单独测试；当前构建入口使用 `flutter build web --release`，不套用原生 AOT 或 Rust 动态库路径的结论。
-
-参考：[Dart 编译与运行时](https://dart.dev/overview)、[Ren’Py 的 Python 支持](https://www.renpy.org/doc/html/python.html)、[脚本编译缓存](https://www.renpy.org/doc/html/language_basics.html)、[GPU 渲染](https://www.renpy.org/doc/html/model.html)、[视频解码](https://www.renpy.org/doc/html/movie.html)、[图片缓存与内存](https://www.renpy.org/doc/html/displayables.html)。
+**作者实测：SakiEngine 与 Ren’Py 双方均使用 Release 构建时，SakiEngine 空项目的内存占用约为 Ren’Py 的一半。**
 
 ## 媒体与原生依赖
 
