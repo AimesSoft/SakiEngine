@@ -187,7 +187,9 @@ macOS 宿主可用以下命令请求 Linux x64 / Windows x64 构建：
 
 ## 媒体与原生依赖
 
-视频组件当前接入仓库内的 `erika_flutter`；常规音频使用 `just_audio`，Windows 使用其 Windows 后端，Linux 使用 GStreamer 相关后端。macOS universal / Windows x64 Erika 运行库固定在 `third_party/erika_flutter/native/`，对应构建脚本使用本地文件并校验摘要。
+[Erika](https://github.com/AimesSoft/Erika) 是 AimesSoft 自研的 Rust 媒体播放器内核。SakiEngine 通过仓库内的 [`erika_flutter`](../third_party/erika_flutter/README.zh.md) 桥接层接入 Erika，由原生层负责视频播放、画面呈现与播放时序控制，Dart 层负责播放指令、状态事件和游戏演出集成。循环、片段衔接、透明视频及混合模式等配置由引擎视频组件提供，具体支持情况依平台后端而定。
+
+常规音乐、音效与语音使用 `just_audio`，Windows 使用其 Windows 后端，Linux 使用 GStreamer 相关后端。macOS universal / Windows x64 Erika 运行库固定在 `third_party/erika_flutter/native/`，对应构建脚本使用本地文件并校验摘要。
 
 `third_party/media_kit*` 及其缓存脚本仍为旧依赖配置保留。只有项目仍依赖该链路、且遇到 Windows media_kit 依赖下载问题时，才需要：
 

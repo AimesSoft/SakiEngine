@@ -41,6 +41,8 @@ SakiEngine is an open-source visual novel engine built with **Flutter / Dart**, 
 
 It uses `.sks` scripts for dialogue, branching and scene direction, with audio, video, localization, saves and rollback. The graphical launcher manages project creation, execution and packaging. Built-in editors support script and scene editing during gameplay, while Flutter modules provide custom interfaces and project logic.
 
+Video playback is powered by **[Erika](https://github.com/AimesSoft/Erika), a Rust media player kernel developed in-house by AimesSoft**, providing the foundation for video-based scenes.
+
 The name **Saki** comes from **Saki Watanabe (渡辺早季)** in *From the New World* (*Shinsekai Yori* /《来自新世界》).
 
 <a id="features"></a>
@@ -51,13 +53,19 @@ The name **Saki** comes from **Saki Watanabe (渡辺早季)** in *From the New W
 | --- | --- |
 | **Story and reading** | SKS dialogue, choices and conditional jumps; standard, NVL and cinematic narration; auto-play, skip, history, rollback, `.sakisav` saves and read tracking |
 | **Characters and scenes** | Automatic positioning, poses, expressions and a second overlay layer; CGs, animated WebP, transitions, filters, mouse parallax and project-defined canvases |
-| **Sound and video** | Music, sound effects and voice controls; Erika video playback with looping, sequencing and alpha-video options, subject to platform support |
+| **Sound and video** | Music, sound effects and voice controls; video scenes powered by the in-house Erika player kernel, with looping, sequencing and alpha-video options, subject to platform support |
 | **Localization** | Simplified Chinese, Traditional Chinese, English and Japanese in the same script line; fallback text, a translation editor and a single-language script view |
 | **Live editing** | Desktop Debug and Showcase tools for script editing, expression previews, canvas placement and developer controls; save and reload to preview changes |
 | **Project extensions** | Launcher project management and creation; `ProjectCode` themes, screens and script extensions; extra settings tabs and Steam achievement integration |
 | **Runtime and delivery** | SKS precompilation, SakiPack resource bundles and Rust services for asset indexes, saves, script indexes and history snapshots |
 
 Platform SDKs, signing requirements and output locations are covered in [Development and releases (中文)](docs/development.md).
+
+### Erika media player kernel
+
+**Erika** is a media player kernel written in Rust. SakiEngine integrates it through the `erika_flutter` bridge for video playback, native rendering and playback timing.
+
+Built on Erika, the engine provides background video, looping, clip sequencing, playback speed control, alpha video, blend modes and opacity settings for integrating video into scenes. Capabilities vary by platform backend; see [Media and native dependencies (中文)](docs/development.md#媒体与原生依赖) for integration details.
 
 <a id="launcher"></a>
 
