@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">SakiEngine — Cross-platform visual novel engine</title>
+  <desc id="desc">A twilight landscape in lilac and peach, with an open book, a rising sun and small stars.</desc>
+  <defs>
+    <linearGradient id="sky" x1="100" y1="0" x2="1180" y2="440" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#20253D"/><stop offset=".55" stop-color="#39354F"/><stop offset="1" stop-color="#735167"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="1030" y1="120" x2="1030" y2="296" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FAD7BF"/><stop offset="1" stop-color="#DCA6BE"/>
+    </linearGradient>
+    <linearGradient id="line" x1="68" y1="352" x2="1212" y2="352" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E8B8C9"/><stop offset=".6" stop-color="#B9B4EB"/><stop offset="1" stop-color="#B9B4EB" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="frame"><rect width="1280" height="400" rx="24"/></clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+    <rect width="1280" height="400" fill="url(#sky)"/>
+    <circle cx="1030" cy="218" r="88" fill="url(#sun)"/>
+    <circle cx="1030" cy="218" r="112" stroke="#FAD7BF" stroke-opacity=".14"/>
+    <circle cx="1030" cy="218" r="142" stroke="#FAD7BF" stroke-opacity=".07"/>
+    <path d="M745 322C855 223 921 249 1009 281C1110 320 1170 202 1280 240V400H745Z" fill="#524761"/>
+    <path d="M690 364C810 291 868 309 981 337C1093 365 1151 279 1280 294V400H690Z" fill="#39374F"/>
+    <path d="M779 395C913 335 977 383 1080 349C1173 317 1244 353 1280 348V400H779Z" fill="#292C43"/>
+    <g stroke="#F4D8C9" stroke-linecap="round">
+      <path d="M844 100V112M838 106H850"/>
+      <path d="M1156 79V97M1147 88H1165"/>
+      <path d="M1200 182V192M1195 187H1205" stroke-opacity=".6"/>
+    </g>
+    <g fill="#E4DDED"><circle cx="947" cy="76" r="2"/><circle cx="1101" cy="53" r="1.5"/><circle cx="791" cy="176" r="1.5"/><circle cx="1207" cy="129" r="2"/></g>
+    <g transform="translate(74 66)" stroke="#F4CCD5" stroke-width="2.5" stroke-linejoin="round">
+      <path d="M0 4C12 0 22 2 32 8V43C22 37 12 35 0 39Z"/>
+      <path d="M32 8C42 2 52 0 64 4V39C52 35 42 37 32 43Z"/>
+      <path d="M9 13C15 12 20 13 24 15M9 22C15 21 20 22 24 24M40 15C44 13 49 12 55 13M40 24C44 22 49 21 55 22" stroke-width="1.5" stroke-opacity=".7"/>
+    </g>
+    <g font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+      <text x="160" y="96" fill="#D5CBE6" font-size="14" letter-spacing="4">FLUTTER · DART · RUST</text>
+      <text x="68" y="199" fill="#FFF5EE" font-size="76" font-weight="650" letter-spacing="-3">SakiEngine</text>
+      <text x="73" y="249" fill="#E8DDEB" font-size="24">Cross-platform visual novel engine</text>
+      <text x="74" y="312" fill="#C4B8D3" font-size="13" letter-spacing="3">SCRIPT · EDIT · BUILD · RELEASE</text>
+    </g>
+    <path d="M74 351H1206" stroke="url(#line)"/>
+    <rect x=".5" y=".5" width="1279" height="399" rx="23.5" stroke="#F8E1E8" stroke-opacity=".1"/>
+  </g>
+</svg>

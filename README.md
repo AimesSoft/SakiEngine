@@ -1,659 +1,284 @@
-# SakiEngine
+<p align="center">
+  <img src="Git/readme-banner.svg" alt="SakiEngine — 跨平台视觉小说引擎" width="100%">
+</p>
 
-## 基于Flutter开发的视觉小说游戏引擎
+<h1 align="center">SakiEngine</h1>
 
-### 项目截图
+<p align="center">
+  <b>基于 Flutter 的跨平台视觉小说引擎</b><br>
+  SKS 剧本 · 可视化演出编辑 · 多语言 · 跨平台发布<br>
+  Windows · macOS · Linux · Android · iOS · Web
+</p>
 
-#### 主界面
+<p align="center">
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-545C91?style=flat-square&amp;logo=flutter&amp;logoColor=white" alt="Built with Flutter"></a>
+  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-6B82A8?style=flat-square&amp;logo=dart&amp;logoColor=white" alt="Written in Dart"></a>
+  <a href="Engine/packages/saki_native"><img src="https://img.shields.io/badge/Rust-native_services-B88D83?style=flat-square&amp;logo=rust&amp;logoColor=white" alt="Rust native services"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-91A891?style=flat-square" alt="MIT License"></a>
+  <a href="https://github.com/AimesSoft/SakiEngine/commits/main"><img src="https://img.shields.io/badge/Status-in_development-D6A0B6?style=flat-square" alt="持续开发中"></a>
+</p>
 
-![主界面](Git/main.png)
+<p align="center">
+  <b>简体中文</b> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a>
+</p>
 
-#### 对话系统
+<p align="center">
+  <a href="#quick-start">快速开始</a> ·
+  <a href="#features">核心功能</a> ·
+  <a href="#launcher">启动器</a> ·
+  <a href="#shortcuts">快捷键</a> ·
+  <a href="#build">发布模式</a> ·
+  <a href="docs/script-guide.md">脚本指南</a> ·
+  <a href="docs/development.md">开发与发布</a> ·
+  <a href="https://github.com/AimesSoft/SakiEngine/issues">问题反馈</a>
+</p>
 
-![对话系统](Git/dialog.png)
+---
 
-#### 历史记录
+## 项目介绍
 
-![历史记录](Git/history.png)
+SakiEngine 是基于 **Flutter / Dart** 开发的开源视觉小说与 Galgame 引擎，支持 **Windows、macOS、Linux、Android、iOS 和 Web**。
 
-#### 对话场景
+引擎使用 `.sks` 编写剧情，提供对话与分支、角色演出、音视频、多语言、存档与回滚。图形化启动器负责项目创建、运行和打包；内置编辑器支持在游戏中调整剧本与演出，项目界面和逻辑可通过 Flutter 模块扩展。
 
-![对话场景](Git/say.png)
+引擎名称 **Saki** 来自《来自新世界》中的**渡边早季（渡辺早季 / Saki Watanabe）**。
 
-### 项目简介
+<a id="features"></a>
 
-SakiEngine 是一个基于 Flutter 的现代化视觉小说游戏引擎，专为跨平台游戏开发而设计。
+## 核心功能
 
-### 主要特性
+| 模块 | 功能 |
+| --- | --- |
+| **剧情与阅读** | SKS 对白、选项与条件跳转，普通 / NVL / 电影旁白，自动播放、快进、历史与回滚，`.sakisav` 存读档与已读记录 |
+| **角色与演出** | 自动站位、姿势与表情、第二层叠加差分，CG、WebP 动画、场景转场、滤镜、鼠标视差与项目画布 |
+| **声音与影像** | 音乐、音效与语音控制；Erika 视频播放组件，支持循环、衔接及透明视频相关配置，具体能力依平台而定 |
+| **多语言创作** | 同一句脚本内写简中、繁中、英语与日语；缺失翻译回退，内置逐句翻译编辑器与单语言脚本视图 |
+| **实时编辑** | 桌面 Debug 与演出模式内置脚本编辑、差分预览、画布选择与开发者面板；保存后重载脚本与资源 |
+| **项目扩展** | Launcher 管理与创建项目；`ProjectCode` 定制主题、界面和脚本扩展，设置页可追加项目页签，提供 Steam 成就接入 |
+| **运行与发布** | SKS 预编译、SakiPack 资源单包，以及 Rust 原生服务层，负责资源索引、存档、脚本索引与历史快照等工作 |
 
-- **类Renpy语法**：使用类似Renpy的脚本语法，降低游戏开发门槛
-- **自适应窗口**：游戏窗口可以自由拉伸，画面智能适配
-- **低性能占用**：轻量级引擎，确保流畅的游戏体验
-- **强大的UI系统**：丰富的界面控件和交互支持
-- **模块化系统**：支持项目特定的自定义模块，实现个性化定制
-- **真正的跨平台**：支持多个主流平台
-  - Windows
-  - Linux
-  - macOS
-  - Android
-  - iOS
+平台 SDK、签名要求与输出位置见 [开发与发布](docs/development.md)。
 
-### 开发状态
+<a id="launcher"></a>
 
-项目目前处于积极开发中。主要功能已经实现，正在持续优化和完善：
+## 启动器
 
-- [X]  基础对话系统
-- [X]  角色立绘支持
-- [X]  场景管理
-- [X]  多平台适配
-- [X]  对话记录系统
-- [X]  回滚系统
-- [X]  选择分支系统
-- [X]  存档和读档系统
-- [X]  项目模块化系统
-- [X]  自动项目创建工具
-- [X]  音乐、音效和语音系统
-- [X]  场景切换效果
-- [X]  转场动画
-- [X]  脚本内持久化变量设置
-- [ ]  更多高级脚本特性
-- [ ]  性能进一步优化
-- [ ]  更多平台细节适配
+**SakiEngine Launcher** 提供项目管理、运行和构建界面。它扫描 `Game/` 中的项目，支持新建项目、设置默认项目、选择运行设备和查看日志。创建器根据项目名称、Bundle ID 与主题颜色，生成脚本、配置、资源目录和 `ProjectCode` 代码包。
 
-### 特色功能
+启动器提供四种运行配置；构建模式单独选择：
 
-- [X]  自动角色站位，多角色会自动分配位置
-- [X]  自动对话框震动，检测到感叹号字符会自动震动
-- [X]  自带普通旁白和电影旁白，电影旁白会有上下黑边
-- [X]  有单独的存档格式.sakisav，市面已存在的反编译工具目前无法直接支持
-- [X]  支持切换深色/浅色模式，就像app一样改变UI的色调
-- [X]  随意拉伸窗口，内部画面会自适应
-- [X]  无限个存档位
-- [X]  支持直接播放webp动图
+| 运行配置 | 用途 |
+| --- | --- |
+| **Debug** | 开发引擎或项目代码，使用 Flutter 热重载、热重启与引擎创作工具 |
+| **演出模式** | 以 Release 配置运行，同时保留脚本直读、重载和引擎编辑工具，适合调整对白、差分、背景与音乐 |
+| **Profile** | 使用发布资源管线运行，观察接近发布环境的性能 |
+| **Release** | 使用发布资源管线运行，检查面向玩家的版本 |
 
-### 部署指南
+**内置控制台**会显示任务日志，提供 Debug 热重载 / 热重启、安全重启、退出和日志复制。**系统终端**适合用 `r` / `R` / `q` 控制 Flutter；Profile / Release 的发布资源运行管线需要使用内置控制台。构建则可选「发布模式」或「演出模式」，完成后自动生成 ZIP 并打开产物目录，区别见 [发布模式](#build)。
 
-#### 前提条件
+<a id="quick-start"></a>
 
-- 安装 Flutter SDK（建议使用最新稳定版）
-- 配置相应平台的开发环境（Android Studio、Xcode等）
+## 快速开始
 
-#### 快速开始
-
-##### 开发环境启动（推荐）
-
-克隆仓库后，在根目录执行以下单命令即可进入启动器：
+先准备 Git 与目标平台的开发环境。原生游戏构建还需要 **Rust / rustup**；Flutter 需包含 **Dart 3.10.4 或更高的 3.x 版本**，以满足当前 Launcher 和示例项目约束。
 
 ```bash
-# macOS/Linux 启动器
+git clone https://github.com/AimesSoft/SakiEngine.git
+cd SakiEngine
+```
+
+**Windows · PowerShell**
+
+```powershell
+.\saki.bat
+```
+
+**macOS / Linux**
+
+```bash
 ./saki.sh
+```
 
-# Windows 启动器
-saki.bat
+入口会优先使用系统 Node.js / Flutter，缺少时自动下载到仓库内。系统编译器、Rust 与平台 SDK 需要另行准备，已有 Flutter 过旧时也需要更新。完整清单见 [环境准备](docs/development.md#准备环境)。
 
-# 跳过启动器，直接启动指定游戏（示例项目）
+在 Launcher 中选择 **SakiEngine** 运行演示，或创建新项目。直接运行演示的命令：
+
+```powershell
+# Windows
+.\saki.bat SakiEngine
+```
+
+```bash
+# macOS / Linux
 ./saki.sh SakiEngine
-saki.bat SakiEngine
-
-# 其他项目（项目名=Game 目录名）
-./saki.sh <项目名>
-saki.bat <项目名>
 ```
 
-首次运行时，脚本会自动执行工具链引导：
+### SKS 脚本示例
 
-- 若系统已安装 Flutter/Node.js：直接使用系统工具链
-- 若系统缺失：自动下载到本仓库 `.saki_toolchain/` 并继续启动
-- 后续运行会复用已下载内容
-
-默认缓存目录：
-
-- `tool/toolchain_cache/flutter/`
-- `tool/toolchain_cache/node/`
-
-当前脚本架构：
-
-- `saki.sh / saki.bat / run.sh / build.sh` 仅做入口转发
-- 核心运行/构建逻辑统一在 JS（`tool/saki_cli.js`、`scripts/build.js`、`run.js` 等）
-- 后续新增功能优先只改 JS 一套逻辑
-
-也可以直接使用统一 CLI：
-
-```bash
-node tool/saki_cli.js saki [项目名]
-node tool/saki_cli.js run
-node tool/saki_cli.js build [项目名|平台] [平台]
-```
-
-启动器（`Launcher/`）当前已覆盖：
-
-- 检测您的操作系统（macOS/Linux/Windows）
-- 扫描可用的游戏项目
-- GUI 创建新项目（替代 `scripts/create_new_project.sh` 交互）
-- 设置默认游戏项目（写入 `default_game.txt`）
-- 在程序内执行 `run.sh/build.sh` 对应的核心流程（含日志输出）
-- 运行模式可切换为 `内置控制台` / `系统终端`（系统终端模式更适合 `flutter run` 热重载）
-
-##### 兼容旧脚本入口
-
-```bash
-# 旧版 shell 启动方式（仍可用）
-./run.sh
-
-# Node 版本（跨平台）
-node run.js
-```
-
-##### 手动方式（项目内直接运行）
-
-1. 进入目标游戏目录（示例：`SakiEngine`）
-
-```bash
-cd Game/SakiEngine
-```
-
-2. 获取依赖并运行
-
-```bash
-flutter pub get
-flutter run -d macos --dart-define=SAKI_GAME_PATH="$PWD"
-```
-
-#### 构建发布版
-
-#### GitHub Action 触发规则
-
-- 仅支持**独立游戏项目仓库**触发编译（仓库根目录需包含 `pubspec.yaml` 与 `Assets/`）
-- 仅在 `push -> main` 且**提交信息包含 `[build]`** 时触发构建发布
-- 默认执行全平台构建（Android / iOS / macOS / Windows / Linux），并发布 Release
-- 发布成功后会自动执行版本号 `patch` 递增
-- 不带 `[build]` 的提交不会触发构建
-- 如果仓库不是独立游戏项目仓库，流程会自动跳过构建/发布
-
-#### macOS 单机交叉构建桌面发布版
-
-SakiEngine 的命令行和 Launcher 支持在一台 macOS 设备上生成三种桌面发布包：
-
-- macOS：使用 Flutter/Xcode 原生构建。
-- Linux x64：使用仓库内置 Linux Runner、原生插件和 macOS AOT snapshotter。
-- Windows x64：使用仓库内置 Windows Runner、原生插件和 macOS AOT snapshotter。
-
-Linux/Windows 交叉构建不会下载目标 Runner、Flutter Embedder、插件 DLL/SO 或 Erika
-运行库；缺少文件或 SHA-256 不匹配时会直接失败。Erika 的 C API 产物随目标包进入仓库；
-维护者也可在目标包工作流勾选 `erika_source_build`，使用 Erika 自身的 target/profile
-交叉构建链从源码重建。构建机仍需预先具备清单指定的 Flutter SDK 和已经解析好的 Dart
-依赖，目标包会严格检查 Flutter Engine revision，不能混用其他 Flutter 版本。
-
-`erika_flutter` 桥接源码也已固定在 `third_party/erika_flutter`，其中包含经过 SHA-256
-校验的 macOS universal 与 Windows x64 Erika 运行库。普通桌面构建只会使用这些仓库内文件，
-不会退回在线下载；维护者更新 Erika 时可运行 `scripts/vendor-erika-flutter.js` 重新导入桥接层
-与许可证文件。macOS 运行库同时包含 arm64/x86_64，Windows 与交叉目标包当前为 x64。
-
-当前内置目标包架构为 Linux x64 和 Windows x64。游戏若新增桌面原生插件，构建器会拒绝
-复用旧 Runner，并提示维护者重新运行
-`.github/workflows/build-cross-target-packs.yml`，避免生成启动后缺插件的静默坏包。
-
-命令行示例：
-
-```bash
-# 以下三条命令均可在 macOS 上执行
-./build.sh SakiEngine macos
-./build.sh SakiEngine linux
-./build.sh SakiEngine windows
-```
-
-Launcher 在 macOS 上也会同时显示 macOS、Linux、Windows；Linux/Windows 自动进入离线
-交叉编译路径，输出位置与 Flutter 原生构建保持一致：
-
-- `Game/<项目>/build/linux/x64/release/bundle`
-- `Game/<项目>/build/windows/x64/runner/Release`
-
-#### 本地构建
-
-```bash
-# 方式1：交互选择游戏项目 + 目标平台
-./build.sh
-
-# 方式2：指定平台（项目默认使用 default_game.txt，可在交互中切换）
-./build.sh macos
-
-# 方式3：指定游戏项目 + 平台
-./build.sh SakiEngine macos
-```
-
-`build.sh` 会直接在 `Game/<项目>` 目录构建，不再修改 `Engine/pubspec.yaml`。发布构建时会先将 `.sks` 预编译到 `Game/<项目>/.saki_cache/`（隐藏缓存目录，不提交 Git），并自动排除 `GameScript*` 原始脚本资源打包。
-
-#### 资源单包（SakiPack）
-
-发布构建流程会自动执行资源打包，生成：
-
-- `Game/<项目>/.saki_cache/game.sakipak`
-
-该文件会合并 `Assets/` 与 `GameScript*` 下的资源（以及 `default_game.txt`）为单个二进制包。  
-运行时引擎会优先从 `game.sakipak` 读取文本/图片资源；音频与视频会按需解包到临时文件后播放，对上层脚本仍保持原有虚拟路径（`Assets/...`）不变。
-
-调试模式（桌面 Debug）仍默认走文件系统直读，便于热更新与排查问题。
-
-#### Windows 用户注意事项
-
-Windows 推荐直接使用：
-
-```bat
-saki.bat
-```
-
-为避免新电脑首次构建时 `media_kit` 下载失败（`mpv-dev*.7z` 校验问题），建议先执行：
-
-```bat
-tool\cache_media_kit_windows_deps.bat
-```
-
-该命令会把 Windows 依赖缓存到：
-
-`third_party\media_kit_libs_windows_video_hotfix\prebuilt\`
-
-然后再运行 `saki.bat <项目名>` 即可优先使用本地缓存，不依赖构建阶段在线下载。
-
-如果需要继续使用 shell 脚本，可使用以下方式之一：
-
-1. **Git Bash**（推荐）
-
-   - 安装 Git for Windows 后自带
-   - 右键选择 "Git Bash Here" 然后运行 `./run.sh`
-2. **WSL (Windows Subsystem for Linux)**
-
-   - 在 Microsoft Store 安装 Ubuntu 或其他 Linux 发行版
-   - 在 WSL 终端中运行脚本
-3. **PowerShell + bash**
-
-   - 如果安装了 Git Bash，可在 PowerShell 中运行：`bash ./run.sh`
-
-#### 分发打包（含工具链与 media_kit 依赖）
-
-可执行：
-
-```bash
-./tool/package_distribution.sh
-```
-
-该脚本会生成：
-
-- 分发目录：`dist/SakiEngine-distribution-时间戳/SakiEngine/`
-- 分发压缩包：`dist/SakiEngine-distribution-时间戳/SakiEngine-distribution-时间戳.zip`
-
-并自动拉取并打包：
-
-- Flutter stable（Windows / Linux / macOS）
-- Node.js LTS（Windows-x64 / Linux-x64 / macOS-x64 / macOS-arm64）
-- media_kit Windows 预置依赖（`mpv-dev*.7z` + `ANGLE.7z`）
-
-#### 项目结构
-
-```
-SakiEngine/
-├── saki.sh             # Launcher 单入口（macOS/Linux）
-├── saki.bat            # Launcher 单入口（Windows）
-├── run.sh              # 统一启动脚本（跨平台）
-├── build.sh            # 发布构建脚本（支持交互选择项目/平台）
-├── default_game.txt    # 默认游戏配置文件
-├── Launcher/           # SakiEngine 图形化启动器（Flutter 项目）
-├── scripts/            # 工具脚本目录
-│   ├── select_game.sh       # 游戏项目选择器
-│   ├── create_new_project.sh # 新项目创建工具
-│   ├── run_legacy_macos.sh  # 传统macOS启动脚本
-│   └── ...                  # 其他工具脚本
-├── Engine/             # Flutter引擎主目录
-│   ├── lib/           # 引擎源码（作为 Flutter package 被引用）
-│   │   ├── src/       # 引擎核心代码（仅通用能力）
-│   │   ├── sakiengine.dart # 对外 API（runSakiEngine/registerProjectModule）
-│   │   └── main.dart  # 兼容入口（内部调用 runSakiEngine）
-│   └── pubspec.yaml   # 依赖配置
-└── Game/              # 游戏项目目录
-    ├── SakiEngine/    # 轻量演示项目
-    └── YourGame/      # 您的游戏项目（建议独立仓库，按需克隆到此目录）
-```
-
-### 新项目创建
-
-SakiEngine 提供了便捷的项目创建工具，可以快速搭建新的视觉小说项目：
-
-#### 创建新项目
-
-```bash
-./scripts/create_new_project.sh
-```
-
-**创建工具会自动：**
-
-- 创建完整的项目目录结构
-- 生成基础的配置文件（角色、姿势、系统配置）
-- 创建示例剧情脚本
-- 生成 `ProjectCode` 项目代码包（项目逻辑不写入引擎）
-- 创建完整 Flutter 项目骨架（`Game/<项目>/pubspec.yaml`、`lib/main.dart`、平台目录）
-- 配置主题颜色和Bundle ID
-- 配置对引擎包 `../../Engine` 的依赖
-- 生成项目级 CI 文件（`.github/workflows`）与项目内 `build.sh`
-
-#### 项目模块化系统
-
-每个新项目都会自动创建对应的Flutter模块，支持：
-
-- **自定义主题**：项目特有的颜色、字体、界面风格
-- **自定义界面**：主菜单、游戏界面、存档界面等
-- **项目配置**：特殊的引擎参数和功能开关
-- **智能回退**：未自定义的组件自动使用引擎默认实现
-
-项目模块位置：`Game/项目名/ProjectCode/lib/项目名小写/项目名_module.dart`
-项目入口：`Game/项目名/lib/main.dart`
-
-#### 快速开始新项目
-
-1. **创建项目**
-
-```bash
-./scripts/create_new_project.sh
-```
-
-2. **选择并运行**
-
-```bash
-./run.sh  # 选择新创建的项目
-```
-
-3. **自定义项目模块**
-
-```bash
-# 编辑项目模块文件
-Game/yourproject/ProjectCode/lib/yourproject/yourproject_module.dart
-```
-
-### VSCode 语法高亮插件
-
-项目根目录包含一个专门为 SakiEngine 开发的 VSCode 语法高亮插件 `vscode-sakiengine-syntax`，支持以下文件类型的语法高亮：
-
-- `.sks` - 剧本文件 (Script Files)
-- `.sks` - 配置文件 (Configuration Files)
-- `.sks` - 坐标管理文件 (Position Management Files)
-- `.sks` - 角色定义文件 (Character Definition Files)
-
-#### 安装方法
-
-1. 在 VSCode 中打开扩展视图
-2. 选择 "从 VSIX 安装"
-3. 导航到项目根目录下的 `vscode-sakiengine-syntax` 文件夹
-4. 选择最新版本的 `.vsix` 文件进行安装
-
-通过这个插件，你可以获得更好的代码编辑体验，包括语法高亮、代码着色等功能，让脚本编写更加直观和高效。
-
-### 脚本语法示例
-
-SakiEngine 使用 `.sks` 脚本文件，语法简单直观，类似 Renpy，但更加简洁：
+下面的例子使用演示项目里的 `yk` 角色与 `bg school` 背景。SKS 借鉴了 Ren’Py 的书写习惯，使用独立的解析器与运行时。
 
 ```sks
-// 开始标签
 label start
-// 设置背景场景
-scene bg school 
+scene bg school with dissolve
+yk pose2 happy "这是一个带选项分支的示例。"
 
-// 角色对话（角色标识 姿势 表情 对话）
-yk pose2 happy "欢迎来到SakiEngine！"
-
-// 选择菜单
 menu
-"给她巧克力" choice_chocolate
-"保持沉默" choice_silence
-"表情测试" choice_expressions
+"角色对白" dialogue_branch
+"旁白" narration_branch
 endmenu
 
-// 巧克力选项
-label choice_chocolate
-yk "呀，谢谢！"
-"嘿嘿，喜欢吗？"
-yk happy "当然喜欢！"
+label dialogue_branch
+yk "这里是角色对白分支。"
 return
 
-// 沉默选项
-label choice_silence
-yk sad "你怎么不说话？"
-yk "不理你了。"
-return
-
-// 表情变化
-label choice_expressions
-yk pose1 "这是不同的姿势和表情"
-yk happy "开心的表情"
-yk sad "难过的表情"
+label narration_branch
+"这里是旁白分支。"
 return
 ```
 
-### 脚本内嵌多语言
+完整示例见 [演示剧本](Game/SakiEngine/GameScript/labels/start.sks)，语法说明见 [SKS 脚本指南](docs/script-guide.md)。
 
-SakiEngine 支持在同一条 `""` 文本中写多语言片段，运行时只显示当前语言对应内容：
-
-```sks
-yk "/zhs 你好/ /zhc 你好呀/ /jp こんにちは/ /en Hello/"
-```
-
-也支持“已有文本 + 新增语言片段”的渐进写法（默认语言文本无需立刻包 `/zhs.../`）：
+### 脚本多语言
 
 ```sks
-yk "你好 /en Hello/"
+yk "/zhs 你好。/ /zhc 你好。/ /en Hello./ /jp こんにちは。/"
 ```
 
-默认脚本语言可在 `GameScript/configs/configs.sks` 中设置：
+对白、选项与角色显示名都可以使用语言片段；缺少当前语言时，按 `script_default_language` 回退。也可以从 `"你好。 /en Hello./"` 这样的渐进写法开始。日语脚本标签使用 `jp`。
 
-```sks
-script_default_language: zhs // zhs / zhc / en / jp
-```
+<a id="build"></a>
 
-说明：
-- 对 `.sks` 中所有 `""` 包裹文本生效（如对话、`menu` 选项、角色配置显示名等）
-- 推荐语法是 `/tag 文本/ /tag 文本/`；写成紧贴的 `...//tag .../` 也会被兼容解析
-- 如果当前语言缺失对应片段，会按默认脚本语言回退
-- 不含语言标记的旧文本会保持原样显示（兼容旧项目）
+## 构建与发布模式
 
-桌面 Debug 模式提供两种编辑视图：
+启动器提供两种构建模式。它们都生成 Release 程序，但资源组织和创作工具的保留方式不同：
 
-- **Shift+L 多语言编辑器**：读取 `GameScript` 中的对白、条件对白和旁白，按文件逐句展示。每种语言单独一行，角色名与正文均可编辑；角色名写回 `configs/characters.sks`，同一角色别名的其他句子同步更新。菜单和演出命令不混入剧情列表。
-- 可勾选显示简体中文、繁体中文、日语和英语。点击「新增语言」会为所有剧情句子和角色名添加该语言的空白行，填写后保存；空白翻译在游戏中仍使用原有回退规则。
-- **Shift+P 脚本编辑器**：路径栏的语言菜单可切换单语言视图或「完整源码」。编辑单语言文本时会保留其他语言版本及演出指令，切换语言也会保留草稿。缺少的翻译显示为空，避免将原文误认为已翻译内容。
-- **⌘/Ctrl+S** 保存并重载；多语言编辑器关闭时会提示处理未保存修改。保存前检查磁盘文件是否被其他编辑器修改，冲突时保留草稿。
+| 对比项 | 发布模式 | 演出模式 |
+| --- | --- | --- |
+| 用途 | 给玩家分发正式作品 | 给编剧、演出或测试人员继续调整作品 |
+| 剧情 | SKS 预编译为 Dart，运行编译后的剧情 | 跳过 SKS 预编译，保留脚本直读与重载 |
+| 资源 | 原生平台生成 `game.sakipak`；Web 保留浏览器可访问的资源 | 桌面产物附带外置 `Game/<项目>/Assets` 与 `GameScript*` |
+| 创作工具 | 关闭引擎编辑工具；保留 `console` 日志入口 | 开启引擎编辑工具与演出快捷键 |
+| 打包 | 自动生成带作品名、版本和日期的 ZIP | 同样生成 ZIP，文件名附加 `-showcase` |
 
-行内翻译仍遵循 SKS 引号和 `/tag 文本/` 语法：正文使用中文引号或 `「」`，标签内的斜杠使用全角 `／`，文本换行使用字面量 `\n`。
+桌面演出模式适合在不重新编译程序的情况下改脚本、替换资源并查看效果；改动 Dart 项目代码仍需要重新构建。发布前，在启动器中选择 **构建模式 → 发布模式 → 构建目标 → 发布构建**，完成后会自动打开输出目录。
 
-### 图像绘制语法
-
-SakiEngine 支持五种主要的图像显示方式：
-
-#### 场景背景 (scene)
-
-```sks
-// 显示背景图片，自动铺满窗口
-scene bg school          // 显示学校背景，铺满整个窗口
-scene bg sunset_beach    // 显示夕阳海滩背景，自动缩放适配
-```
-
-#### 角色立绘 (show)
-
-```sks
-// 显示角色立绘，自动调节窗口内站位
-show yk pose1 happy      // 显示yk角色，引擎自动分配站位
-show alice pose2 sad     // 显示alice角色，自动与其他角色协调位置
-show character          // 多角色同时显示时自动分配最佳站位
-```
-
-#### 第二层差分（叠加层）
-
-角色差分支持两层：第一层是基础表情，第二层叠加绘制在它之上。剧本里把第二层直接
-接在第一层后面即可：
-
-```sks
-x happy                  // 只换第一层，当前第二层保留
-x happy mask             // happy 作为第一层，mask 作为第二层盖在它上面
-x happy --mask           // 与上一行等价（显式层级前缀）
-x happy angry            // 换成另一组两层
-x happy --none           // 只摘掉第二层，保留第一层 happy
-```
-
-对应的文件命名：
-
-| 层级 | 文件名示例 | 说明 |
-|---|---|---|
-| 第一层 | `xiayo1-happy.png` | 基础表情 |
-| 第二层 | `xiayo1--mask.png` | 叠加层，盖在第一层之上 |
-
-第二层是"叠加"语义：只写第一层时角色当前的第二层会被保留，只有显式写出第二层
-或 `--none` 才会改动它。显式写出的第二层如果缺图，引擎会跳过该层而不是换成别的
-差分。Debug 模式下按 `Shift+E` 打开差分选择器，第一层与第二层各有独立的展示与
-预览区域。
-
-#### 动画效果 (anime)
-
-```sks
-// 播放WebP动图，自动铺满窗口，默认播放一次后消失
-anime flash_effect       // 播放闪光动画，播放完自动消失
-anime explosion          // 播放爆炸效果，默认一次性播放
-
-// 使用参数控制播放行为
-anime rain keep          // 播放雨滴动画，播放完后保持显示
-anime fire loop          // 播放火焰动画，循环播放不停止
-anime magic keep loop    // 播放魔法效果，循环播放且保持显示
-```
-
-#### 项目画布 (canvas)
-
-```sks
-// 显示项目模块注册的持续绘制效果；覆盖游戏画面，但不遮挡 UI
-canvas pixel_rain
-
-// 清除当前画布
-hide canvas
-```
-
-项目通过 `GameModule.scriptCanvases` 注册画布 ID、显示名与绘制回调。Debug
-模式下按 `Shift+V` 可打开画布预览/放置网格，双击把命令放到当前对话前。
-
-#### CG插图 (cg)
-
-```sks
-// 显示CG图片，结合scene和show特性：铺满窗口 + 自动识别切换
-cg ending_kiss          // 显示CG，自动铺满窗口
-cg battle_scene         // CG会自动识别和切换到对应场景
-cg romantic_moment      // 支持CG之间的自动过渡和识别
-```
-
-### 文本标签语法
-
-SakiEngine 支持在对话文本中使用特殊标签来控制显示效果：
-
-#### 等待标签 [w]
-
-```sks
-// 在指定位置暂停文字显示
-yk "你好...[w=1]我是小雪。"        // 在省略号后暂停1秒
-alice "等等[w=5]让我想想..."       // 在"等等"后暂停5秒文字显示
-```
-
-#### 文字大小标签 [size]
-
-```sks
-// 改变文字大小
-"这是[size=1.3]大字[/size]和正常字。"     // 显示大字
-"[size=0.8]小字提示[/size]正常对话"       // 显示小字
-"[size=1.5]重要提醒！[/size]"             // 显示更大的字
-```
-
-#### 快进标签 [pass]
-
-```sks
-// 跳过打字机效果，瞬间显示文字
-"[pass]这段文字会瞬间显示出来！[/pass]"          // 整句瞬间显示
-"正常显示[pass]后面瞬间显示[/pass]"             // 部分瞬间显示
-```
-
-### 转场效果语法
-
-SakiEngine 支持多种场景转场效果，使用 `with 转场类型` 语法：
-
-#### 淡入淡出 (fade)
-
-```sks
-// 黑屏淡入淡出转场，经典过渡效果
-scene sky with fade           // 先淡出到黑屏，再淡入新场景
-```
-
-#### 溶解 (diss/dissolve)
-
-```sks
-// 图片直接渐变过渡，无黑屏阶段
-scene home with diss          // 旧场景溶解到新场景
-scene school with dissolve    // 支持 dissolve 别名
-```
-
-#### 擦除 (wipe)
-
-```sks
-// 旋转扇形擦除效果，适合时空转换
-scene flashback with wipe     // 扇形旋转覆盖并显示新场景
-```
-
-#### 睁眼 (blink/eyeopen) ⭐ 新增
-
-```sks
-// 从黑屏睁眼显示场景，不会遮挡UI
-scene bedroom with blink      // 适合醒来场景
-scene reality with eyeopen    // 从梦境/回忆回到现实
-scene world with eye          // 支持简写别名
-```
-
-**睁眼转场特点：**
-- 🎬 从完全黑屏开始（已经闭眼状态）
-- 👁️ 上下遮罩移开，逐渐显示新场景
-- ✅ **不会遮挡UI**（对话框、菜单等保持可见）
-- 💡 只有睁眼过程，没有闭眼过程
-
-**睁眼转场适用场景：**
-- 💤 角色从睡梦中醒来
-- 👁️ 失去意识后恢复
-- 🔄 从回忆/幻觉回到现实
-- ⚡ 从黑屏过渡到新场景
-
-#### 转场效果对比表
-
-| 转场类型 | 关键词 | 视觉效果 | 是否遮挡UI | 适用场景 |
-|---------|--------|---------|-----------|---------|
-| 淡入淡出 | `fade` | 黑屏渐变 | ✅ 遮挡 | 通用场景切换 |
-| 溶解 | `diss`, `dissolve` | 图片直接渐变 | ❌ 不遮挡 | 平滑的场景过渡 |
-| 擦除 | `wipe` | 旋转扇形擦除 | ✅ 遮挡 | 时空转换、特效 |
-| 睁眼 | `blink`, `eyeopen`, `eye` | 黑屏入，上下移开 | ❌ **不遮挡** | 醒来、恢复意识 |
-
-### 语法特点
-
-- **无需缩进**：所有命令都在同一级别
-- **使用 `//` 注释**：支持单行注释说明
-- **简单的角色对话语法**：角色名 + 可选姿势 + 可选表情 + 对话内容
-- **灵活的图像控制**：支持背景、立绘、动画、CG等多种显示方式
-- **富文本标签**：支持等待、大小、快进等文字效果
-- **直观的选择菜单系统**：menu/endmenu 包围选择项
-
-### 许可证
-
-本项目使用开源许可证。详细信息请参见 LICENSE 文件。
-
-### 示例游戏
-
-引擎仓库内默认保留轻量演示项目 `Game/SakiEngine`。
-
-《空之歌：每当磁针再次振动，我便在此等待》已迁移到独立仓库：
-https://github.com/MCDFsteve/SoraNoUta-SakiEngine
-
-可按需克隆到 `Game/` 目录并切换默认项目：
+在 Launcher 中选择构建目标，或使用已安装的 Node.js：
 
 ```bash
-git clone https://github.com/MCDFsteve/SoraNoUta-SakiEngine.git Game/SoraNoUta
-echo SoraNoUta > default_game.txt
+node tool/saki_cli.js build
+# 示例：在 Windows 上构建演示项目
+node tool/saki_cli.js build SakiEngine windows
 ```
 
-### 贡献
+| 平台 | 发布方式 |
+| --- | --- |
+| Windows | 桌面应用，使用 Windows 原生构建或 macOS 交叉构建 |
+| macOS | macOS 应用，使用 Flutter / Xcode 构建 |
+| Linux | 桌面应用，使用 Linux 原生构建或 macOS 交叉构建 |
+| Android | 当前脚本生成 ARM64 APK |
+| iOS | 在 macOS 上构建；当前默认不签名，分发时完成签名 |
+| Web | 生成 `build/web` 静态站点，部署到 Web 服务器后通过浏览器游玩 |
+| macOS → Windows / Linux | 提供 x64 交叉构建路径，要求清单匹配的 Flutter SDK、目标包与原生插件集合 |
 
-欢迎提交 Issues 和 Pull Requests！
+产物位于 `Game/<项目>/build/`，启动器生成的 ZIP 位于对应产物目录的上一级。命令行 `build` 走发布构建流程；需要演出构建或自动 ZIP 打包时使用 Launcher。具体输出、环境要求、资源打包方式及 CI 模板现状见 [开发与发布](docs/development.md)。
+
+<a id="shortcuts"></a>
+
+## 快捷键与操作
+
+### 阅读与通用操作
+
+| 操作 | 功能 |
+| --- | --- |
+| `Enter` / `Space` / 方向键下 / 滚轮向下 | 显示完整对白或推进剧情 |
+| 方向键上 / 滚轮向上 | 按设置回退剧情或打开观看记录 |
+| 按住 `Ctrl` / `Command` | 强制快进；松开停止 |
+| 鼠标右键 | 隐藏 / 恢复游戏 UI；在支持的覆盖界面中关闭该界面 |
+| `Esc` | 关闭当前编辑工具或支持的覆盖界面 |
+| 依次输入 `console` | 打开日志面板，发布版也可用；不要按修饰键，相邻按键间隔不超过 3 秒 |
+
+### 创作与演出
+
+以下为桌面 **Debug / 演出模式**的内置操作。游戏窗口需获得焦点，编辑文本时会暂停会干扰输入的全局快捷键。
+
+| 快捷键 | 创作工具 |
+| --- | --- |
+| `Shift + R` | 重载当前脚本，用于查看磁盘上的剧情与资源修改 |
+| `Shift + A` | 表情 / 姿势轮盘，选择后松开 Shift 应用 |
+| `Shift + C` | 当前对白的角色 / 旁白轮盘，选择后松开 Shift 应用 |
+| `Shift + B` | 背景网格，预览并双击应用 |
+| `Shift + 1` | 音乐网格，试听并双击应用 |
+| `Shift + V` | 项目画布网格，预览并双击放置 |
+| `Shift + E` | 完整差分选择器，分别预览基础表情与第二层叠加 |
+| `Shift + D` | 开发者面板 |
+| `Shift + P` | 脚本编辑器，支持完整源码与单语言视图 |
+| `Shift + L` | 多语言编辑器，逐句编辑对白与角色名 |
+
+背景、音乐与画布网格松开 Shift 后保持打开，再按对应快捷键或 `Esc` 关闭；轮盘在松开 Shift 时应用。项目还可以通过 `GameModule.debugCommandMenus` 注册自己的 Shift 快捷键。`Shift + R` 是游戏脚本重载，与 Flutter 终端的 `r` 热重载、`R` 热重启不同。
+
+<details>
+<summary>编辑器内的完整快捷键</summary>
+
+下表中的 `Mod` 在 Windows / Linux 上指 `Ctrl`，macOS 上指 `Command`。
+
+| 快捷键 | 功能 |
+| --- | --- |
+| `Mod + S` | 保存并重载；脚本和多语言编辑器均支持 |
+| `Mod + W` / `Esc` | 关闭编辑器；脚本编辑器中 Esc 优先关闭查找栏，多语言编辑器会提示处理未保存修改 |
+| `Mod + F` | 打开脚本查找栏 |
+| `Mod + G` / `F3` | 查找下一处；查找栏未打开时先打开 |
+| `Mod + Shift + G` / `Shift + F3` | 查找上一处 |
+| `Mod + /` | 切换所选脚本行的注释 |
+| `Mod + Z` | 撤销脚本编辑 |
+| `Mod + Shift + Z` / `Mod + Y` | 重做脚本编辑 |
+| `Mod + A` / `C` / `X` / `V` | 全选 / 复制 / 剪切 / 粘贴 |
+
+保存前会检查磁盘文件是否被其他编辑器修改；冲突时保留草稿并提示处理。
+
+</details>
+
+<a id="showcase"></a>
+
+## 界面截图
+
+<table>
+  <tr>
+    <td width="50%"><img src="Git/main.png" alt="作品展示：主菜单界面" width="100%"></td>
+    <td width="50%"><img src="Git/say.png" alt="作品展示：角色立绘与对话框" width="100%"></td>
+  </tr>
+  <tr>
+    <td align="center">主菜单</td>
+    <td align="center">角色与对白</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="Git/history.png" alt="作品展示：对话历史记录" width="100%" loading="lazy"></td>
+    <td width="50%"><img src="Git/dialog.png" alt="作品展示：返回主菜单的确认对话框" width="100%" loading="lazy"></td>
+  </tr>
+  <tr>
+    <td align="center">对话历史</td>
+    <td align="center">确认弹窗</td>
+  </tr>
+</table>
+
+<p align="center"><sub>仓库中保留的作品截图；具体界面由项目主题与模块决定。</sub></p>
+
+<a id="explore"></a>
+
+## 文档与示例
+
+| 资源 | 内容 |
+| --- | --- |
+| [SKS 脚本与创作指南](docs/script-guide.md) | 场景、差分、动画、画布、文字效果、转场与多语言 |
+| [开发与发布](docs/development.md) | 工具链、CLI、项目结构、模块定制、SakiPack 与构建 |
+| [轻量演示](Game/SakiEngine) | 随仓库提供的可编辑项目 |
+| [《空之歌：每当磁针再次振动，我便在此等待》](https://store.steampowered.com/app/3536120/) | 使用 SakiEngine 制作的游戏，已上架 Steam · [源码仓库](https://github.com/MCDFsteve/SoraNoUta-SakiEngine) |
+| [VS Code 扩展](vscode-sakiengine-syntax) | `.sks` 语法高亮；在扩展面板选择「从 VSIX 安装」，使用目录中最新的 `.vsix` |
+| [Rust 原生服务](Engine/packages/saki_native/README.md) | 资源与脚本索引、存档、历史快照和已读记录 |
+
+## 反馈与贡献
+
+通过 [Issues](https://github.com/AimesSoft/SakiEngine/issues) 提交问题、功能建议或翻译修正，通过 Pull Request 贡献代码与文档。问题报告请附操作系统、启动命令、复现步骤和相关日志。
+
+## 许可证
+
+引擎代码采用 [MIT License](LICENSE)。第三方依赖与游戏素材遵循各自的许可，发布作品时请同时查看对应授权。
