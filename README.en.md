@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>A cross-platform visual novel engine built with Flutter</b><br>
-  SKS scripts · Visual scene editing · Localization · Cross-platform builds<br>
+  SKS scripts · Fluid layouts · Vector UI · Cross-platform builds<br>
   Windows · macOS · Linux · Android · iOS · Web
 </p>
 
@@ -24,6 +24,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
+  <a href="#interface">UI and extensions</a> ·
   <a href="#performance">Performance and memory</a> ·
   <a href="#features">Features</a> ·
   <a href="#launcher">Launcher</a> ·
@@ -45,6 +46,20 @@ It uses `.sks` scripts for dialogue, branching and scene direction, with audio, 
 Video playback is powered by **[Erika](https://github.com/AimesSoft/Erika), a Rust media player kernel developed in-house by AimesSoft**, providing the foundation for video-based scenes.
 
 The name **Saki** comes from **Saki Watanabe (渡辺早季)** in *From the New World* (*Shinsekai Yori* /《来自新世界》).
+
+<a id="interface"></a>
+
+## UI, ecosystem and system integration
+
+SakiEngine gives game projects access to **Flutter's layouts, drawing tools, package ecosystem and platform APIs**, supporting complete application interfaces and desktop interactions alongside visual novel scenes.
+
+- **Fluid, adaptive layouts**: Components can reflow, wrap and resize with the available space. Settings pages switch between one and two columns, while the game canvas uses logical resolution and aspect-ratio adaptation to accommodate window changes and scene composition.
+- **Vector-drawn UI**: Text, icons, paths and SVG graphics can be drawn at the target size to stay sharp on high-DPI displays and resized windows. Custom drawing, animation and themes support distinctive menus, controls and interactions.
+- **A broad package ecosystem**: Use Flutter / Dart packages from [pub.dev](https://pub.dev) to integrate animation, networking, storage and platform services through `ProjectCode`. Extend project interfaces, themes and logic with standard Flutter components.
+- **Native OS integration**: Text input, focus, clipboard access and desktop shortcuts work alongside platform-appropriate save and log storage and tools that open the system file manager. Flutter plugins and platform channels provide access to further system APIs.
+- **Flexible window controls and extensions**: Desktop support includes windowed / fullscreen modes, `5:4` / `16:10` / `16:9` presets, aspect-preserving maximize and restore, fitting to the current display's work area and custom close confirmation. Projects can add always-on-top behavior, system trays and other desktop features through community plugins.
+
+Desktop window controls target Windows, macOS and Linux; mobile and Web use their respective platform capabilities. Select and integrate community plugins for your target platforms. See [UI and system extensions (中文)](docs/development.md#interface).
 
 <a id="performance"></a>
 

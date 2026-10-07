@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>基于 Flutter 的跨平台视觉小说引擎</b><br>
-  SKS 剧本 · 可视化演出编辑 · 多语言 · 跨平台发布<br>
+  SKS 剧本 · 流式布局 · 矢量 UI · 跨平台发布<br>
   Windows · macOS · Linux · Android · iOS · Web
 </p>
 
@@ -24,6 +24,7 @@
 
 <p align="center">
   <a href="#quick-start">快速开始</a> ·
+  <a href="#interface">界面与扩展</a> ·
   <a href="#performance">性能与内存</a> ·
   <a href="#features">核心功能</a> ·
   <a href="#launcher">启动器</a> ·
@@ -45,6 +46,20 @@ SakiEngine 是基于 **Flutter / Dart** 开发、面向高性能原生运行的�
 视频播放集成 **AimesSoft 自研的 Rust 播放器内核 [Erika](https://github.com/AimesSoft/Erika)**，为游戏中的视频演出提供底层播放能力。
 
 引擎名称 **Saki** 来自《来自新世界》中的**渡边早季（渡辺早季 / Saki Watanabe）**。
+
+<a id="interface"></a>
+
+## 界面、生态与系统集成
+
+SakiEngine 将 **Flutter 的布局、绘制、组件生态与平台接口**开放给游戏项目，既能制作视觉小说，也能围绕作品构建完整的应用界面和桌面交互。
+
+- **流式布局与自适应界面**：组件可随可用空间重新排布、换行和伸缩；设置页支持单双列切换，游戏画布提供逻辑分辨率与比例适配，兼顾窗口变化与演出构图。
+- **矢量绘制 UI**：文字、图标、路径与 SVG 可按目标尺寸绘制，在高 DPI 和窗口缩放时保持清晰；结合自定义绘制、动画与主题，可制作作品专属的菜单、控件和交互效果。
+- **丰富的社区包生态**：直接使用 [pub.dev](https://pub.dev) 上的 Flutter / Dart 包，将动画、网络、数据存储及平台服务接入 `ProjectCode`。项目 UI、主题和逻辑均可用标准 Flutter 组件扩展。
+- **原生操作系统交互**：接入文本输入、焦点、剪贴板与桌面快捷键，按系统规范存储存档和日志，并可从工具中打开系统文件管理器。更深层的系统能力可通过 Flutter 插件或平台通道接入。
+- **灵活的窗口控制与扩展**：桌面端支持窗口 / 全屏切换、`5:4` / `16:10` / `16:9` 比例预设、等比例最大化与还原、当前显示器工作区适配，以及自定义关闭确认；项目还可通过社区插件扩展窗口置顶、系统托盘等桌面行为。
+
+桌面窗口控制面向 Windows、macOS 与 Linux；移动端和 Web 使用各自的平台能力。社区插件按目标平台选择与集成，开发入口见 [界面与系统扩展](docs/development.md#interface)。
 
 <a id="performance"></a>
 

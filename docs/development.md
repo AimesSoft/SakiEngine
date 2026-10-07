@@ -101,6 +101,30 @@ SakiEngine/
 
 `Game/` 下除 `SakiEngine` 演示外的项目默认被引擎仓库忽略，适合使用各自的 Git 仓库管理。
 
+<a id="interface"></a>
+
+## 界面与系统扩展
+
+### 流式布局与矢量绘制
+
+项目界面使用标准 Flutter Widget，可组合 `Row`、`Column`、`Expanded`、`Wrap` 与 `LayoutBuilder`，根据可用空间调整排布、换行和尺寸。现有 [视频设置页](../Engine/lib/src/widgets/settings/video_settings_tab.dart)会按区域宽高切换单双列；[虚拟游戏画布](../Engine/lib/src/widgets/common/virtual_game_canvas.dart)负责逻辑分辨率、等比例缩放和画面比例适配。应用界面可以流式排版，场景画布则可保留稳定的演出坐标。
+
+Flutter 的文字、图标和路径绘制，以及引擎接入的 [`flutter_svg`](https://pub.dev/packages/flutter_svg)，支持按目标尺寸绘制矢量 UI。项目还可使用 `CustomPainter` 定制形状与动效，例如现有 [命令轮盘](../Engine/lib/src/widgets/command_radial_wheel.dart)和[脚本画布绘制层](../Engine/lib/src/widgets/script_canvas_layer.dart)。位图背景与角色素材仍按其自身分辨率处理，矢量 UI 不会把位图转换成矢量图。
+
+### 接入 Flutter / Dart 社区包
+
+`ProjectCode` 是 Flutter 包，可以在自己的 `pubspec.yaml` 中声明 [pub.dev](https://pub.dev) 依赖，再通过 `GameModule` 的界面工厂、主题、设置页签或脚本扩展点接入项目。动画、网络请求、数据存储和平台服务都可以复用社区实现。若功能直接写在游戏入口包，则将依赖声明在对应游戏的 `pubspec.yaml` 中。
+
+纯 Dart 包与原生插件按各自声明的支持平台使用；涉及平台权限、SDK 或 Runner 配置时，在游戏项目对应的 Android、iOS 或桌面目录完成配置。当前引擎已经使用 `flutter_animate`、`flutter_svg`、`window_manager`、`screen_retriever` 和 `path_provider` 等包，可从 [引擎依赖清单](../Engine/pubspec.yaml)查看集成示例。
+
+### 操作系统交互与窗口扩展
+
+引擎与工具已接入文本编辑、焦点管理、剪贴板和桌面快捷键；[本地存储路径](../Engine/lib/src/utils/local_storage_paths.dart)使用系统应用数据目录保存存档与元数据，[文件管理器接口](../Engine/lib/src/utils/desktop_file_manager.dart)调用 Windows Explorer、macOS Finder 或 Linux 文件管理器打开目录。
+
+桌面 [`PlatformWindowManager`](../Engine/lib/src/utils/platform_window_manager_io.dart)基于 `window_manager` 与 `screen_retriever` 提供窗口标题、全屏、最大化 / 还原、宽高比约束和窗口事件。当前游戏内置 `5:4`、`16:10`、`16:9` 比例预设，按当前显示器可用工作区计算窗口边界，并支持等比例最大化后恢复原位置与尺寸。项目可通过 `GameModule.getAppTitle` 和 `showWindowCloseConfirmation` 定制标题与退出确认。
+
+需要额外桌面行为时，可在项目层调用 [window_manager](https://pub.dev/packages/window_manager) 扩展窗口控制，或接入相应插件实现置顶、系统托盘等功能；这些属于项目扩展，并非引擎默认启用的功能。超出插件接口的系统能力，可通过 [Flutter 平台通道](https://docs.flutter.dev/platform-integration/platform-channels)连接原生代码。Web 使用[浏览器窗口适配层](../Engine/lib/src/utils/platform_window_manager_web.dart)，提供页面标题与浏览器全屏等操作；桌面窗口尺寸、位置控制不适用于浏览器页面。
+
 ## 本地发布构建
 
 ### 发布模式与演出模式
