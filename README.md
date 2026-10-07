@@ -24,6 +24,7 @@
 
 <p align="center">
   <a href="#quick-start">快速开始</a> ·
+  <a href="#performance">性能与内存</a> ·
   <a href="#features">核心功能</a> ·
   <a href="#launcher">启动器</a> ·
   <a href="#shortcuts">快捷键</a> ·
@@ -37,13 +38,34 @@
 
 ## 项目介绍
 
-SakiEngine 是基于 **Flutter / Dart** 开发的开源视觉小说与 Galgame 引擎，支持 **Windows、macOS、Linux、Android、iOS 和 Web**。
+SakiEngine 是基于 **Flutter / Dart** 开发、面向高性能原生运行的开源视觉小说与 Galgame 引擎，支持 **Windows、macOS、Linux、Android、iOS 和 Web**。
 
 引擎使用 `.sks` 编写剧情，提供对话与分支、角色演出、音视频、多语言、存档与回滚。图形化启动器负责项目创建、运行和打包；内置编辑器支持在游戏中调整剧本与演出，项目界面和逻辑可通过 Flutter 模块扩展。
 
 视频播放集成 **AimesSoft 自研的 Rust 播放器内核 [Erika](https://github.com/AimesSoft/Erika)**，为游戏中的视频演出提供底层播放能力。
 
 引擎名称 **Saki** 来自《来自新世界》中的**渡边早季（渡辺早季 / Saki Watanabe）**。
+
+<a id="performance"></a>
+
+## 高性能设计
+
+**Dart AOT + Rust 原生服务 + Erika 播放器内核**构成原生发布版的性能基础。Dart 代码提前编译为机器码，Rust 承担资源索引、存档与历史快照等数据处理，Erika 将视频播放、渲染和时序控制保留在原生层，Dart 只传递播放命令与状态事件。
+
+### 与 Ren’Py 的运行开销和内存对比
+
+以下比较 **SakiEngine 原生发布模式**与 **Ren’Py 8 / Python 3** 的架构，不代表同场景实测成绩。Web 使用浏览器编译与运行管线，需单独评估。
+
+| 维度 | SakiEngine | Ren’Py 8 / Python 3 |
+| --- | --- | --- |
+| **逻辑执行开销** | Dart AOT 与 Rust 执行机器码，避免这些路径上的 Python 字节码解释开销 | Python 层逻辑由解释器执行；原生扩展中的工作不承担相同的解释开销 |
+| **剧本加载** | 构建时将 SKS 预生成 Dart 脚本节点，省去发布时的剧情文本解析；运行时仍有节点调度 | 使用 `.rpyc` 编译缓存加速加载，并由 Ren’Py 运行时调度剧情 |
+| **渲染与视频** | Flutter 原生渲染管线与自研 Erika；视频热路径不经过 Dart 逐帧处理 | 同样使用 GPU 渲染与 FFmpeg 等原生组件，不能按纯 Python 的速度估算画面和解码性能 |
+| **内存管理** | Rust 数据结构、SakiPack 内存映射与历史快照 LZ4 压缩控制部分数据开销；Dart 堆仍有 GC | Python 对象、回滚状态与图片预测缓存占用内存；图像和解码器也有原生缓冲区 |
+
+**性能优势主要体现在逻辑与数据处理路径。** 相比等价的纯 Python 循环和对象操作，AOT 与 Rust 通常有更低的执行开销；收益取决于这部分工作在整帧中的占比，不能直接换算为整款游戏的帧率倍数。
+
+**总内存占用需要按场景比较。** Rust 可以减少部分对象和分配开销，但 Flutter 引擎、Dart 堆、解码后的图片、GPU 纹理及视频缓冲同样占用内存。AOT 不会消除 GC，也不保证游戏比 Ren’Py 更省内存。这里未提供同素材、同分辨率的对照实测，因此不标注内存降幅。实现依据与测试口径见 [性能与内存说明](docs/development.md#performance)。
 
 <a id="features"></a>
 
