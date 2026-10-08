@@ -6,6 +6,7 @@ import 'package:sakiengine/src/game/story_flowchart_manager.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
 import 'package:sakiengine/src/widgets/common/overlay_scaffold.dart';
 import 'package:sakiengine/src/utils/scaling_manager.dart';
+import 'package:sakiengine/src/utils/story_flowchart_layout.dart';
 import 'package:sakiengine/src/config/saki_engine_config.dart';
 import 'package:sakiengine/src/widgets/common/square_icon_button.dart';
 import 'package:sakiengine/src/utils/ui_sound_manager.dart';
@@ -152,52 +153,10 @@ class _StoryFlowchartScreenState extends State<StoryFlowchartScreen> {
 
   /// 获取当前章节的所有节点
   List<StoryFlowNode> _getNodesForCurrentChapter() {
-    if (_selectedChapter == null) return [];
-
-    final allNodes = _flowchartManager.nodes.values.toList();
-    final nodesMap = {for (var n in allNodes) n.id: n};
-
-    // 递归查找最近的有解锁状态的祖先节点（章节、分支选择、结局）
-    bool isAncestorUnlocked(String? nodeId) {
-      if (nodeId == null) return false;
-      final node = nodesMap[nodeId];
-      if (node == null) return false;
-
-      // 如果是分支选项或汇合点，继续向上查找
-      final bool isBranchOption = node.metadata != null && node.metadata!.containsKey('branchText');
-      final bool isMergePoint = node.type == StoryNodeType.merge;
-
-      if (isBranchOption || isMergePoint) {
-        // 汇合点可能有多个父节点
-        if (isMergePoint && node.metadata != null) {
-          final parentIds = node.metadata!['parentIds'] as List<dynamic>?;
-          if (parentIds != null && parentIds.isNotEmpty) {
-            // 只要有一个父节点的祖先解锁就返回 true
-            return parentIds.any((id) => isAncestorUnlocked(id as String));
-          }
-        }
-        // 分支选项向上查找
-        return isAncestorUnlocked(node.parentNodeId);
-      }
-
-      // 找到有解锁状态的节点，返回其解锁状态
-      return node.isUnlocked;
-    }
-
-    return allNodes.where((node) {
-      if (node.chapterName != _selectedChapter) return false;
-
-      // 分支选项和汇合点：检查祖先节点是否已解锁
-      final bool isBranchOption = node.metadata != null && node.metadata!.containsKey('branchText');
-      final bool isMergePoint = node.type == StoryNodeType.merge;
-
-      if (isBranchOption || isMergePoint) {
-        return isAncestorUnlocked(node.id);
-      }
-
-      // 其他节点：只返回已解锁的节点
-      return node.isUnlocked;
-    }).toList();
+    return visibleStoryFlowchartNodes(
+      _flowchartManager.nodes.values,
+      _selectedChapter,
+    );
   }
 
   @override
@@ -508,69 +467,15 @@ class _StoryFlowchartScreenState extends State<StoryFlowchartScreen> {
   }
 
   /// 计算节点布局（避免重叠，垂直居中对称）
-  Map<String, Map<String, double>> _calculateLayout(List<StoryFlowNode> rootNodes) {
-    final Map<String, Map<String, double>> layoutInfo = {};
-    final Map<int, List<StoryFlowNode>> depthNodes = {}; // 每个深度的节点列表
-
-    // 获取当前章节的所有节点，用于查找子节点
-    final currentChapterNodes = _getNodesForCurrentChapter();
-    final nodesMap = {for (var n in currentChapterNodes) n.id: n};
-
-    // 第一步：收集每个深度的所有节点
-    void collectNodes(StoryFlowNode node, int depth) {
-      depthNodes[depth] = depthNodes[depth] ?? [];
-      depthNodes[depth]!.add(node);
-
-      // 递归处理子节点
-      final children = node.childNodeIds
-          .map((id) => nodesMap[id])
-          .whereType<StoryFlowNode>()
-          .toList();
-      for (var child in children) {
-        collectNodes(child, depth + 1);
-      }
-    }
-
-    // 收集所有根节点及其子节点
-    for (var root in rootNodes) {
-      collectNodes(root, 0);
-    }
-
-    // 第二步：计算每个深度的垂直居中位置（使用画布中心作为原点）
-    const double canvasCenter = 20000.0; // 画布中心点（40000 / 2）
-
-    for (var entry in depthNodes.entries) {
-      final depth = entry.key;
-      final nodes = entry.value;
-      final nodeCount = nodes.length;
-
-      // 计算垂直居中的起始Y坐标（以画布中心为原点）
-      final totalHeight = (nodeCount - 1) * 200.0;
-      final startY = canvasCenter - totalHeight / 2; // 以画布中心为基准居中
-
-      for (int i = 0; i < nodes.length; i++) {
-        final node = nodes[i];
-        final double x = canvasCenter + 100 + depth * 400.0; // X也以画布中心为基准
-        final double y = startY + i * 200.0;
-
-        layoutInfo[node.id] = {'x': x, 'y': y, 'depth': depth.toDouble()};
-      }
-    }
-
-    // 第三步：调整小节点的Y坐标，使其中心对齐到大节点的中心
-    final double verticalAdjustment = (_largeNodeHeight - _smallNodeHeight) / 2;
-    for (var entry in layoutInfo.entries) {
-      final node = nodesMap[entry.key];
-      if (node != null) {
-        final bool isSmallNode = (node.metadata != null && node.metadata!.containsKey('branchText')) ||
-                                  node.type == StoryNodeType.merge;
-        if (isSmallNode) {
-          entry.value['y'] = entry.value['y']! + verticalAdjustment;
-        }
-      }
-    }
-
-    return layoutInfo;
+  Map<String, Map<String, double>> _calculateLayout(
+    List<StoryFlowNode> rootNodes,
+  ) {
+    return calculateStoryFlowchartLayout(
+      _getNodesForCurrentChapter(),
+      rootNodes,
+      largeNodeHeight: _largeNodeHeight,
+      smallNodeHeight: _smallNodeHeight,
+    );
   }
 
   /// 构建单个节点组件
