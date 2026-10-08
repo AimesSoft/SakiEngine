@@ -1,6 +1,48 @@
 part of 'game_manager.dart';
 
 extension _GameManagerLifecycle on GameManager {
+  Future<void> _reloadLanguageLifecycle(
+    SupportedLanguage language,
+    int revision,
+  ) async {
+    // Playback still uses the old source indices while loading. Prepare the
+    // replacement separately so chapter/voice/autosave lookups stay valid.
+    final pendingMerger = ScriptMerger();
+    var committed = false;
+    try {
+      final charactersContent = await AssetManager().loadString(
+        'assets/GameScript/configs/characters.sks',
+      );
+      final characterConfigs = ConfigParser().parseCharacters(charactersContent);
+      final script =
+          await (languageScriptLoaderForTesting?.call(
+                pendingMerger.getMergedScript,
+              ) ??
+              pendingMerger.getMergedScript());
+      if (_disposed ||
+          _activeLanguage != language ||
+          _languageReloadRevision != revision) {
+        return;
+      }
+
+      // A language-only change must not replay the current Say/API/voice node or
+      // clear image/animation caches. Localized scripts keep the same node layout.
+      final previousMerger = _scriptMerger;
+      _scriptMerger = pendingMerger;
+      committed = true;
+      previousMerger.dispose();
+      _characterConfigs = characterConfigs;
+      _script = script;
+      _buildLabelIndexMap();
+      _buildMusicRegions();
+      SaveLoadManager.clearCache();
+      _refreshLocalizedDialogueState();
+      _emitCurrentState();
+    } finally {
+      if (!committed) pendingMerger.dispose();
+    }
+  }
+
   Future<void> _loadConfigs() async {
     final charactersContent = await AssetManager().loadString(
       'assets/GameScript/configs/characters.sks',
@@ -161,44 +203,12 @@ extension _GameManagerLifecycle on GameManager {
       //print('[GameManager] 存档恢复：cgCharacters内容 = ${snapshot.currentState.cgCharacters.keys.toList()}');
     }
 
-    // 修复bug：从新脚本中获取当前对话文本，避免使用存档中的旧文本
-    // 使用 NvlStateManager 来处理 NVL 模式的特殊逻辑
-    String? freshDialogue;
-    String? freshDialogueTag;
-    String? freshSpeaker;
-    List<NvlDialogue>? freshNvlDialogues;
-
-    // NVL模式：使用模块化的状态管理器
-    freshNvlDialogues = NvlStateManager.restoreNvlDialogues(
-      snapshot: snapshot,
-      script: _script,
-      characterConfigs: _characterConfigs,
-      scriptIndex: _scriptIndex,
-    );
-
     // 非NVL模式：刷新当前对话
     // 注意：_scriptIndex 在大多数存档中已经指向“下一条指令”，
     // 当前显示句应优先取历史记录最后一句对应的脚本索引。
     final displayedDialogueScriptIndex = snapshot.dialogueHistory.isNotEmpty
         ? snapshot.dialogueHistory.last.scriptIndex
         : (_scriptIndex > 0 ? _scriptIndex - 1 : _scriptIndex);
-
-    if (!snapshot.isNvlMode) {
-      final dialogueScriptIndex = displayedDialogueScriptIndex;
-
-      if (dialogueScriptIndex >= 0 &&
-          dialogueScriptIndex < _script.children.length) {
-        final currentNode = _script.children[dialogueScriptIndex];
-        if (currentNode is SayNode) {
-          freshDialogue = _resolveScriptText(currentNode.dialogue);
-          freshDialogueTag = currentNode.dialogueTag;
-          if (currentNode.character != null) {
-            final characterConfig = _characterConfigs[currentNode.character];
-            freshSpeaker = characterConfig?.name;
-          }
-        }
-      }
-    }
 
     final restoredBackground = await _resolveRestoredBackground(
       snapshot,
@@ -215,15 +225,11 @@ extension _GameManagerLifecycle on GameManager {
       isNvlMovieMode: snapshot.isNvlMovieMode,
       isNvlnMode: snapshot.isNvlnMode, // 新增：恢复无遮罩NVL模式状态
       isNvlOverlayVisible: snapshot.isNvlOverlayVisible,
-      nvlDialogues: freshNvlDialogues ?? snapshot.nvlDialogues,
+      nvlDialogues: snapshot.nvlDialogues,
       everShownCharacters: _everShownCharacters,
       isFastForwarding: false, // 修复快进回退bug：强制设置为非快进状态
       // 明确恢复CG角色状态（修复CG存档恢复bug）
       cgCharacters: snapshot.currentState.cgCharacters,
-      // 修复bug：使用从新脚本获取的对话文本
-      dialogue: freshDialogue ?? snapshot.currentState.dialogue,
-      dialogueTag: freshDialogueTag ?? snapshot.currentState.dialogueTag,
-      speaker: freshSpeaker ?? snapshot.currentState.speaker,
     );
 
     // 设置NVL上下文模式
@@ -250,19 +256,12 @@ extension _GameManagerLifecycle on GameManager {
       );
     }
 
-    if (snapshot.dialogueHistory.isNotEmpty) {
+    if (snapshot.dialogueHistory.isNotEmpty || reloadCharacterConfigs) {
       _dialogueHistory = List.from(snapshot.dialogueHistory);
-      // 修复bug：从新脚本中重新获取对话文本，确保剧本修改后读档时显示最新内容
-      _refreshDialogueHistoryFromScript();
     }
-
-    // 修复bug：同时更新当前状态的对话文本
-    // 但NVL模式不需要刷新，因为nvlDialogues已经在上面正确恢复了
-    if (!snapshot.isNvlMode) {
-      _refreshCurrentStateDialogue(
-        dialogueScriptIndex: displayedDialogueScriptIndex,
-      );
-    }
+    _refreshLocalizedDialogueState(
+      displayedDialogueScriptIndex: displayedDialogueScriptIndex,
+    );
 
     // 恢复快照中实际播放的音乐，不跨分支推算
     await _restoreCurrentMusic();
@@ -284,7 +283,7 @@ extension _GameManagerLifecycle on GameManager {
         if (currentNode is MenuNode) {
           // 如果当前位置是MenuNode，确保currentNode被正确设置
           _currentState = _currentState.copyWith(
-            currentNode: currentNode,
+            currentNode: _localizeMenuNode(currentNode),
             everShownCharacters: _everShownCharacters,
           );
           if (kEngineDebugMode) {

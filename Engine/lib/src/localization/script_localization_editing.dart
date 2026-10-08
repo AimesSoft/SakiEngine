@@ -7,6 +7,7 @@ const scriptEditorLanguages = <String, String>{
   'zhc': '繁體中文',
   'jp': '日本語',
   'en': 'English',
+  'ko': '한국어',
 };
 
 String? canonicalScriptLanguage(String tag) =>
@@ -15,6 +16,7 @@ String? canonicalScriptLanguage(String tag) =>
       'zhc' || 'zht' || 'zhhant' || 'zhtw' || 'zhtc' => 'zhc',
       'jp' || 'ja' => 'jp',
       'en' => 'en',
+      'ko' || 'kr' => 'ko',
       _ => null,
     };
 

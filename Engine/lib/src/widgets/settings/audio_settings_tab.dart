@@ -6,6 +6,7 @@ import 'package:sakiengine/src/utils/music_manager.dart';
 import 'package:sakiengine/src/widgets/game_style_switch.dart';
 import 'package:sakiengine/src/widgets/game_style_slider.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
+import 'package:sakiengine/src/localization/script_text_localizer.dart';
 
 class AudioSettingsTab extends StatelessWidget {
   final bool musicEnabled;
@@ -642,7 +643,7 @@ class AudioSettingsTab extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        profile.displayName,
+                        ScriptTextLocalizer.resolve(profile.displayName),
                         overflow: TextOverflow.ellipsis,
                         style: config.reviewTitleTextStyle.copyWith(
                           fontSize:

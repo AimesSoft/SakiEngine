@@ -9,7 +9,7 @@ import 'package:sakiengine/src/game/unified_game_data_manager.dart';
 import 'package:sakiengine/src/config/project_info_manager.dart';
 import 'package:sakiengine/src/utils/engine_asset_loader.dart';
 
-enum SupportedLanguage { zhHans, zhHant, en, ja }
+enum SupportedLanguage { zhHans, zhHant, en, ja, ko }
 
 extension SupportedLanguageX on SupportedLanguage {
   String get code {
@@ -22,6 +22,8 @@ extension SupportedLanguageX on SupportedLanguage {
         return 'en';
       case SupportedLanguage.ja:
         return 'ja';
+      case SupportedLanguage.ko:
+        return 'ko';
     }
   }
 
@@ -35,6 +37,8 @@ extension SupportedLanguageX on SupportedLanguage {
         return const Locale('en');
       case SupportedLanguage.ja:
         return const Locale('ja');
+      case SupportedLanguage.ko:
+        return const Locale('ko');
     }
   }
 
@@ -48,6 +52,8 @@ extension SupportedLanguageX on SupportedLanguage {
         return 'English';
       case SupportedLanguage.ja:
         return 'Japanese';
+      case SupportedLanguage.ko:
+        return 'Korean';
     }
   }
 }
@@ -113,7 +119,10 @@ class LocalizationManager extends ChangeNotifier {
       _currentLanguage = _detectSystemLanguage();
       // 保存自动检测的语言
       await _dataManager.setStringVariable(
-          'sakiengine.language', _currentLanguage.code, _projectName!);
+        'sakiengine.language',
+        _currentLanguage.code,
+        _projectName!,
+      );
     }
 
     _initialized = true;
@@ -177,6 +186,10 @@ class LocalizationManager extends ChangeNotifier {
           return SupportedLanguage.ja;
         }
       }
+      if (languageCode == 'ko' &&
+          _translations.containsKey(SupportedLanguage.ko)) {
+        return SupportedLanguage.ko;
+      }
     }
 
     // 如果没有匹配到，使用默认语言（英语）
@@ -214,8 +227,10 @@ class LocalizationManager extends ChangeNotifier {
     }
 
     try {
-      final raw =
-          await EngineAssetLoader.loadString(_translationsAsset, cache: false);
+      final raw = await EngineAssetLoader.loadString(
+        _translationsAsset,
+        cache: false,
+      );
       if (_tryLoadTranslationsFromRaw(raw)) {
         _updateFallbackLanguage();
         return;
@@ -310,12 +325,18 @@ class LocalizationManager extends ChangeNotifier {
 
     _currentLanguage = language;
     await _dataManager.setStringVariable(
-        'sakiengine.language', language.code, _projectName!);
+      'sakiengine.language',
+      language.code,
+      _projectName!,
+    );
     notifyListeners();
   }
 
-  String t(String key,
-      {Map<String, String>? params, SupportedLanguage? language}) {
+  String t(
+    String key, {
+    Map<String, String>? params,
+    SupportedLanguage? language,
+  }) {
     final lang = language ?? _currentLanguage;
     String? value =
         _translations[lang]?[key] ?? _translations[_fallbackLanguage]?[key];

@@ -8,11 +8,29 @@ import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 import 'package:sakiengine/src/sks_parser/sks_parser.dart';
 import 'package:sakiengine/src/native/native_script_compiler.dart';
 import 'package:sakiengine/src/native/native_runtime_index.dart';
+import 'package:sakiengine/src/localization/localization_manager.dart';
 
 class ScriptMerger {
   static ScriptNode? _sharedMergedScript;
   static Map<String, int> _sharedFileStartIndices = const {};
   static Map<String, String> _sharedGlobalLabelMap = const {};
+  static SupportedLanguage? _sharedLanguage;
+  static int? _sharedLanguageRevision;
+  static int _languageRevision = 0;
+  static bool _listeningToLanguage = false;
+
+  SupportedLanguage? _cachedLanguage;
+  int? _cachedLanguageRevision;
+
+  ScriptMerger() {
+    if (!_listeningToLanguage) {
+      _listeningToLanguage = true;
+      LocalizationManager().addListener(() {
+        _languageRevision++;
+        _sharedMergedScript = null;
+      });
+    }
+  }
 
   final Map<String, ScriptNode> _loadedScripts = {};
   final Map<String, int> _fileStartIndices = {}; // 记录每个文件在合并脚本中的起始索引
@@ -219,11 +237,32 @@ class ScriptMerger {
 
   /// 合并所有脚本文件成一个连续的脚本
   Future<ScriptNode> getMergedScript() async {
+    while (true) {
+      final language = LocalizationManager().currentLanguage;
+      final revision = _languageRevision;
+      if (_cachedLanguage != language || _cachedLanguageRevision != revision) {
+        _clearInstanceCache();
+        _cachedLanguage = language;
+        _cachedLanguageRevision = revision;
+      }
+      final script = await _getMergedScriptForCurrentLanguage();
+      if (language == LocalizationManager().currentLanguage &&
+          revision == _languageRevision) {
+        return script;
+      }
+      // A language changed during asynchronous source loading (including ABA).
+      // Discard the partial result and load a consistent set for the latest one.
+    }
+  }
+
+  Future<ScriptNode> _getMergedScriptForCurrentLanguage() async {
     if (_mergedScript != null) {
       return _mergedScript!;
     }
     final shared = _sharedMergedScript;
-    if (shared != null) {
+    if (shared != null &&
+        _sharedLanguage == _cachedLanguage &&
+        _sharedLanguageRevision == _cachedLanguageRevision) {
       _mergedScript = shared;
       _fileStartIndices
         ..clear()
@@ -270,10 +309,14 @@ class ScriptMerger {
 
   void _publishSharedScript() {
     final script = _mergedScript;
-    if (script == null) {
+    if (script == null ||
+        _cachedLanguage != LocalizationManager().currentLanguage ||
+        _cachedLanguageRevision != _languageRevision) {
       return;
     }
     _sharedMergedScript = script;
+    _sharedLanguage = _cachedLanguage;
+    _sharedLanguageRevision = _cachedLanguageRevision;
     _sharedFileStartIndices = Map.unmodifiable(_fileStartIndices);
     _sharedGlobalLabelMap = Map.unmodifiable(_globalLabelMap);
   }
@@ -426,10 +469,21 @@ class ScriptMerger {
 
   /// 清理缓存，强制重新合并
   void clearCache() {
-    _nativeRuntimeIndex?.dispose();
     _sharedMergedScript = null;
+    _sharedLanguage = null;
+    _sharedLanguageRevision = null;
     _sharedFileStartIndices = const {};
     _sharedGlobalLabelMap = const {};
+    _clearInstanceCache();
+  }
+
+  /// Releases this merger's native index without invalidating shared sources.
+  void dispose() => _clearInstanceCache();
+
+  void _clearInstanceCache() {
+    _nativeRuntimeIndex?.dispose();
+    _cachedLanguage = null;
+    _cachedLanguageRevision = null;
     _mergedScript = null;
     _loadedScripts.clear();
     _fileStartIndices.clear();

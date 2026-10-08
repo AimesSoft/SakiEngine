@@ -2,6 +2,7 @@ import 'package:sakiengine/src/game/game_manager.dart';
 import 'package:sakiengine/src/config/config_models.dart';
 import 'package:sakiengine/src/localization/script_text_localizer.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
+import 'package:sakiengine/src/game/script_dialogue_resolver.dart';
 
 /// NVL模式状态管理器
 /// 负责NVL模式的状态恢复和刷新逻辑
@@ -24,19 +25,71 @@ class NvlStateManager {
     required ScriptNode script,
     required Map<String, CharacterConfig> characterConfigs,
     required int scriptIndex,
+    List<DialogueHistoryEntry>? playedHistory,
+    String Function(String)? resolveText,
   }) {
     // 如果不是NVL模式或没有对话，直接返回null
     if (!snapshot.isNvlMode || snapshot.nvlDialogues.isEmpty) {
       return null;
     }
 
-    // 关键修复：NVL模式读档时，不刷新对话内容
-    // 直接使用存档中保存的 nvlDialogues，因为：
-    // 1. nvlDialogues 在存档时已经保存了正确的对话内容
-    // 2. scriptIndex 已经指向下一句，用它获取对话会出错
-    // 3. 观看记录（dialogueHistory）是正确的，证明存档的内容没问题
+    final originals = snapshot.nvlDialogues;
+    final history = playedHistory ?? snapshot.dialogueHistory;
+    final indices = List<int?>.filled(originals.length, null);
 
-    return null; // 返回null表示不需要刷新，使用存档中的原始数据
+    // An NVL page contains the most recently played dialogue entries. Use
+    // their real execution order, which may cross jumps or skip conditions.
+    var target = originals.length - 1;
+    for (var i = history.length - 1; i >= 0 && target >= 0; i--) {
+      indices[target--] = history[i].scriptIndex;
+    }
+
+    // Older history snapshots omit history to avoid recursive serialization.
+    // Without an execution trace, only infer an uninterrupted NVL block. Never
+    // walk across a jump/label/conditional and accidentally reveal an unplayed
+    // branch. Preserve unmatched old lines rather than guessing their source.
+    if (history.isEmpty) {
+      for (var i = scriptIndex - 1; i >= 0 && target >= 0; i--) {
+        if (i >= script.children.length) continue;
+        final node = script.children[i];
+        if (node is SayNode) {
+          indices[target--] = i;
+        } else if (node is LabelNode ||
+            node is JumpNode ||
+            node is MenuNode ||
+            node is ConditionalSayNode ||
+            node is NvlNode ||
+            node is NvlnNode ||
+            node is NvlMovieNode ||
+            node is EndNvlNode ||
+            node is EndNvlnNode ||
+            node is EndNvlMovieNode ||
+            node is ReturnNode) {
+          break;
+        }
+      }
+    }
+
+    return List.generate(originals.length, (i) {
+      final original = originals[i];
+      final index = indices[i];
+      final node = index == null
+          ? null
+          : ScriptDialogueResolver.at(script, index);
+      if (node == null) return original;
+      return NvlDialogue(
+        speaker: node.character == null
+            ? null
+            : characterConfigs[node.character]?.name,
+        speakerAlias: node.character ?? node.tailCharacter,
+        dialogue:
+            resolveText?.call(node.dialogue) ??
+            ScriptTextLocalizer.resolve(node.dialogue),
+        dialogueTag: node.dialogueTag,
+        timestamp: original.timestamp,
+        presentation: original.presentation,
+      );
+    });
   }
 
   /// 刷新当前状态的对话文本（仅用于非NVL模式）
@@ -83,10 +136,7 @@ class NvlStateManager {
     }
 
     if (newDialogue != null) {
-      return {
-        'dialogue': newDialogue,
-        'speaker': newSpeaker,
-      };
+      return {'dialogue': newDialogue, 'speaker': newSpeaker};
     }
 
     return null;
@@ -96,9 +146,7 @@ class NvlStateManager {
   ///
   /// 用于调试和验证，确保NVL模式读档后状态正确
   static bool shouldRefreshNvlState(GameStateSnapshot snapshot) {
-    // NVL模式永远不需要刷新对话内容
-    // 因为存档中的 nvlDialogues 已经包含了正确的对话
-    return false;
+    return snapshot.isNvlMode && snapshot.nvlDialogues.isNotEmpty;
   }
 
   /// 获取NVL模式的上下文类型

@@ -865,10 +865,19 @@ class _SaveSlotCardState extends State<_SaveSlotCard>
     );
     _dialoguePreviewFuture = _createDialoguePreviewFuture(widget.saveSlot);
     _screenshotFuture = widget.loadScreenshot?.call();
+    LocalizationManager().addListener(_refreshPreviewLanguage);
+  }
+
+  void _refreshPreviewLanguage() {
+    if (!mounted) return;
+    setState(() {
+      _dialoguePreviewFuture = _createDialoguePreviewFuture(widget.saveSlot);
+    });
   }
 
   @override
   void dispose() {
+    LocalizationManager().removeListener(_refreshPreviewLanguage);
     _animationController.dispose();
     super.dispose();
   }

@@ -18,8 +18,14 @@ class TextSegment {
 }
 
 class RichTextParser {
+  // Inline language segments reserve ASCII / as their delimiter. The script
+  // guide uses full-width ／ inside a segment, including rich-text closers.
+  static String _normalizeClosingTags(String text) => text
+      .replaceAll('[／size]', '[/size]')
+      .replaceAll('[／pass]', '[/pass]');
+
   static String cleanText(String text) {
-    return text
+    return _normalizeClosingTags(text)
         .replaceAll(RegExp(r'\[size=[0-9.]+\]'), '')
         .replaceAll('[/size]', '')
         .replaceAll(RegExp(r'\[w=[0-9.]+\]'), '')
@@ -28,6 +34,7 @@ class RichTextParser {
   }
   
   static List<TextSegment> parseTextSegments(String text) {
+    text = _normalizeClosingTags(text);
     final List<TextSegment> segments = [];
     final combinedRegex = RegExp(r'\[size=([0-9.]+)\](.*?)\[/size\]|\[w=([0-9.]+)\]|\[pass\](.*?)\[/pass\]');
     

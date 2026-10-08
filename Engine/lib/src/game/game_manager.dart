@@ -39,6 +39,7 @@ import 'package:sakiengine/src/game/story_flowchart_manager.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
 import 'package:sakiengine/src/utils/history_snapshot_codec.dart';
 import 'package:sakiengine/src/game/nvl_state_manager.dart';
+import 'package:sakiengine/src/game/script_dialogue_resolver.dart';
 import 'package:sakiengine/src/game/chapter_autosave_manager.dart';
 import 'package:sakiengine/src/game/script_sound_state_resolver.dart';
 import 'package:sakiengine/src/native/native_memory_pressure.dart';
@@ -193,9 +194,14 @@ class GameManager {
   List<MapEntry<String, int>> _sortedLabelEntries = const [];
 
   // 脚本合并器
-  final ScriptMerger _scriptMerger = ScriptMerger();
+  ScriptMerger _scriptMerger = ScriptMerger();
   SupportedLanguage _activeLanguage = SupportedLanguage.zhHans;
   bool _isLanguageReloading = false;
+  int _languageReloadRevision = 0;
+
+  @visibleForTesting
+  Future<ScriptNode> Function(Future<ScriptNode> Function() load)?
+  languageScriptLoaderForTesting;
   late final VoidCallback _languageListener;
 
   Map<String, CharacterConfig> _characterConfigs = {};
@@ -2038,17 +2044,23 @@ class GameManager {
       return;
     }
     _activeLanguage = newLanguage;
+    _languageReloadRevision++;
 
     if (!_isScriptInitialized() || _isLanguageReloading) {
       return;
     }
 
     _isLanguageReloading = true;
-    final scriptName = currentScriptFile;
-
     Future.microtask(() async {
       try {
-        await hotReload(scriptName);
+        // Language changes can arrive while assets are loading. Drain to the
+        // latest selection rather than dropping changes behind the guard.
+        while (!_disposed) {
+          final requestedLanguage = _activeLanguage;
+          final requestedRevision = _languageReloadRevision;
+          await _reloadLanguageLifecycle(requestedLanguage, requestedRevision);
+          if (requestedRevision == _languageReloadRevision) break;
+        }
       } catch (e, stack) {
         if (kEngineDebugMode) {
           print(
@@ -2064,6 +2076,63 @@ class GameManager {
 
   String _resolveScriptText(String text) {
     return ScriptTextLocalizer.resolve(text, language: _activeLanguage);
+  }
+
+  /// Refreshes only presentation text. Progress, history snapshots, animations,
+  /// sound, and the currently displayed NVL page retain their original timing.
+  void _refreshLocalizedDialogueState({int? displayedDialogueScriptIndex}) {
+    final snapshot = saveStateSnapshot();
+    final displayedIndex =
+        displayedDialogueScriptIndex ??
+        (_dialogueHistory.isNotEmpty
+            ? _dialogueHistory.last.scriptIndex
+            : _scriptIndex - 1);
+    final nvlDialogues = NvlStateManager.restoreNvlDialogues(
+      snapshot: snapshot,
+      script: _script,
+      characterConfigs: _characterConfigs,
+      scriptIndex: _scriptIndex,
+      playedHistory: _dialogueHistory,
+      resolveText: _resolveScriptText,
+    );
+    if (nvlDialogues != null) {
+      _currentState = _currentState.copyWith(nvlDialogues: nvlDialogues);
+    } else if (!_currentState.isNvlMode && _currentState.dialogue != null) {
+      _refreshCurrentStateDialogue(dialogueScriptIndex: displayedIndex);
+    }
+    _refreshDialogueHistoryFromScript();
+    if (_currentState.currentNode is MenuNode &&
+        _scriptIndex >= 0 &&
+        _scriptIndex < _script.children.length) {
+      final node = _script.children[_scriptIndex];
+      if (node is MenuNode) {
+        _currentState = _currentState.copyWith(
+          currentNode: _localizeMenuNode(node),
+        );
+      }
+    }
+  }
+
+  @visibleForTesting
+  void refreshLocalizedScriptForTesting(
+    ScriptNode script, {
+    required Map<String, CharacterConfig> characterConfigs,
+    GameStateSnapshot? loadedSnapshot,
+  }) {
+    _script = script;
+    _characterConfigs = characterConfigs;
+    if (loadedSnapshot != null) {
+      _scriptIndex = loadedSnapshot.scriptIndex;
+      _currentState = loadedSnapshot.currentState.copyWith(
+        isNvlMode: loadedSnapshot.isNvlMode,
+        isNvlMovieMode: loadedSnapshot.isNvlMovieMode,
+        isNvlnMode: loadedSnapshot.isNvlnMode,
+        isNvlOverlayVisible: loadedSnapshot.isNvlOverlayVisible,
+        nvlDialogues: loadedSnapshot.nvlDialogues,
+      );
+      _dialogueHistory = List.from(loadedSnapshot.dialogueHistory);
+    }
+    _refreshLocalizedDialogueState();
   }
 
   MenuNode _localizeMenuNode(MenuNode node) {
@@ -3641,10 +3710,6 @@ class GameManager {
           );
 
           if (followingMenuNodeIndex != null) {
-            final menuNode =
-                _script.children[followingMenuNodeIndex] as MenuNode;
-            final localizedMenuNode = _localizeMenuNode(menuNode);
-
             // 分支选择前创建运行时自动存档
             await _createRuntimeAutoSave(reason: '分支选择');
             // 分支选择前创建自动存档
@@ -3654,7 +3719,9 @@ class GameManager {
             );
 
             _currentState = _currentState.copyWith(
-              currentNode: localizedMenuNode,
+              currentNode: _localizeMenuNode(
+                _script.children[followingMenuNodeIndex] as MenuNode,
+              ),
               clearDialogueAndSpeaker: false,
               everShownCharacters: _everShownCharacters,
             );
@@ -4038,10 +4105,6 @@ class GameManager {
           }
 
           if (followingMenuNodeIndex != null) {
-            final menuNode =
-                _script.children[followingMenuNodeIndex] as MenuNode;
-            final localizedMenuNode = _localizeMenuNode(menuNode);
-
             // 分支选择前创建运行时自动存档
             await _createRuntimeAutoSave(reason: '分支选择');
             // 分支选择前创建自动存档
@@ -4051,7 +4114,9 @@ class GameManager {
             );
 
             _currentState = _currentState.copyWith(
-              currentNode: localizedMenuNode,
+              currentNode: _localizeMenuNode(
+                _script.children[followingMenuNodeIndex] as MenuNode,
+              ),
               clearDialogueAndSpeaker: false,
               everShownCharacters: _everShownCharacters,
             );
@@ -4067,7 +4132,6 @@ class GameManager {
       }
 
       if (node is MenuNode) {
-        final localizedMenuNode = _localizeMenuNode(node);
         // 分支选择前创建运行时自动存档
         await _createRuntimeAutoSave(reason: '分支选择');
 
@@ -4075,7 +4139,9 @@ class GameManager {
         await _checkAndCreateAutoSave(_scriptIndex, reason: '分支选择');
 
         _currentState = _currentState.copyWith(
-          currentNode: localizedMenuNode,
+          currentNode: _localizeMenuNode(
+            _script.children[currentNodeIndex] as MenuNode,
+          ),
           // 进入选项时保留上一句对话与说话人，避免对话框被隐藏。
           clearDialogueAndSpeaker: false,
           everShownCharacters: _everShownCharacters,
@@ -4723,6 +4789,21 @@ class GameManager {
     String? sourceScriptFile,
     int? sourceLine,
   }) {
+    // A Say node may have awaited an animation or inline API while the script
+    // language changed. Resolve again at commit time without replaying those
+    // actions, so its captured old text cannot overwrite the language refresh.
+    final latestNode = ScriptDialogueResolver.at(_script, currentNodeIndex);
+    if (latestNode != null) {
+      dialogue = _resolveScriptText(latestNode.dialogue);
+      speaker = latestNode.character == null
+          ? null
+          : _characterConfigs[latestNode.character]?.name;
+      dialogueTag = latestNode.dialogueTag;
+      _refreshCurrentStateDialogue(dialogueScriptIndex: currentNodeIndex);
+      if (_currentState.isNvlMode) {
+        _currentState = _currentState.copyWith(clearDialogueAndSpeaker: true);
+      }
+    }
     // 历史快照索引应与常规存档语义一致：指向“下一条待执行节点”。
     final nextScriptIndex = (currentNodeIndex + 1)
         .clamp(0, _script.children.length)
@@ -4783,7 +4864,7 @@ class GameManager {
         continue;
       }
 
-      final node = _script.children[scriptIndex];
+      final node = ScriptDialogueResolver.at(_script, scriptIndex);
       String? newDialogue;
       String? newSpeaker;
 
@@ -4799,7 +4880,7 @@ class GameManager {
       // 如果成功获取到新对话，则更新；否则保留原对话
       if (newDialogue != null) {
         final updatedEntry = DialogueHistoryEntry(
-          speaker: newSpeaker ?? entry.speaker,
+          speaker: newSpeaker,
           dialogue: RichTextParser.cleanText(newDialogue),
           dialogueTag: (node is SayNode) ? node.dialogueTag : entry.dialogueTag,
           timestamp: entry.timestamp,
@@ -4828,7 +4909,7 @@ class GameManager {
       return;
     }
 
-    final node = _script.children[targetScriptIndex];
+    final node = ScriptDialogueResolver.at(_script, targetScriptIndex);
     String? newDialogue;
     String? newSpeaker;
 
@@ -5832,6 +5913,7 @@ class GameManager {
     _endSceneTransitionWait();
     final ownsGlobalResources = _resourceSessionId == _latestResourceSessionId;
     LocalizationManager().removeListener(_languageListener);
+    _scriptMerger.dispose();
     _currentTimer?.cancel(); // 取消活跃的计时器
     _currentTimerCompletion = null;
     _sceneAnimationController?.dispose(); // 清理场景动画控制器

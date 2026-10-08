@@ -3,17 +3,14 @@ import 'dart:html' as html;
 import 'dart:typed_data';
 import 'package:sakiengine/src/utils/foundation_compat.dart';
 import 'package:sakiengine/src/game/game_manager.dart';
+import 'package:sakiengine/src/game/save_dialogue_preview.dart';
 import 'package:sakiengine/src/game/screenshot_generator.dart';
 import 'package:sakiengine/src/utils/binary_serializer.dart';
 import 'package:sakiengine/src/utils/rich_text_parser.dart';
 import 'package:sakiengine/src/config/config_models.dart';
-import 'package:sakiengine/src/config/config_parser.dart';
 import 'package:sakiengine/src/sks_parser/sks_ast.dart';
 import 'package:sakiengine/src/localization/localization_manager.dart';
-import 'package:sakiengine/src/game/script_merger.dart';
-import 'package:sakiengine/src/config/asset_manager.dart';
 import 'package:sakiengine/src/utils/engine_asset_loader.dart';
-import 'package:sakiengine/src/localization/script_text_localizer.dart';
 
 class SaveLoadManager {
   static const String _storageKeyPrefix = 'saki_save_';
@@ -31,137 +28,13 @@ class SaveLoadManager {
     html.window.localStorage[storageKey] = base64Encode(data);
   }
 
-  // 缓存脚本和配置，避免重复加载
-  static ScriptNode? _cachedScript;
-  static Map<String, CharacterConfig>? _cachedCharacterConfigs;
-  static Future<ScriptNode>? _scriptLoadFuture;
-  static Future<Map<String, CharacterConfig>>? _characterConfigsLoadFuture;
-
-  static Future<void> _ensureScriptLoaded() async {
-    if (_cachedScript != null) {
-      return;
-    }
-
-    _scriptLoadFuture ??= () async {
-      final scriptMerger = ScriptMerger();
-      return scriptMerger.getMergedScript();
-    }();
-
-    try {
-      _cachedScript = await _scriptLoadFuture!;
-    } finally {
-      _scriptLoadFuture = null;
-    }
-  }
-
-  static Future<void> _ensureCharacterConfigsLoaded() async {
-    if (_cachedCharacterConfigs != null) {
-      return;
-    }
-
-    _characterConfigsLoadFuture ??= () async {
-      final charactersContent = await AssetManager().loadString(
-        'assets/GameScript/configs/characters.sks',
-      );
-      return ConfigParser().parseCharacters(charactersContent);
-    }();
-
-    try {
-      _cachedCharacterConfigs = await _characterConfigsLoadFuture!;
-    } finally {
-      _characterConfigsLoadFuture = null;
-    }
-  }
-
-  /// 实时查询存档的对话预览文本
-  /// 根据scriptIndex从当前脚本中查询对话内容
-  static Future<String> getDialoguePreview(GameStateSnapshot snapshot) async {
-    try {
-      final currentState = snapshot.currentState;
-
-      // 检查是否是选择界面
-      if (currentState.currentNode != null &&
-          currentState.currentNode is MenuNode) {
-        final menuNode = currentState.currentNode as MenuNode;
-        final choiceTexts = menuNode.choices
-            .map((choice) => '[${choice.text}]')
-            .toList();
-        final localization = LocalizationManager();
-        return '${localization.t('saveLoad.choiceMenu')}\n${choiceTexts.join('\n')}';
-      }
-
-      // 如果无法从脚本查询，回退到NVL模式检查
-      if (currentState.isNvlMode && currentState.nvlDialogues.isNotEmpty) {
-        final latestNvlDialogue = currentState.nvlDialogues.last;
-        if (latestNvlDialogue.speaker != null &&
-            latestNvlDialogue.speaker!.isNotEmpty) {
-          return '【${latestNvlDialogue.speaker}】${RichTextParser.cleanText(latestNvlDialogue.dialogue)}';
-        } else {
-          return RichTextParser.cleanText(latestNvlDialogue.dialogue);
-        }
-      }
-
-      // 普通模式优先使用当前状态的对话
-      if (currentState.dialogue != null && currentState.dialogue!.isNotEmpty) {
-        if (currentState.speaker != null && currentState.speaker!.isNotEmpty) {
-          return '【${currentState.speaker}】${RichTextParser.cleanText(currentState.dialogue!)}';
-        } else {
-          return RichTextParser.cleanText(currentState.dialogue!);
-        }
-      }
-
-      // 再回退到历史最后一句（避免不必要的脚本解析）
-      if (snapshot.dialogueHistory.isNotEmpty) {
-        final latestDialogue = snapshot.dialogueHistory.last;
-        if (latestDialogue.speaker != null &&
-            latestDialogue.speaker!.isNotEmpty) {
-          return '【${latestDialogue.speaker}】${RichTextParser.cleanText(latestDialogue.dialogue)}';
-        } else {
-          return RichTextParser.cleanText(latestDialogue.dialogue);
-        }
-      }
-
-      // 最后兜底：基于脚本索引查询（旧存档兼容）
-      final int dialogueScriptIndex = snapshot.scriptIndex;
-      if (dialogueScriptIndex >= 0) {
-        await _ensureScriptLoaded();
-        if (dialogueScriptIndex < _cachedScript!.children.length) {
-          final node = _cachedScript!.children[dialogueScriptIndex];
-          if (node is SayNode) {
-            final dialogue = ScriptTextLocalizer.resolve(node.dialogue);
-            String? speaker;
-
-            if (node.character != null) {
-              await _ensureCharacterConfigsLoaded();
-              final characterConfig = _cachedCharacterConfigs![node.character];
-              speaker = characterConfig?.name;
-            }
-
-            if (speaker != null && speaker.isNotEmpty) {
-              return '【$speaker】${RichTextParser.cleanText(dialogue)}';
-            } else {
-              return RichTextParser.cleanText(dialogue);
-            }
-          }
-        }
-      }
-
-      return '...';
-    } catch (e) {
-      if (kEngineDebugMode) {
-        print('[SaveLoadManager] 实时查询对话预览失败: $e');
-      }
-      return '...';
-    }
-    // return '...';
-  }
+  /// Resolve captions from the currently selected script language.
+  static Future<String> getDialoguePreview(GameStateSnapshot snapshot) =>
+      SaveDialoguePreview.get(snapshot);
 
   /// 清除缓存（在脚本热重载时调用）
   static void clearCache() {
-    _cachedScript = null;
-    _cachedCharacterConfigs = null;
-    _scriptLoadFuture = null;
-    _characterConfigsLoadFuture = null;
+    SaveDialoguePreview.clearCache();
   }
 
   // Web平台使用默认项目名

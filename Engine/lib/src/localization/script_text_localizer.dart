@@ -17,6 +17,8 @@ class ScriptTextLocalizer {
     'en': SupportedLanguage.en,
     'jp': SupportedLanguage.ja,
     'ja': SupportedLanguage.ja,
+    'ko': SupportedLanguage.ko,
+    'kr': SupportedLanguage.ko,
   };
 
   static final Map<SupportedLanguage, String> _languageToPrimaryTag = {
@@ -24,6 +26,7 @@ class ScriptTextLocalizer {
     SupportedLanguage.zhHant: 'zhc',
     SupportedLanguage.en: 'en',
     SupportedLanguage.ja: 'jp',
+    SupportedLanguage.ko: 'ko',
   };
 
   static String _defaultScriptLanguageTag = defaultLanguageTag;
@@ -34,8 +37,10 @@ class ScriptTextLocalizer {
     if (rawTag == null) {
       return null;
     }
-    final normalized =
-        rawTag.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    final normalized = rawTag.trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-z0-9]+'),
+      '',
+    );
     if (normalized.isEmpty) {
       return null;
     }
@@ -72,10 +77,7 @@ class ScriptTextLocalizer {
     return RegExp(r'[A-Za-z0-9_-]').hasMatch(char);
   }
 
-  static String resolve(
-    String text, {
-    SupportedLanguage? language,
-  }) {
+  static String resolve(String text, {SupportedLanguage? language}) {
     if (text.isEmpty || !text.contains('/')) {
       return text;
     }
@@ -95,8 +97,9 @@ class ScriptTextLocalizer {
       }
 
       if (slashIndex > cursor) {
-        segments
-            .add(_ScriptTextSegment.plain(text.substring(cursor, slashIndex)));
+        segments.add(
+          _ScriptTextSegment.plain(text.substring(cursor, slashIndex)),
+        );
       }
 
       var tagEnd = slashIndex + 1;
@@ -128,8 +131,9 @@ class ScriptTextLocalizer {
       var taggedText = text.substring(tagEnd, closeSlashIndex);
       taggedText = taggedText.replaceFirst(RegExp(r'^\s+'), '');
       final canonicalTag = _canonicalTagFor(normalizedTag);
-      segments
-          .add(_ScriptTextSegment.tagged(tag: canonicalTag, text: taggedText));
+      segments.add(
+        _ScriptTextSegment.tagged(tag: canonicalTag, text: taggedText),
+      );
       final bucket = taggedTexts.putIfAbsent(canonicalTag, StringBuffer.new);
       bucket.write(taggedText);
       hasTaggedSegment = true;
@@ -182,10 +186,7 @@ class ScriptTextLocalizer {
     return text;
   }
 
-  static String localizeQuotedText(
-    String line, {
-    SupportedLanguage? language,
-  }) {
+  static String localizeQuotedText(String line, {SupportedLanguage? language}) {
     if (line.isEmpty || !line.contains('"')) {
       return line;
     }
@@ -249,10 +250,8 @@ class _ScriptTextSegment {
   });
 
   const _ScriptTextSegment.plain(String text)
-      : this._(isTagged: false, tag: null, text: text);
+    : this._(isTagged: false, tag: null, text: text);
 
-  const _ScriptTextSegment.tagged({
-    required String tag,
-    required String text,
-  }) : this._(isTagged: true, tag: tag, text: text);
+  const _ScriptTextSegment.tagged({required String tag, required String text})
+    : this._(isTagged: true, tag: tag, text: text);
 }
